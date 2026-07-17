@@ -36,6 +36,29 @@ data class PetGeneratedMedia(
     val moodImages: List<PetMoodImage> = emptyList(),
 )
 
+data class ScheduledStoryResult(
+    val text: String,
+    val reaction: String,
+    val consequence: String,
+    val experienceGained: Int,
+)
+
+data class ScheduledStory(
+    val storyId: String,
+    val petId: String,
+    val title: String,
+    val text: String,
+    val question: String,
+    val choices: List<String>,
+    val createdAt: String,
+    val imageUrl: String?,
+    val videoUrl: String?,
+    val selectedChoice: String? = null,
+    val result: ScheduledStoryResult? = null,
+    val resultImageUrl: String? = null,
+    val resultVideoUrl: String? = null,
+)
+
 class SensitiveToken private constructor(
     private val rawValue: String,
 ) {

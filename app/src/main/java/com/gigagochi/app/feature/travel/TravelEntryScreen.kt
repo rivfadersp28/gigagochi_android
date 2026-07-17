@@ -873,7 +873,7 @@ private fun TravelEntryBackground(
 }
 
 @Composable
-private fun rememberTravelReducedMotionPreference(): Boolean {
+internal fun rememberTravelReducedMotionPreference(): Boolean {
     val context = LocalContext.current
     return remember(context) {
         Settings.Global.getFloat(

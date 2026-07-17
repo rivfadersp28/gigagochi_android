@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "d4b4c798df40cd1e4feb17da09257d34",
+    "identityHash": "55855d549920215260e5075a8617374d",
     "entities": [
       {
         "tableName": "pet_snapshots",
@@ -942,11 +942,157 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_applied_outfit_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
           }
         ]
+      },
+      {
+        "tableName": "scheduled_stories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `storyId` TEXT NOT NULL, `petId` TEXT NOT NULL, `title` TEXT NOT NULL, `text` TEXT NOT NULL, `question` TEXT NOT NULL, `choice0` TEXT NOT NULL, `choice1` TEXT NOT NULL, `choice2` TEXT NOT NULL, `choice3` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `imageUrl` TEXT, `videoUrl` TEXT, `choiceRequestKey` TEXT, `pendingChoice` TEXT, `selectedChoice` TEXT, `resultText` TEXT, `resultReaction` TEXT, `resultConsequence` TEXT, `resultExperienceGained` INTEGER, `resultImageUrl` TEXT, `resultVideoUrl` TEXT, PRIMARY KEY(`ownerId`, `storyId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "storyId",
+            "columnName": "storyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "question",
+            "columnName": "question",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice0",
+            "columnName": "choice0",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice1",
+            "columnName": "choice1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice2",
+            "columnName": "choice2",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice3",
+            "columnName": "choice3",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "videoUrl",
+            "columnName": "videoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "choiceRequestKey",
+            "columnName": "choiceRequestKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pendingChoice",
+            "columnName": "pendingChoice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedChoice",
+            "columnName": "selectedChoice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultText",
+            "columnName": "resultText",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultReaction",
+            "columnName": "resultReaction",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultConsequence",
+            "columnName": "resultConsequence",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultExperienceGained",
+            "columnName": "resultExperienceGained",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resultImageUrl",
+            "columnName": "resultImageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultVideoUrl",
+            "columnName": "resultVideoUrl",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "storyId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_scheduled_story_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_story_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'd4b4c798df40cd1e4feb17da09257d34')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '55855d549920215260e5075a8617374d')"
     ]
   }
 }

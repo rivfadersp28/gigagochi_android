@@ -2,8 +2,24 @@ package com.gigagochi.app.core.database
 
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
+import com.gigagochi.app.core.model.ScheduledStory
 
 const val OutfitAcceptanceCost = 200
+
+data class LocalScheduledStory(
+    val ownerId: String,
+    val story: ScheduledStory,
+    val choiceRequestKey: String? = null,
+    val pendingChoice: String? = null,
+)
+
+sealed interface ScheduledStoryChoiceClaim {
+    data class Claimed(val requestKey: String, val choice: String) : ScheduledStoryChoiceClaim
+    data class Existing(val requestKey: String, val choice: String) : ScheduledStoryChoiceClaim
+    data class Completed(val story: ScheduledStory, val requestKey: String) : ScheduledStoryChoiceClaim
+    data object Conflict : ScheduledStoryChoiceClaim
+    data object Missing : ScheduledStoryChoiceClaim
+}
 
 data class OwnedPetSnapshot(
     val ownerId: String,
@@ -52,6 +68,18 @@ interface PendingBackendStateStore {
 interface FeatureMediaOutcomeStore {
     suspend fun saveTravelVideoAsset(asset: LocalTravelVideoAsset)
     suspend fun saveOutfitMediaOutcome(outcome: LocalOutfitMediaOutcome)
+}
+
+interface ScheduledStoryStore {
+    suspend fun saveScheduledStory(story: LocalScheduledStory): Boolean
+    suspend fun getScheduledStory(ownerId: String, storyId: String): LocalScheduledStory?
+    suspend fun getScheduledStories(ownerId: String, petId: String): List<LocalScheduledStory>
+    suspend fun claimScheduledStoryChoice(
+        ownerId: String,
+        storyId: String,
+        requestKey: String,
+        choice: String,
+    ): ScheduledStoryChoiceClaim
 }
 
 data class LocalPendingCreateGeneration(

@@ -18,6 +18,7 @@ import androidx.room.TypeConverters
         OutfitMediaOutcomeEntity::class,
         OutfitMoodImageEntity::class,
         AppliedOutfitReceiptEntity::class,
+        ScheduledStoryEntity::class,
     ],
     version = 1,
     exportSchema = true,

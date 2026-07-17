@@ -3,6 +3,8 @@ package com.gigagochi.app.core.network
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.PetMoodImage
+import com.gigagochi.app.core.model.ScheduledStory
+import com.gigagochi.app.core.model.ScheduledStoryResult
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
@@ -25,6 +27,10 @@ private val FeatureJson = Json {
     explicitNulls = true
     encodeDefaults = true
 }
+private val UUID4Pattern = Regex(
+    "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
+)
+private val StoryIdPattern = Regex("^android-story-[a-f0-9]{32}$")
 
 enum class FeatureFailureKind {
     Network,
@@ -212,6 +218,81 @@ data class TravelVideoDto(
     }
 }
 
+@Serializable
+data class DueStoryRequestDto(val pet: FeaturePetDto)
+
+@Serializable
+data class ScheduledStoryResultDto(
+    val text: String,
+    val adviceAssessment: String,
+    val reaction: String,
+    val reactionTone: String,
+    val consequence: String,
+    val outcomeValence: String,
+    val experienceGained: Int,
+) {
+    init {
+        require(text.isNotBlank() && text.length <= 700)
+        require(adviceAssessment in setOf("helpful", "harmful", "ambiguous"))
+        require(reaction.isNotBlank() && reaction.length <= 220)
+        require(
+            reactionTone in setOf(
+                "enthusiastic", "confused", "worried", "amused", "indignant",
+                "determined", "surprised",
+            ),
+        )
+        require(consequence.isNotBlank() && consequence.length <= 280)
+        require(outcomeValence in setOf("positive", "negative"))
+        require(experienceGained in 0..150)
+    }
+}
+
+@Serializable
+data class ScheduledStoryDto(
+    val storyId: String,
+    val petId: String,
+    val title: String,
+    val text: String,
+    val question: String,
+    val choices: List<String>,
+    val createdAt: String,
+    val imageUrl: String? = null,
+    val videoUrl: String? = null,
+    val selectedChoice: String? = null,
+    val result: ScheduledStoryResultDto? = null,
+    val resultImageUrl: String? = null,
+    val resultVideoUrl: String? = null,
+) {
+    init {
+        require(StoryIdPattern.matches(storyId))
+        require(petId.isNotBlank() && petId.length <= 120)
+        require(title.isNotBlank() && title.length <= 120)
+        require(text.isNotBlank() && text.length <= 700)
+        require(question.isNotBlank() && question.length <= 280)
+        require(choices.size == 4 && choices.toSet().size == 4)
+        require(choices.all { it.isNotBlank() && it.length <= 280 })
+        requireIsoTimestamp(createdAt)
+        require((selectedChoice == null) == (result == null))
+        require(selectedChoice == null || selectedChoice in choices)
+        require(resultImageUrl == null || selectedChoice != null)
+        require(resultVideoUrl == null || selectedChoice != null)
+    }
+}
+
+@Serializable
+data class DueStoryResponseDto(val story: ScheduledStoryDto? = null)
+
+@Serializable
+data class ScheduledStoryChoiceRequestDto(
+    val requestKey: String,
+    val choice: String,
+) {
+    init {
+        require(UUID4Pattern.matches(requestKey))
+        require(choice.isNotBlank() && choice.length <= 280)
+    }
+}
+
 interface AndroidFeatureService {
     suspend fun submitCreate(request: CreateJobRequestDto): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun pollCreate(jobId: String): FeatureApiResult<GenerationEnvelopeDto>
@@ -221,8 +302,14 @@ interface AndroidFeatureService {
     suspend fun pollOutfit(jobId: String): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun submitTravel(request: TravelVideoRequestDto): FeatureApiResult<TravelVideoDto>
     suspend fun pollTravel(jobId: String): FeatureApiResult<TravelVideoDto>
+    suspend fun dueStory(request: DueStoryRequestDto): FeatureApiResult<DueStoryResponseDto>
+    suspend fun chooseStory(
+        storyId: String,
+        request: ScheduledStoryChoiceRequestDto,
+    ): FeatureApiResult<ScheduledStoryDto>
     fun resolveMediaUrl(value: String?): String?
     fun media(dto: GenerationAssetDto): PetGeneratedMedia?
+    fun story(dto: ScheduledStoryDto): ScheduledStory?
 }
 
 class AndroidFeatureApi(
@@ -266,6 +353,19 @@ class AndroidFeatureApi(
         jobId,
     )
 
+    override suspend fun dueStory(
+        request: DueStoryRequestDto,
+    ): FeatureApiResult<DueStoryResponseDto> = post("/api/android/stories/due", request)
+
+    override suspend fun chooseStory(
+        storyId: String,
+        request: ScheduledStoryChoiceRequestDto,
+    ): FeatureApiResult<ScheduledStoryDto> {
+        val validated = storyId.takeIf(StoryIdPattern::matches)
+            ?: return failure(FeatureFailureKind.Protocol)
+        return post("/api/android/stories/$validated/choice", request)
+    }
+
     override fun resolveMediaUrl(value: String?): String? = mediaUrlPolicy.resolve(value)
 
     override fun media(dto: GenerationAssetDto): PetGeneratedMedia? = runCatching {
@@ -288,6 +388,31 @@ class AndroidFeatureApi(
             spriteSheetUrl = resolveOptionalMediaUrl(dto.spriteSheetUrl),
             characterBibleJson = dto.characterBible?.toString(),
             moodImages = images,
+        )
+    }.getOrNull()
+
+    override fun story(dto: ScheduledStoryDto): ScheduledStory? = runCatching {
+        ScheduledStory(
+            storyId = dto.storyId,
+            petId = dto.petId,
+            title = dto.title,
+            text = dto.text,
+            question = dto.question,
+            choices = dto.choices,
+            createdAt = dto.createdAt,
+            imageUrl = dto.imageUrl?.let { requireNotNull(resolveMediaUrl(it)) },
+            videoUrl = dto.videoUrl?.let { requireNotNull(resolveMediaUrl(it)) },
+            selectedChoice = dto.selectedChoice,
+            result = dto.result?.let {
+                ScheduledStoryResult(
+                    text = it.text,
+                    reaction = it.reaction,
+                    consequence = it.consequence,
+                    experienceGained = it.experienceGained,
+                )
+            },
+            resultImageUrl = dto.resultImageUrl?.let { requireNotNull(resolveMediaUrl(it)) },
+            resultVideoUrl = dto.resultVideoUrl?.let { requireNotNull(resolveMediaUrl(it)) },
         )
     }.getOrNull()
 

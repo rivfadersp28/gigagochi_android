@@ -126,6 +126,39 @@ class AndroidFeatureApiTest {
         assertFailure(result, FeatureFailureKind.Protocol)
     }
 
+    @Test
+    fun scheduledStoryAllowsAdditiveFieldsButRejectsMalformedChoicesAndUnsafeMedia() = runBlocking {
+        val accepted = api(200, dueStoryJson().replace("\"storyId\"", "\"future\":true,\"storyId\""))
+            .dueStory(DueStoryRequestDto(featurePet()))
+        assertTrue(accepted is FeatureApiResult.Success)
+        val dto = (accepted as FeatureApiResult.Success).value.story
+        assertNotNull(api(200, "{}").story(requireNotNull(dto)))
+
+        val duplicate = dueStoryJson().replace("[\"a\",\"b\",\"c\",\"d\"]", "[\"a\",\"a\",\"c\",\"d\"]")
+        assertFailure(
+            api(200, duplicate).dueStory(DueStoryRequestDto(featurePet())),
+            FeatureFailureKind.Protocol,
+        )
+        val unsafe = dueStoryJson().replace("/static/story.png?v=1", "https://evil.example/static/story.png")
+        val unsafeResponse = api(200, unsafe).dueStory(DueStoryRequestDto(featurePet()))
+        assertTrue(unsafeResponse is FeatureApiResult.Success)
+        assertNull(api(200, "{}").story(requireNotNull((unsafeResponse as FeatureApiResult.Success).value.story)))
+    }
+
+    @Test
+    fun scheduledChoiceSerializesExactRequestKeyAndChoice() = runBlocking {
+        var body = ""
+        val result = api(200, dueStoryJson(selected = true).substringAfter("\"story\":" ).dropLast(1)) {
+            body = it.body?.toString(Charsets.UTF_8).orEmpty()
+        }.chooseStory(
+            "android-story-1234567890abcdef1234567890abcdef",
+            ScheduledStoryChoiceRequestDto(Key, "b"),
+        )
+        assertTrue(result is FeatureApiResult.Success)
+        assertTrue(body.contains("\"requestKey\":\"$Key\""))
+        assertTrue(body.contains("\"choice\":\"b\""))
+    }
+
     private fun api(
         status: Int,
         body: String,
@@ -194,6 +227,31 @@ class AndroidFeatureApiTest {
           }
         }
     """.trimIndent()
+
+    private fun featurePet() = FeaturePetDto(
+        petId = "pet-a",
+        description = "dragon",
+        stage = "baby",
+        mood = "idle",
+        stats = FeaturePetStatsDto(50, 50, 50),
+    )
+
+    private fun dueStoryJson(selected: Boolean = false): String {
+        val selection = if (selected) """,
+          "selectedChoice":"b",
+          "result":{
+            "text":"result","adviceAssessment":"helpful","reaction":"yay",
+            "reactionTone":"enthusiastic","consequence":"safe",
+            "outcomeValence":"positive","experienceGained":20
+          }""" else ""
+        return """{"story":{
+          "storyId":"android-story-1234567890abcdef1234567890abcdef",
+          "petId":"pet-a","title":"История","text":"Ситуация",
+          "question":"Что делать?","choices":["a","b","c","d"],
+          "createdAt":"2026-07-17T10:11:12Z",
+          "imageUrl":"/static/story.png?v=1"$selection
+        }}"""
+    }
 
     private fun assertFailure(result: FeatureApiResult<*>, kind: FeatureFailureKind) {
         assertTrue(result is FeatureApiResult.Failure)

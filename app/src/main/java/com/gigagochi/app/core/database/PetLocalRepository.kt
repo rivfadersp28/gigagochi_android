@@ -5,6 +5,8 @@ import com.gigagochi.app.core.model.CharacterBibleMaxUtf8Bytes
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.PetMoodImage
+import com.gigagochi.app.core.model.ScheduledStory
+import com.gigagochi.app.core.model.ScheduledStoryResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -70,7 +72,8 @@ interface DashboardOutcomeStore {
 
 class PetLocalRepository(
     private val database: GigagochiDatabase,
-) : OwnerRecoveryStore, PendingBackendStateStore, FeatureMediaOutcomeStore, DashboardOutcomeStore {
+) : OwnerRecoveryStore, PendingBackendStateStore, FeatureMediaOutcomeStore, DashboardOutcomeStore,
+    ScheduledStoryStore {
     private val dao: GigagochiDao = database.gigagochiDao()
 
     override suspend fun replacePetSnapshot(snapshot: OwnedPetSnapshot) {
@@ -544,6 +547,88 @@ class PetLocalRepository(
         return dao.deleteStoryReceipt(ownerId, receiptKey) == 1
     }
 
+    override suspend fun saveScheduledStory(story: LocalScheduledStory): Boolean {
+        LocalPersistenceValidation.scheduledStory(story)
+        return database.withTransaction {
+            val current = dao.getScheduledStory(story.ownerId, story.story.storyId)
+            if (current == null) {
+                return@withTransaction dao.insertScheduledStory(story.toEntity()) != -1L
+            }
+            val existing = current.toModel()
+            if (existing.story.withoutOutcome() != story.story.withoutOutcome()) {
+                return@withTransaction false
+            }
+            val merged = when {
+                existing.story.selectedChoice != null -> {
+                    if (story.story.selectedChoice != null && existing.story != story.story) {
+                        return@withTransaction false
+                    }
+                    existing
+                }
+                story.story.selectedChoice != null -> {
+                    if (existing.pendingChoice != null && existing.pendingChoice != story.story.selectedChoice) {
+                        return@withTransaction false
+                    }
+                    story.copy(
+                        choiceRequestKey = existing.choiceRequestKey ?: story.choiceRequestKey,
+                        pendingChoice = null,
+                    )
+                }
+                else -> existing
+            }
+            dao.upsertScheduledStory(merged.toEntity())
+            true
+        }
+    }
+
+    override suspend fun getScheduledStory(ownerId: String, storyId: String): LocalScheduledStory? {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.storyId(storyId)
+        return dao.getScheduledStory(ownerId, storyId)?.toModel()
+    }
+
+    override suspend fun getScheduledStories(ownerId: String, petId: String): List<LocalScheduledStory> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return dao.getScheduledStories(ownerId, petId).map(ScheduledStoryEntity::toModel)
+    }
+
+    override suspend fun claimScheduledStoryChoice(
+        ownerId: String,
+        storyId: String,
+        requestKey: String,
+        choice: String,
+    ): ScheduledStoryChoiceClaim {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.storyId(storyId)
+        LocalPersistenceValidation.requestKey(requestKey)
+        return database.withTransaction {
+            val current = dao.getScheduledStory(ownerId, storyId)?.toModel()
+                ?: return@withTransaction ScheduledStoryChoiceClaim.Missing
+            if (choice !in current.story.choices) return@withTransaction ScheduledStoryChoiceClaim.Conflict
+            current.story.selectedChoice?.let {
+                return@withTransaction if (it == choice && current.choiceRequestKey != null) {
+                    ScheduledStoryChoiceClaim.Completed(current.story, current.choiceRequestKey)
+                }
+                else ScheduledStoryChoiceClaim.Conflict
+            }
+            current.choiceRequestKey?.let { winner ->
+                return@withTransaction if (current.pendingChoice == choice) {
+                    ScheduledStoryChoiceClaim.Existing(winner, choice)
+                } else ScheduledStoryChoiceClaim.Conflict
+            }
+            if (dao.claimScheduledStoryChoice(ownerId, storyId, requestKey, choice) == 1) {
+                ScheduledStoryChoiceClaim.Claimed(requestKey, choice)
+            } else {
+                val winner = dao.getScheduledStory(ownerId, storyId)?.toModel()
+                    ?: return@withTransaction ScheduledStoryChoiceClaim.Missing
+                if (winner.pendingChoice == choice && winner.choiceRequestKey != null) {
+                    ScheduledStoryChoiceClaim.Existing(winner.choiceRequestKey, choice)
+                } else ScheduledStoryChoiceClaim.Conflict
+            }
+        }
+    }
+
     suspend fun deleteOwnerData(ownerId: String) {
         LocalPersistenceValidation.ownerId(ownerId)
         database.withTransaction {
@@ -551,6 +636,7 @@ class PetLocalRepository(
             dao.deleteOwnerPendingOutfits(ownerId)
             dao.deleteOwnerPendingTravels(ownerId)
             dao.deleteOwnerStoryReceipts(ownerId)
+            dao.deleteOwnerScheduledStories(ownerId)
             dao.deleteOwnerMoodImages(ownerId)
             dao.deleteOwnerOutfitMoodImages(ownerId)
             dao.deleteOwnerOutfitMediaOutcomes(ownerId)
@@ -604,12 +690,44 @@ object LocalPersistenceValidation {
     private const val ReceiptKeyMax = 255
     private const val TravelIdMax = 255
     private const val PartKeyMax = 160
+    private const val StoryIdMax = 96
 
     fun ownerId(value: String) = identifier("ownerId", value, OwnerIdMax)
     fun petId(value: String) = identifier("petId", value, PetIdMax)
     fun requestKey(value: String) = identifier("requestKey", value, RequestKeyMax)
     fun backendJobId(value: String) = identifier("backendJobId", value, JobIdMax)
     fun receiptKey(value: String) = identifier("receiptKey", value, ReceiptKeyMax)
+    fun storyId(value: String) = identifier("storyId", value, StoryIdMax)
+
+    fun scheduledStory(value: LocalScheduledStory) {
+        ownerId(value.ownerId)
+        storyId(value.story.storyId)
+        petId(value.story.petId)
+        bounded("story title", value.story.title, 120)
+        bounded("story text", value.story.text, 700)
+        bounded("story question", value.story.question, 280)
+        require(value.story.choices.size == 4 && value.story.choices.toSet().size == 4)
+        value.story.choices.forEach { bounded("story choice", it, 280) }
+        bounded("createdAt", value.story.createdAt, 80)
+        listOfNotNull(
+            value.story.imageUrl,
+            value.story.videoUrl,
+            value.story.resultImageUrl,
+            value.story.resultVideoUrl,
+        ).forEach { safeUrl("story media", it) }
+        require((value.story.selectedChoice == null) == (value.story.result == null))
+        require(value.story.selectedChoice == null || value.story.selectedChoice in value.story.choices)
+        value.story.result?.let {
+            bounded("result text", it.text, 700)
+            bounded("result reaction", it.reaction, 220)
+            bounded("result consequence", it.consequence, 500)
+            require(it.experienceGained in 0..150)
+        }
+        require(value.pendingChoice == null || value.choiceRequestKey != null)
+        require(value.pendingChoice == null || value.story.selectedChoice == null)
+        value.choiceRequestKey?.let(::requestKey)
+        require(value.pendingChoice == null || value.pendingChoice in value.story.choices)
+    }
 
     fun backendState(ownerId: String, requestKey: String, errorCode: String?) {
         ownerId(ownerId)
@@ -795,6 +913,66 @@ private fun checkedProgressValue(
     val next = current.toLong() + delta.toLong()
     return next.coerceIn(allowed.first.toLong(), allowed.last.toLong()).toInt()
 }
+
+private fun ScheduledStory.withoutOutcome() = copy(
+    selectedChoice = null,
+    result = null,
+    resultImageUrl = null,
+    resultVideoUrl = null,
+)
+
+private fun LocalScheduledStory.toEntity() = ScheduledStoryEntity(
+    ownerId = ownerId,
+    storyId = story.storyId,
+    petId = story.petId,
+    title = story.title,
+    text = story.text,
+    question = story.question,
+    choice0 = story.choices[0],
+    choice1 = story.choices[1],
+    choice2 = story.choices[2],
+    choice3 = story.choices[3],
+    createdAt = story.createdAt,
+    imageUrl = story.imageUrl,
+    videoUrl = story.videoUrl,
+    choiceRequestKey = choiceRequestKey,
+    pendingChoice = pendingChoice,
+    selectedChoice = story.selectedChoice,
+    resultText = story.result?.text,
+    resultReaction = story.result?.reaction,
+    resultConsequence = story.result?.consequence,
+    resultExperienceGained = story.result?.experienceGained,
+    resultImageUrl = story.resultImageUrl,
+    resultVideoUrl = story.resultVideoUrl,
+)
+
+private fun ScheduledStoryEntity.toModel() = LocalScheduledStory(
+    ownerId = ownerId,
+    story = ScheduledStory(
+        storyId = storyId,
+        petId = petId,
+        title = title,
+        text = text,
+        question = question,
+        choices = listOf(choice0, choice1, choice2, choice3),
+        createdAt = createdAt,
+        imageUrl = imageUrl,
+        videoUrl = videoUrl,
+        selectedChoice = selectedChoice,
+        result = resultText?.let {
+            ScheduledStoryResult(
+                text = it,
+                reaction = requireNotNull(resultReaction),
+                consequence = requireNotNull(resultConsequence),
+                experienceGained = requireNotNull(resultExperienceGained),
+            )
+        },
+        resultImageUrl = resultImageUrl,
+        resultVideoUrl = resultVideoUrl,
+    ),
+    choiceRequestKey = choiceRequestKey,
+    pendingChoice = pendingChoice,
+).also(LocalPersistenceValidation::scheduledStory)
 
 private fun OwnedPetSnapshot.toEntity() = PetSnapshotEntity(
     ownerId = ownerId,

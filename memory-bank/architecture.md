@@ -36,3 +36,10 @@
 - Production Dashboard использует real Chat/Outfit/Travel adapters и deterministic local Feed; explicit debug routes используют только fixtures и не открывают production Room. Lifecycle-STARTED foreground recovery poll'ит jobs, затем bounded повторяет только Room apply/consume для Ready rows; provider mutation не повторяется. После commit Main перечитывает Room-authoritative pet/travel presentation. 4-part Interactive Travel network/coordinator/persistence удалены; сохранён только one-part fixture UI/reducer/media shell.
 - Dashboard media projection выбирает consumed Travel asset либо mood/age-specific generated pet video/poster. `StaticMediaUrlPolicy` и Media3 datasource допускают только validated same-origin `/static` URL, не следуют redirect, не используют bearer/cookies/cache и отдельно ограничивают image/video bytes/ranges. Reduced motion и lifecycle ниже STARTED оставляют poster; decode image проверяет dimensions/pixels до allocation. Локальный персонаж остаётся explicit fixture либо recoverable media fallback в той же 402×874 геометрии.
 - Обычный Dashboard snapshot save использует optimistic `assetSetId` fence: stale Compose state не может перезаписать media, уже атомарно применённые из Outfit outcome.
+- Scheduled short story uses exactly one additional owner-scoped Room v1 table. Each row contains
+  one situation, four choices/media and at most one selected result; a durable choice request key
+  fences double taps/restart replay. Dashboard performs a lifecycle-STARTED due check and only
+  persists the response; default startup never auto-navigates. An explicit story-id deep link opens
+  the retained one-part `InteractiveTravelStoryScreen` shell without restoring 4-part machinery.
+  Choice success/replay commits the existing story receipt with the actual durable request key;
+  route state and return to Dashboard use Room-authoritative experience, so restart cannot double XP.

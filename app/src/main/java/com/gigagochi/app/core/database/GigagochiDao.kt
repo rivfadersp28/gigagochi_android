@@ -214,6 +214,26 @@ internal interface GigagochiDao {
     @Query("SELECT * FROM applied_story_receipts WHERE ownerId = :ownerId ORDER BY appliedAtEpochMillis")
     suspend fun getStoryReceipts(ownerId: String): List<AppliedStoryReceiptEntity>
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertScheduledStory(entity: ScheduledStoryEntity): Long
+
+    @Upsert
+    suspend fun upsertScheduledStory(entity: ScheduledStoryEntity)
+
+    @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND storyId = :storyId")
+    suspend fun getScheduledStory(ownerId: String, storyId: String): ScheduledStoryEntity?
+
+    @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAt DESC")
+    suspend fun getScheduledStories(ownerId: String, petId: String): List<ScheduledStoryEntity>
+
+    @Query("UPDATE scheduled_stories SET choiceRequestKey = :requestKey, pendingChoice = :choice WHERE ownerId = :ownerId AND storyId = :storyId AND selectedChoice IS NULL AND choiceRequestKey IS NULL")
+    suspend fun claimScheduledStoryChoice(
+        ownerId: String,
+        storyId: String,
+        requestKey: String,
+        choice: String,
+    ): Int
+
     @Query("DELETE FROM applied_story_receipts WHERE ownerId = :ownerId AND receiptKey = :receiptKey")
     suspend fun deleteStoryReceipt(ownerId: String, receiptKey: String): Int
 
@@ -228,6 +248,9 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM applied_story_receipts WHERE ownerId = :ownerId")
     suspend fun deleteOwnerStoryReceipts(ownerId: String): Int
+
+    @Query("DELETE FROM scheduled_stories WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerScheduledStories(ownerId: String): Int
 
     @Query("DELETE FROM pet_snapshots WHERE ownerId = :ownerId")
     suspend fun deleteOwnerPets(ownerId: String): Int

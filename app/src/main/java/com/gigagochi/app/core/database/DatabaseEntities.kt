@@ -220,6 +220,36 @@ internal data class AppliedStoryReceiptEntity(
     val appliedAtEpochMillis: Long,
 )
 
+@Entity(
+    tableName = "scheduled_stories",
+    primaryKeys = ["ownerId", "storyId"],
+    indices = [Index(value = ["ownerId", "petId"], name = "index_scheduled_story_owner_pet")],
+)
+internal data class ScheduledStoryEntity(
+    val ownerId: String,
+    val storyId: String,
+    val petId: String,
+    val title: String,
+    val text: String,
+    val question: String,
+    val choice0: String,
+    val choice1: String,
+    val choice2: String,
+    val choice3: String,
+    val createdAt: String,
+    val imageUrl: String?,
+    val videoUrl: String?,
+    val choiceRequestKey: String?,
+    val pendingChoice: String?,
+    val selectedChoice: String?,
+    val resultText: String?,
+    val resultReaction: String?,
+    val resultConsequence: String?,
+    val resultExperienceGained: Int?,
+    val resultImageUrl: String?,
+    val resultVideoUrl: String?,
+)
+
 internal class DatabaseTypeConverters {
     @TypeConverter
     fun pendingCreateStageToStorage(value: PendingCreateStage): String = value.name

@@ -39,6 +39,7 @@ import com.gigagochi.app.core.auth.SessionBootstrapOutcome
 import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.core.database.LocalScheduledStory
 import com.gigagochi.app.core.database.AccountPetLifecycle
 import com.gigagochi.app.core.database.AccountStartupDestination
 import com.gigagochi.app.core.database.GigagochiDatabase
@@ -68,9 +69,12 @@ import com.gigagochi.app.feature.dashboard.toUi
 import com.gigagochi.app.feature.dashboard.durableDashboardRequestKey
 import com.gigagochi.app.feature.travel.TravelDebugState
 import com.gigagochi.app.feature.travel.TravelEntryRoute
+import com.gigagochi.app.feature.travel.ScheduledStoryCoordinator
+import com.gigagochi.app.feature.travel.ScheduledStoryRoute
+import com.gigagochi.app.feature.travel.StoryReceiptCoordinator
 import kotlinx.coroutines.launch
 
-internal enum class AppRoute { Auth, Create, Dashboard, Travel, LocalDataError }
+internal enum class AppRoute { Auth, Create, Dashboard, Travel, Story, LocalDataError }
 
 internal fun appRouteForOutcomeApplyConflict(): AppRoute = AppRoute.LocalDataError
 
@@ -125,6 +129,9 @@ class MainActivity : ComponentActivity() {
                 val travelDebugState = remember(intent) {
                     TravelDebugState.fromRouteValue(intent.getStringExtra("gigagochi.travel.state"))
                 }
+                var pendingStoryDeepLink by remember(intent) {
+                    mutableStateOf(intent.getStringExtra("gigagochi.storyId"))
+                }
                 var route by remember {
                     mutableStateOf(explicitRouteValue?.let(::appRouteFromValue))
                 }
@@ -134,6 +141,7 @@ class MainActivity : ComponentActivity() {
                 val inMemorySession = remember { mutableStateOf<Session?>(null) }
                 val activePet = remember { mutableStateOf<PetDashboardState?>(null) }
                 val activeStartup = remember { mutableStateOf<AccountStartupDestination?>(null) }
+                val activeStory = remember { mutableStateOf<LocalScheduledStory?>(null) }
                 val sessionRepository = remember {
                     androidSessionRepository(applicationContext)
                 }
@@ -187,7 +195,15 @@ class MainActivity : ComponentActivity() {
                         is AccountStartupDestination.Dashboard -> {
                             activePet.value = destination.pet
                             activeStartup.value = destination
-                            route = appRouteForAccountStartup(destination)
+                            val storyId = pendingStoryDeepLink
+                            pendingStoryDeepLink = null
+                            val story = if (storyId != null) {
+                                petRepository?.getScheduledStory(session.accountId, storyId)
+                            } else null
+                            activeStory.value = story
+                            route = if (story != null && story.story.petId == destination.pet.petId) {
+                                AppRoute.Story
+                            } else appRouteForAccountStartup(destination)
                         }
                         is AccountStartupDestination.Create -> {
                             activeStartup.value = destination
@@ -348,6 +364,18 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         val lifecycleOwner = LocalLifecycleOwner.current
+                        val scheduledStoryCoordinator = remember(session.accountId, repository, api) {
+                            ScheduledStoryCoordinator(session.accountId, repository, api)
+                        }
+                        LaunchedEffect(
+                            scheduledStoryCoordinator,
+                            activePet.value?.petId,
+                            lifecycleOwner,
+                        ) {
+                            lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
+                                scheduledStoryCoordinator.checkDue(requireNotNull(activePet.value))
+                            }
+                        }
                         LaunchedEffect(pendingRecovery, activePet.value?.petId, lifecycleOwner) {
                             lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
                                 pendingRecovery.watch(requireNotNull(activePet.value).petId)
@@ -388,6 +416,34 @@ class MainActivity : ComponentActivity() {
                         TravelEntryRoute(
                             debugState = travelDebugState,
                             onNavigateDashboard = { route = AppRoute.Dashboard },
+                        )
+                    }
+                    AppRoute.Story -> {
+                        val session = requireNotNull(inMemorySession.value)
+                        val repository = requireNotNull(petRepository)
+                        val api = requireNotNull(featureApi)
+                        val mediaUrlPolicy = remember {
+                            StaticMediaUrlPolicy(BuildConfig.BACKEND_BASE_URL, BuildConfig.DEBUG)
+                        }
+                        ScheduledStoryRoute(
+                            pet = requireNotNull(activePet.value),
+                            initialStory = requireNotNull(activeStory.value),
+                            coordinator = remember(session.accountId, repository, api) {
+                                ScheduledStoryCoordinator(
+                                    session.accountId,
+                                    repository,
+                                    api,
+                                    StoryReceiptCoordinator(
+                                        session.accountId,
+                                        requireNotNull(activePet.value).petId,
+                                        repository,
+                                    ),
+                                )
+                            },
+                            mediaUrlPolicy = mediaUrlPolicy,
+                            onNavigateDashboard = {
+                                scope.launch { routeAuthenticatedSession(session) }
+                            },
                         )
                     }
                     AppRoute.LocalDataError -> LocalDataStartupErrorRoute(

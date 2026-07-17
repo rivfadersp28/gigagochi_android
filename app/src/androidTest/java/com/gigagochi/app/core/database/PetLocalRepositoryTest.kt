@@ -6,6 +6,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.PetMoodImage
+import com.gigagochi.app.core.model.ScheduledStory
+import com.gigagochi.app.core.model.ScheduledStoryResult
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -63,6 +65,45 @@ class PetLocalRepositoryTest {
 
         assertNull(repository.getPetSnapshot("owner-a", PetId))
         assertNotNull(repository.getPetSnapshot("owner-b", PetId))
+    }
+
+    @Test
+    fun scheduledEpisodeIsOwnerScopedAndChoiceIsSingleRowIdempotent() = runBlocking {
+        val base = ScheduledStory(
+            "android-story-1234567890abcdef1234567890abcdef",
+            PetId,
+            "История",
+            "Ситуация",
+            "Что делать?",
+            listOf("a", "b", "c", "d"),
+            "2026-07-17T10:11:12Z",
+            "https://gigagochi.serega.works/static/story.png?v=1",
+            null,
+        )
+        assertTrue(repository.saveScheduledStory(LocalScheduledStory("owner-a", base)))
+        assertTrue(repository.saveScheduledStory(LocalScheduledStory("owner-b", base)))
+        assertEquals(1, repository.getScheduledStories("owner-a", PetId).size)
+        assertEquals(1, repository.getScheduledStories("owner-b", PetId).size)
+
+        val claim = repository.claimScheduledStoryChoice("owner-a", base.storyId, ChoiceKey, "b")
+        assertTrue(claim is ScheduledStoryChoiceClaim.Claimed)
+        assertTrue(
+            repository.saveScheduledStory(
+                LocalScheduledStory(
+                    "owner-a",
+                    base.copy(
+                        selectedChoice = "b",
+                        result = ScheduledStoryResult("result", "reaction", "consequence", 20),
+                    ),
+                    ChoiceKey,
+                ),
+            ),
+        )
+        assertTrue(
+            repository.claimScheduledStoryChoice("owner-a", base.storyId, "other-key", "b")
+                is ScheduledStoryChoiceClaim.Completed,
+        )
+        assertNull(repository.getScheduledStory("owner-b", base.storyId)?.story?.selectedChoice)
     }
 
     @Test
@@ -456,5 +497,6 @@ class PetLocalRepositoryTest {
         const val OwnerId = "owner-a"
         const val PetId = "pet-a"
         const val AssetSetId = "debug-test-pet-seedance-forest-mouse-v1"
+        const val ChoiceKey = "123e4567-e89b-42d3-a456-426614174000"
     }
 }
