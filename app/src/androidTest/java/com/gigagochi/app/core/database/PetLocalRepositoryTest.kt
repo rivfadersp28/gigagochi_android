@@ -278,6 +278,9 @@ class PetLocalRepositoryTest {
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
         assertTrue(repository.getOutfitMediaOutcomes(OwnerId, PetId).isEmpty())
         assertTrue(repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey) is OutfitOutcomeApplicationResult.AlreadyApplied)
+        assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
 
         val stale = snapshot(experience = 999)
         assertEquals(false, repository.replacePetSnapshotIfAssetCurrent(stale))

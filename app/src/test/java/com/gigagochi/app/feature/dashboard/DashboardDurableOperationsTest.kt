@@ -2,6 +2,7 @@ package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.database.LocalPendingOutfit
 import com.gigagochi.app.core.database.LocalPendingTravelVideo
+import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.OutfitAcceptanceResult
 import com.gigagochi.app.core.database.OwnerRecoveryData
 import com.gigagochi.app.core.database.OwnedPetSnapshot
@@ -69,12 +70,51 @@ class DashboardDurableOperationsTest {
         assertEquals(0, queueCalls)
     }
 
+    @Test
+    fun consumedTravelRequestReplayDoesNotCreatePendingOrSubmitAgain() = runBlocking {
+        val store = Store(pet()).apply {
+            travelAssets += LocalTravelVideoAsset(
+                "owner-a",
+                pet.petId,
+                "travel-consumed",
+                "backend-ready",
+                "Луна",
+                null,
+                null,
+                null,
+                "https://gigagochi.serega.works/static/travel.mp4",
+                10,
+                11,
+            )
+        }
+        var queueCalls = 0
+        val adapter = object : DashboardTravelAdapter {
+            override suspend fun queue(
+                request: PendingTravelRequest,
+                pet: PetDashboardState,
+            ): PendingTravelGeneration {
+                queueCalls += 1
+                error("completed request must not submit again")
+            }
+        }
+
+        val result = DashboardDurableOperations(
+            "owner-a", store, UnavailableDashboardOutfitAdapter(), adapter,
+        ).acceptTravel(PendingTravelRequest("travel-consumed", "Луна"), store.pet)
+
+        assertEquals(DurableTravelResult.Failure, result)
+        assertTrue(store.travels.isEmpty())
+        assertEquals(0, queueCalls)
+    }
+
     private class Store(var pet: PetDashboardState) : TestOwnerRecoveryStore() {
         val outfits = mutableListOf<LocalPendingOutfit>()
         val travels = mutableListOf<LocalPendingTravelVideo>()
+        val travelAssets = mutableListOf<LocalTravelVideoAsset>()
         override suspend fun loadOwnerRecovery(ownerId: String) = OwnerRecoveryData(
             listOf(OwnedPetSnapshot(ownerId, pet, 1)), emptyList(),
             outfits.filter { it.ownerId == ownerId }, travels.filter { it.ownerId == ownerId }, emptyList(),
+            travelVideoAssets = travelAssets.filter { it.ownerId == ownerId },
         )
         override suspend fun acceptOutfit(pending: LocalPendingOutfit): OutfitAcceptanceResult {
             if (outfits.any { it.requestKey == pending.requestKey }) return OutfitAcceptanceResult.AlreadyApplied

@@ -19,7 +19,9 @@ open class TestAndroidFeatureService : AndroidFeatureService {
     override fun media(dto: GenerationAssetDto): PetGeneratedMedia? = PetGeneratedMedia(
         generatedAt = dto.generatedAt,
         moodImages = dto.images.flatMap { (stage, moods) ->
-            moods.map { (mood, url) -> com.gigagochi.app.core.model.PetMoodImage(stage, mood, url) }
+            moods.map { (mood, url) ->
+                com.gigagochi.app.core.model.PetMoodImage(stage, mood, url)
+            }
         },
     )
 }

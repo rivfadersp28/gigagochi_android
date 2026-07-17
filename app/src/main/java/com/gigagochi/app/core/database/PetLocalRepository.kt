@@ -213,6 +213,9 @@ class PetLocalRepository(
     override suspend fun acceptOutfit(pending: LocalPendingOutfit): OutfitAcceptanceResult {
         LocalPersistenceValidation.pendingOutfit(pending)
         return database.withTransaction {
+            if (dao.getAppliedOutfitReceipt(pending.ownerId, pending.requestKey) != null) {
+                return@withTransaction OutfitAcceptanceResult.AlreadyApplied
+            }
             if (dao.getPendingOutfit(pending.ownerId, pending.requestKey) != null) {
                 return@withTransaction OutfitAcceptanceResult.AlreadyApplied
             }

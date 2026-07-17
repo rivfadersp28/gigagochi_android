@@ -53,15 +53,10 @@ import com.gigagochi.app.feature.create.CreateDebugState
 import com.gigagochi.app.feature.create.CreatePetRoute
 import com.gigagochi.app.feature.create.CreateFinalizationCoordinator
 import com.gigagochi.app.feature.create.CreatePendingCoordinator
-import com.gigagochi.app.feature.create.ProductionPetGenerationUnavailableAdapter
 import com.gigagochi.app.feature.create.RealPetGenerationAdapter
 import com.gigagochi.app.feature.dashboard.DashboardRoute
 import com.gigagochi.app.feature.dashboard.DashboardDebugState
 import com.gigagochi.app.feature.dashboard.DashboardDurableOperations
-import com.gigagochi.app.feature.dashboard.UnavailableDashboardChatAdapter
-import com.gigagochi.app.feature.dashboard.UnavailableDashboardFeedAdapter
-import com.gigagochi.app.feature.dashboard.UnavailableDashboardOutfitAdapter
-import com.gigagochi.app.feature.dashboard.UnavailableDashboardTravelAdapter
 import com.gigagochi.app.feature.dashboard.DeterministicLocalDashboardFeedAdapter
 import com.gigagochi.app.feature.dashboard.ForegroundPendingRecoveryCoordinator
 import com.gigagochi.app.feature.dashboard.ForegroundRecoverySignal

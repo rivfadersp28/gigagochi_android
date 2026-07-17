@@ -112,7 +112,8 @@ class DashboardDurableOperations(
         pet: PetDashboardState,
     ): DurableTravelResult {
         return try {
-            val existing = store.loadOwnerRecovery(ownerId).pendingTravels.firstOrNull {
+            val recovery = store.loadOwnerRecovery(ownerId)
+            val existing = recovery.pendingTravels.firstOrNull {
                 it.petId == pet.petId
             }
             if (existing != null) {
@@ -121,6 +122,12 @@ class DashboardDurableOperations(
                 } else {
                     DurableTravelResult.PersistedButQueueFailed(existing.toUi())
                 }
+            }
+            if (recovery.travelVideoAssets.any {
+                    it.petId == pet.petId && it.requestKey == request.requestKey
+                }
+            ) {
+                return DurableTravelResult.Failure
             }
             if (!travelAdapter.isAvailable) return DurableTravelResult.Unavailable
             val local = LocalPendingTravelVideo(
