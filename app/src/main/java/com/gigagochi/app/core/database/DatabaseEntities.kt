@@ -67,6 +67,7 @@ internal data class TravelVideoAssetEntity(
     val videoUrl: String,
     val completedAtEpochMillis: Long,
     val consumedAtEpochMillis: Long? = null,
+    val notifiedAtEpochMillis: Long? = null,
 )
 
 @Entity(
@@ -80,6 +81,7 @@ internal data class AppliedOutfitReceiptEntity(
     val requestKey: String,
     val assetSetId: String,
     val appliedAtEpochMillis: Long,
+    val notifiedAtEpochMillis: Long? = null,
 )
 
 @Entity(
@@ -248,6 +250,7 @@ internal data class ScheduledStoryEntity(
     val resultExperienceGained: Int?,
     val resultImageUrl: String?,
     val resultVideoUrl: String?,
+    val notifiedAtEpochMillis: Long? = null,
 )
 
 internal class DatabaseTypeConverters {

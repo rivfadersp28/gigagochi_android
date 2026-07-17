@@ -145,6 +145,12 @@ internal interface GigagochiDao {
     @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND requestKey = :requestKey")
     suspend fun getTravelVideoAsset(ownerId: String, requestKey: String): TravelVideoAssetEntity?
 
+    @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId AND consumedAtEpochMillis IS NOT NULL AND notifiedAtEpochMillis IS NULL")
+    suspend fun getUnnotifiedTravelVideoAssets(ownerId: String, petId: String): List<TravelVideoAssetEntity>
+
+    @Query("UPDATE travel_video_assets SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND requestKey = :requestKey AND notifiedAtEpochMillis IS NULL")
+    suspend fun markTravelVideoAssetNotified(ownerId: String, requestKey: String, notifiedAt: Long): Int
+
     @Query("UPDATE travel_video_assets SET consumedAtEpochMillis = :consumedAt WHERE ownerId = :ownerId AND requestKey = :requestKey AND consumedAtEpochMillis IS NULL")
     suspend fun consumeTravelVideoAsset(ownerId: String, requestKey: String, consumedAt: Long): Int
 
@@ -174,6 +180,12 @@ internal interface GigagochiDao {
 
     @Query("SELECT * FROM applied_outfit_receipts WHERE ownerId = :ownerId AND requestKey = :requestKey")
     suspend fun getAppliedOutfitReceipt(ownerId: String, requestKey: String): AppliedOutfitReceiptEntity?
+
+    @Query("SELECT * FROM applied_outfit_receipts WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL")
+    suspend fun getUnnotifiedAppliedOutfitReceipts(ownerId: String, petId: String): List<AppliedOutfitReceiptEntity>
+
+    @Query("UPDATE applied_outfit_receipts SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND requestKey = :requestKey AND notifiedAtEpochMillis IS NULL")
+    suspend fun markAppliedOutfitReceiptNotified(ownerId: String, requestKey: String, notifiedAt: Long): Int
 
     @Query(
         """
@@ -225,6 +237,12 @@ internal interface GigagochiDao {
 
     @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAt DESC")
     suspend fun getScheduledStories(ownerId: String, petId: String): List<ScheduledStoryEntity>
+
+    @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL ORDER BY createdAt")
+    suspend fun getUnnotifiedScheduledStories(ownerId: String, petId: String): List<ScheduledStoryEntity>
+
+    @Query("UPDATE scheduled_stories SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND storyId = :storyId AND notifiedAtEpochMillis IS NULL")
+    suspend fun markScheduledStoryNotified(ownerId: String, storyId: String, notifiedAt: Long): Int
 
     @Query("UPDATE scheduled_stories SET choiceRequestKey = :requestKey, pendingChoice = :choice WHERE ownerId = :ownerId AND storyId = :storyId AND selectedChoice IS NULL AND choiceRequestKey IS NULL")
     suspend fun claimScheduledStoryChoice(

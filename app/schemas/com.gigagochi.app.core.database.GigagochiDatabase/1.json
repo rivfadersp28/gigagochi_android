@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "55855d549920215260e5075a8617374d",
+    "identityHash": "7be550dbdd9db67f5e4eed125eb282d8",
     "entities": [
       {
         "tableName": "pet_snapshots",
@@ -624,7 +624,7 @@
       },
       {
         "tableName": "travel_video_assets",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `backendJobId` TEXT NOT NULL, `prompt` TEXT NOT NULL, `title` TEXT, `scenario` TEXT, `imageUrl` TEXT, `videoUrl` TEXT NOT NULL, `completedAtEpochMillis` INTEGER NOT NULL, `consumedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `backendJobId` TEXT NOT NULL, `prompt` TEXT NOT NULL, `title` TEXT, `scenario` TEXT, `imageUrl` TEXT, `videoUrl` TEXT NOT NULL, `completedAtEpochMillis` INTEGER NOT NULL, `consumedAtEpochMillis` INTEGER, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
         "fields": [
           {
             "fieldPath": "ownerId",
@@ -686,6 +686,11 @@
           {
             "fieldPath": "consumedAtEpochMillis",
             "columnName": "consumedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
             "affinity": "INTEGER"
           }
         ],
@@ -890,7 +895,7 @@
       },
       {
         "tableName": "applied_outfit_receipts",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `appliedAtEpochMillis` INTEGER NOT NULL, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
         "fields": [
           {
             "fieldPath": "ownerId",
@@ -921,6 +926,11 @@
             "columnName": "appliedAtEpochMillis",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -945,7 +955,7 @@
       },
       {
         "tableName": "scheduled_stories",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `storyId` TEXT NOT NULL, `petId` TEXT NOT NULL, `title` TEXT NOT NULL, `text` TEXT NOT NULL, `question` TEXT NOT NULL, `choice0` TEXT NOT NULL, `choice1` TEXT NOT NULL, `choice2` TEXT NOT NULL, `choice3` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `imageUrl` TEXT, `videoUrl` TEXT, `choiceRequestKey` TEXT, `pendingChoice` TEXT, `selectedChoice` TEXT, `resultText` TEXT, `resultReaction` TEXT, `resultConsequence` TEXT, `resultExperienceGained` INTEGER, `resultImageUrl` TEXT, `resultVideoUrl` TEXT, PRIMARY KEY(`ownerId`, `storyId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `storyId` TEXT NOT NULL, `petId` TEXT NOT NULL, `title` TEXT NOT NULL, `text` TEXT NOT NULL, `question` TEXT NOT NULL, `choice0` TEXT NOT NULL, `choice1` TEXT NOT NULL, `choice2` TEXT NOT NULL, `choice3` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `imageUrl` TEXT, `videoUrl` TEXT, `choiceRequestKey` TEXT, `pendingChoice` TEXT, `selectedChoice` TEXT, `resultText` TEXT, `resultReaction` TEXT, `resultConsequence` TEXT, `resultExperienceGained` INTEGER, `resultImageUrl` TEXT, `resultVideoUrl` TEXT, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `storyId`))",
         "fields": [
           {
             "fieldPath": "ownerId",
@@ -1067,6 +1077,11 @@
             "fieldPath": "resultVideoUrl",
             "columnName": "resultVideoUrl",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
@@ -1092,7 +1107,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '55855d549920215260e5075a8617374d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7be550dbdd9db67f5e4eed125eb282d8')"
     ]
   }
 }

@@ -37,6 +37,8 @@ import com.gigagochi.app.core.auth.InMemoryAuthHeaderProvider
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.SessionBootstrapOutcome
 import com.gigagochi.app.core.auth.androidSessionRepository
+import com.gigagochi.app.core.background.MvpSyncScheduler
+import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.database.LocalScheduledStory
@@ -94,6 +96,11 @@ internal enum class FeatureAdapterMode { RealAuthenticated, ExplicitDebugFixture
 internal fun featureAdapterMode(explicitRouteValue: String?): FeatureAdapterMode =
     if (explicitRouteValue == null) FeatureAdapterMode.RealAuthenticated
     else FeatureAdapterMode.ExplicitDebugFixture
+
+internal fun shouldEnqueueBackgroundSync(
+    explicitDebugRoute: Boolean,
+    destination: AccountStartupDestination,
+): Boolean = !explicitDebugRoute && destination is AccountStartupDestination.Dashboard
 
 internal val ForegroundRecoveryMinimumLifecycle = Lifecycle.State.STARTED
 
@@ -201,6 +208,9 @@ class MainActivity : ComponentActivity() {
                                 petRepository?.getScheduledStory(session.accountId, storyId)
                             } else null
                             activeStory.value = story
+                            if (shouldEnqueueBackgroundSync(isExplicitDebugRoute, destination)) {
+                                MvpSyncScheduler.enqueue(applicationContext)
+                            }
                             route = if (story != null && story.story.petId == destination.pet.petId) {
                                 AppRoute.Story
                             } else appRouteForAccountStartup(destination)
@@ -305,6 +315,7 @@ class MainActivity : ComponentActivity() {
                     AppRoute.Dashboard -> if (isExplicitDebugRoute) {
                         DashboardRoute(debugState = dashboardDebugState)
                     } else {
+                        RequestNotificationPermissionOnce(enabled = true)
                         val recovery = activeStartup.value as? AccountStartupDestination.Dashboard
                         val session = requireNotNull(inMemorySession.value)
                         val repository = requireNotNull(petRepository)

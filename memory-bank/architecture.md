@@ -43,3 +43,9 @@
   the retained one-part `InteractiveTravelStoryScreen` shell without restoring 4-part machinery.
   Choice success/replay commits the existing story receipt with the actual durable request key;
   route state and return to Dashboard use Room-authoritative experience, so restart cannot double XP.
+- Background delivery is one unique WorkManager `CoroutineWorker` (`KEEP`, connected network,
+  15-minute periodic minimum) enqueued only after authenticated production Dashboard startup. One
+  pass bootstraps the Keystore session, checks due story once, performs exactly one pending
+  Outfit/Travel recovery poll/apply, then emits one-channel local notifications. Room v1 dedupe is
+  three nullable `notifiedAt` fields on existing completed rows; stable Android notification IDs
+  replace a prior post if the process dies before the durable mark. Create is never background work.

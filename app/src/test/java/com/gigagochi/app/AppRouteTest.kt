@@ -6,6 +6,8 @@ import com.gigagochi.app.core.model.PetDashboardState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import androidx.lifecycle.Lifecycle
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 
 class AppRouteTest {
     @Test
@@ -62,6 +64,35 @@ class AppRouteTest {
         listOf("auth", "create", "dashboard", "travel").forEach {
             assertEquals(FeatureAdapterMode.ExplicitDebugFixture, featureAdapterMode(it))
         }
+    }
+
+    @Test
+    fun backgroundSyncEnqueuesOnlyForProductionDashboard() {
+        val dashboard = AccountStartupDestination.Dashboard(
+            PetDashboardState(
+                "pet", "asset", "лис", "Тото", "baby", "Малыш", "idle",
+                0, 100, 100, 100, "", false,
+            ),
+            null,
+            null,
+            emptyList(),
+        )
+        assertEquals(true, shouldEnqueueBackgroundSync(false, dashboard))
+        assertEquals(false, shouldEnqueueBackgroundSync(true, dashboard))
+        assertEquals(
+            false,
+            shouldEnqueueBackgroundSync(false, AccountStartupDestination.Create()),
+        )
+        assertEquals(15L, com.gigagochi.app.core.background.MvpSyncIntervalMinutes)
+        assertEquals(1, com.gigagochi.app.core.background.MvpWorkerMaxPollAttempts)
+        assertEquals(
+            ExistingPeriodicWorkPolicy.KEEP,
+            com.gigagochi.app.core.background.MvpSyncExistingPolicy,
+        )
+        assertEquals(
+            NetworkType.CONNECTED,
+            com.gigagochi.app.core.background.MvpSyncNetworkConstraint,
+        )
     }
 
 }

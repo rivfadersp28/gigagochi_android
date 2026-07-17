@@ -84,6 +84,11 @@ class PetLocalRepositoryTest {
         assertTrue(repository.saveScheduledStory(LocalScheduledStory("owner-b", base)))
         assertEquals(1, repository.getScheduledStories("owner-a", PetId).size)
         assertEquals(1, repository.getScheduledStories("owner-b", PetId).size)
+        val storyNotification = repository.getUnnotifiedNotifications("owner-a", PetId).single()
+        assertEquals(LocalNotificationKind.ScheduledStory, storyNotification.kind)
+        assertTrue(repository.markNotificationSent("owner-a", storyNotification, 20))
+        assertTrue(repository.getUnnotifiedNotifications("owner-a", PetId).isEmpty())
+        assertEquals(1, repository.getUnnotifiedNotifications("owner-b", PetId).size)
 
         val claim = repository.claimScheduledStoryChoice("owner-a", base.storyId, ChoiceKey, "b")
         assertTrue(claim is ScheduledStoryChoiceClaim.Claimed)
@@ -103,6 +108,7 @@ class PetLocalRepositoryTest {
             repository.claimScheduledStoryChoice("owner-a", base.storyId, "other-key", "b")
                 is ScheduledStoryChoiceClaim.Completed,
         )
+        assertTrue(repository.getUnnotifiedNotifications("owner-a", PetId).isEmpty())
         assertNull(repository.getScheduledStory("owner-b", base.storyId)?.story?.selectedChoice)
     }
 
@@ -317,6 +323,10 @@ class PetLocalRepositoryTest {
         assertEquals("asset-${pending.requestKey}", repository.getPetSnapshot(OwnerId, PetId)?.pet?.assetSetId)
         assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
+        val outfitNotification = repository.getUnnotifiedNotifications(OwnerId, PetId).single()
+        assertEquals(LocalNotificationKind.OutfitReady, outfitNotification.kind)
+        assertTrue(repository.markNotificationSent(OwnerId, outfitNotification, 30))
+        assertTrue(repository.getUnnotifiedNotifications(OwnerId, PetId).isEmpty())
         assertTrue(repository.getOutfitMediaOutcomes(OwnerId, PetId).isEmpty())
         assertTrue(repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey) is OutfitOutcomeApplicationResult.AlreadyApplied)
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
@@ -362,6 +372,10 @@ class PetLocalRepositoryTest {
         assertEquals(21L, recovered.consumedAtEpochMillis)
         repository.saveTravelVideoAsset(recovered.copy(consumedAtEpochMillis = null))
         assertEquals(21L, repository.getTravelVideoAssets(OwnerId, PetId).single().consumedAtEpochMillis)
+        val travelNotification = repository.getUnnotifiedNotifications(OwnerId, PetId).single()
+        assertEquals(LocalNotificationKind.TravelReady, travelNotification.kind)
+        assertTrue(repository.markNotificationSent(OwnerId, travelNotification, 31))
+        assertTrue(repository.getUnnotifiedNotifications(OwnerId, PetId).isEmpty())
         assertTrue(
             repository.consumeTravelAsset(OwnerId, PetId, pending.requestKey, 22) is
                 TravelAssetConsumptionResult.AlreadyConsumed,

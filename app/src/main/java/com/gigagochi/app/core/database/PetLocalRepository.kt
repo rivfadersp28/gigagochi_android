@@ -331,7 +331,12 @@ class PetLocalRepository(
             if (existing == null) {
                 check(dao.insertTravelVideoAsset(asset.toEntity()) != -1L)
             } else {
-                require(existing.toModel().copy(consumedAtEpochMillis = asset.consumedAtEpochMillis) == asset) {
+                require(
+                    existing.toModel().copy(
+                        consumedAtEpochMillis = asset.consumedAtEpochMillis,
+                        notifiedAtEpochMillis = asset.notifiedAtEpochMillis,
+                    ) == asset,
+                ) {
                     "travel asset replay conflicts with durable result"
                 }
             }
@@ -572,6 +577,7 @@ class PetLocalRepository(
                     story.copy(
                         choiceRequestKey = existing.choiceRequestKey ?: story.choiceRequestKey,
                         pendingChoice = null,
+                        notifiedAtEpochMillis = existing.notifiedAtEpochMillis,
                     )
                 }
                 else -> existing
@@ -625,6 +631,84 @@ class PetLocalRepository(
                 if (winner.pendingChoice == choice && winner.choiceRequestKey != null) {
                     ScheduledStoryChoiceClaim.Existing(winner.choiceRequestKey, choice)
                 } else ScheduledStoryChoiceClaim.Conflict
+            }
+        }
+    }
+
+    suspend fun getUnnotifiedNotifications(
+        ownerId: String,
+        petId: String,
+    ): List<LocalCompletionNotification> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return database.withTransaction {
+            buildList {
+                dao.getUnnotifiedScheduledStories(ownerId, petId).forEach {
+                    add(
+                        LocalCompletionNotification(
+                            LocalNotificationKind.ScheduledStory,
+                            it.storyId,
+                            it.title,
+                            it.text.take(180),
+                            it.storyId,
+                        ),
+                    )
+                }
+                dao.getUnnotifiedAppliedOutfitReceipts(ownerId, petId).forEach {
+                    add(
+                        LocalCompletionNotification(
+                            LocalNotificationKind.OutfitReady,
+                            it.requestKey,
+                            "Новый образ готов",
+                            "Загляни к питомцу и посмотри результат.",
+                        ),
+                    )
+                }
+                dao.getUnnotifiedTravelVideoAssets(ownerId, petId).forEach {
+                    add(
+                        LocalCompletionNotification(
+                            LocalNotificationKind.TravelReady,
+                            it.requestKey,
+                            "Видео путешествия готово",
+                            "Новое приключение уже на главном экране.",
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    suspend fun markNotificationSent(
+        ownerId: String,
+        notification: LocalCompletionNotification,
+        notifiedAtEpochMillis: Long,
+    ): Boolean {
+        LocalPersistenceValidation.ownerId(ownerId)
+        require(notifiedAtEpochMillis >= 0)
+        return when (notification.kind) {
+            LocalNotificationKind.ScheduledStory -> {
+                LocalPersistenceValidation.storyId(notification.stableKey)
+                dao.markScheduledStoryNotified(
+                    ownerId,
+                    notification.stableKey,
+                    notifiedAtEpochMillis,
+                ) == 1
+            }
+            LocalNotificationKind.OutfitReady -> {
+                LocalPersistenceValidation.requestKey(notification.stableKey)
+                dao.markAppliedOutfitReceiptNotified(
+                    ownerId,
+                    notification.stableKey,
+                    notifiedAtEpochMillis,
+                ) == 1
+            }
+            LocalNotificationKind.TravelReady -> {
+                LocalPersistenceValidation.requestKey(notification.stableKey)
+                dao.markTravelVideoAssetNotified(
+                    ownerId,
+                    notification.stableKey,
+                    notifiedAtEpochMillis,
+                ) == 1
             }
         }
     }
@@ -944,6 +1028,7 @@ private fun LocalScheduledStory.toEntity() = ScheduledStoryEntity(
     resultExperienceGained = story.result?.experienceGained,
     resultImageUrl = story.resultImageUrl,
     resultVideoUrl = story.resultVideoUrl,
+    notifiedAtEpochMillis = notifiedAtEpochMillis,
 )
 
 private fun ScheduledStoryEntity.toModel() = LocalScheduledStory(
@@ -972,6 +1057,7 @@ private fun ScheduledStoryEntity.toModel() = LocalScheduledStory(
     ),
     choiceRequestKey = choiceRequestKey,
     pendingChoice = pendingChoice,
+    notifiedAtEpochMillis = notifiedAtEpochMillis,
 ).also(LocalPersistenceValidation::scheduledStory)
 
 private fun OwnedPetSnapshot.toEntity() = PetSnapshotEntity(
@@ -1034,12 +1120,12 @@ private fun OutfitMoodImageEntity.toModel() = PetMoodImage(stage, mood, url)
 
 private fun LocalTravelVideoAsset.toEntity() = TravelVideoAssetEntity(
     ownerId, petId, requestKey, backendJobId, prompt, title, scenario,
-    imageUrl, videoUrl, completedAtEpochMillis, consumedAtEpochMillis,
+    imageUrl, videoUrl, completedAtEpochMillis, consumedAtEpochMillis, notifiedAtEpochMillis,
 )
 
 private fun TravelVideoAssetEntity.toModel() = LocalTravelVideoAsset(
     ownerId, petId, requestKey, backendJobId, prompt, title, scenario,
-    imageUrl, videoUrl, completedAtEpochMillis, consumedAtEpochMillis,
+    imageUrl, videoUrl, completedAtEpochMillis, consumedAtEpochMillis, notifiedAtEpochMillis,
 )
 
 private fun LocalOutfitMediaOutcome.toEntity() = OutfitMediaOutcomeEntity(

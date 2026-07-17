@@ -11,6 +11,7 @@ data class LocalScheduledStory(
     val story: ScheduledStory,
     val choiceRequestKey: String? = null,
     val pendingChoice: String? = null,
+    val notifiedAtEpochMillis: Long? = null,
 )
 
 sealed interface ScheduledStoryChoiceClaim {
@@ -138,6 +139,17 @@ data class LocalTravelVideoAsset(
     val videoUrl: String,
     val completedAtEpochMillis: Long,
     val consumedAtEpochMillis: Long? = null,
+    val notifiedAtEpochMillis: Long? = null,
+)
+
+enum class LocalNotificationKind { ScheduledStory, OutfitReady, TravelReady }
+
+data class LocalCompletionNotification(
+    val kind: LocalNotificationKind,
+    val stableKey: String,
+    val title: String,
+    val body: String,
+    val storyId: String? = null,
 )
 
 data class LocalOutfitMediaOutcome(
