@@ -121,8 +121,11 @@ internal fun Modifier.petTapBulge(
         )
     }
 
-    return onSizeChanged { measuredSize = it }
-        .graphicsLayer {
+    val measuredModifier = onSizeChanged { measuredSize = it }
+    val activeStrength = strength.value
+    if (activeStrength <= .0001f) return measuredModifier
+
+    return measuredModifier.graphicsLayer {
             val center = reaction?.center ?: Offset(
                 measuredSize.width / 2f,
                 measuredSize.height / 2f,
@@ -141,14 +144,14 @@ internal fun Modifier.petTapBulge(
                 )
                 runtimeShader.setFloatUniform("center", center.x, center.y)
                 runtimeShader.setFloatUniform("radius", .27f)
-                runtimeShader.setFloatUniform("strength", strength.value)
-                this.renderEffect = renderEffect.takeIf { strength.value > .0001f }
+                runtimeShader.setFloatUniform("strength", activeStrength)
+                this.renderEffect = renderEffect
             } else if (measuredSize.width > 0 && measuredSize.height > 0) {
                 transformOrigin = TransformOrigin(
                     (center.x / measuredSize.width).coerceIn(0f, 1f),
                     (center.y / measuredSize.height).coerceIn(0f, 1f),
                 )
-                val fallbackScale = 1f + strength.value * .09f
+                val fallbackScale = 1f + activeStrength * .09f
                 scaleX = fallbackScale
                 scaleY = fallbackScale
             }
