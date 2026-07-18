@@ -1656,6 +1656,11 @@ private fun SpeechBubble(
 ) {
     val geometry = speechBubbleGeometry(message)
     val bottomPadding = if (geometry.height > 99.dp) 10.dp else 5.dp
+    val maxMessageLines = when {
+        geometry.height >= 150.dp -> 4
+        geometry.height > 99.dp -> 3
+        else -> 2
+    }
     val messageWidth = if (
         showContinuation && geometry == SpeechBubbleGeometry(341.dp, 99.dp)
     ) {
@@ -1712,7 +1717,7 @@ private fun SpeechBubble(
                 letterSpacing = (-0.25).sp,
                 textAlign = TextAlign.Center,
                 lineHeight = 29.9.sp,
-                maxLines = 2,
+                maxLines = maxMessageLines,
                 softWrap = true,
                 modifier = Modifier.requiredWidth(messageWidth).offset(y = (-1).dp),
             )

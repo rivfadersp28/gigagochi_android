@@ -24,7 +24,7 @@ class RealPetGenerationAdapter(
     private val stateStore: PendingBackendStateStore,
     private val api: AndroidFeatureService,
     private val pollDelayMillis: Long = 2_000L,
-    private val maxPollAttempts: Int = 180,
+    private val maxPollAttempts: Int = 600,
 ) : PetGenerationAdapter {
     override suspend fun generate(request: PendingPetGeneration): GeneratedPetFixture {
         val persisted = store.loadOwnerRecovery(ownerId).pendingCreates.singleOrNull {

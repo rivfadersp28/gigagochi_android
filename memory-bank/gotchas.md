@@ -69,6 +69,8 @@
 - Пока Android-приложение не выпущено, Room history намеренно схлопнута в один clean schema v1 без runtime migrations и destructive fallback. Локальный APK со старой pre-release schema надо удалить и установить заново; после первого релиза такой reset уже недопустим и следующая версия потребует обычную migration.
 - Удаление pending после успешного apply не означает, что mutation key можно забыть: Outfit replay должен проверять applied receipt до debit, а Travel replay — durable asset до нового submit. Иначе тот же requestKey после restart повторяет платную/долгую операцию уже после очистки pending.
 - Terminal failed Create job нельзя «ретраить» повторным poll того же backendJobId: серверный status неизменяем и мгновенно вернёт старую ошибку. Явный retry сохраняет pet/ответы, но получает новый requestKey и транзакционно заменяет только локальную pending-row со state `Failed`; transient/unknown ошибки продолжают использовать исходную identity, чтобы не задвоить платную генерацию.
+- Production Create занял около 12 минут. Polling window Android должен быть заметно длиннее: короткий client timeout показывает ложную ошибку, пока backend продолжает и успешно завершает job.
+- Dashboard speech bubble имеет несколько фиксированных высот. `maxLines` обязан соответствовать высоте: 99dp — 2 строки, промежуточная — 3, 150dp — 4; общий лимит в 2 строки молча обрезает реальные ответы персонажа.
 - WorkManager periodic interval 15 minutes is only a legal minimum, not a delivery deadline: OS
   batching, Doze and network constraints may delay it. This MVP is local best-effort notification,
   not FCM/push. Never replace the one-pass `recoverForeground(maxPollAttempts=1)` with `watch()` or
