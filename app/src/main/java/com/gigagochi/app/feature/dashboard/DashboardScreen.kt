@@ -1,9 +1,11 @@
 package com.gigagochi.app.feature.dashboard
 
 import android.net.Uri
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.provider.Settings
 import android.os.SystemClock
+import android.view.TextureView
 import android.view.LayoutInflater
 import androidx.annotation.OptIn
 import androidx.activity.compose.BackHandler
@@ -58,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -597,9 +600,8 @@ private fun DashboardInlineScreen(
                     projection = mediaProjection,
                     urlPolicy = mediaUrlPolicy,
                     reducedMotion = reducedMotion,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .petTapBulge(petTapReaction, reducedMotion),
+                    petTapReaction = petTapReaction,
+                    modifier = Modifier.fillMaxSize(),
                 )
                 Image(
                     painter = painterResource(R.drawable.video_filter_normal),
@@ -1329,6 +1331,7 @@ private fun DashboardVideo(
     projection: DashboardMediaProjection,
     urlPolicy: StaticMediaUrlPolicy?,
     reducedMotion: Boolean,
+    petTapReaction: PetTapReaction? = null,
     modifier: Modifier = Modifier,
 ) {
     if (LocalInspectionMode.current) {
@@ -1387,6 +1390,29 @@ private fun DashboardVideo(
             prepare()
         }
     }
+    var videoTexture by remember(projection, retryToken) { mutableStateOf<TextureView?>(null) }
+    var capturedFrame by remember(projection, retryToken) { mutableStateOf<Bitmap?>(null) }
+    var capturedFrameVersion by remember(projection, retryToken) { mutableIntStateOf(0) }
+
+    LaunchedEffect(petTapReaction?.id, videoTexture, reducedMotion) {
+        val reaction = petTapReaction ?: return@LaunchedEffect
+        val texture = videoTexture?.takeIf { it.isAvailable && it.width > 0 && it.height > 0 }
+            ?: return@LaunchedEffect
+        val bitmap = Bitmap.createBitmap(texture.width, texture.height, Bitmap.Config.ARGB_8888)
+        capturedFrame = bitmap
+        val durationMillis = if (reducedMotion) 100L else PetTapBulgeDurationMillis.toLong()
+        val deadlineNanos = System.nanoTime() + durationMillis * 1_000_000L
+        try {
+            do {
+                texture.getBitmap(bitmap)
+                capturedFrameVersion += 1
+                withFrameNanos { }
+            } while (System.nanoTime() < deadlineNanos && reaction.id == petTapReaction?.id)
+        } finally {
+            capturedFrame = null
+            bitmap.recycle()
+        }
+    }
 
     DisposableEffect(player, lifecycle) {
         if (player == null) return@DisposableEffect onDispose {}
@@ -1427,10 +1453,17 @@ private fun DashboardVideo(
                         setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                         setKeepContentOnPlayerReset(true)
                         this.player = player
+                        videoTexture = videoSurfaceView as? TextureView
                     }
                 },
-                update = { it.player = player },
-                onRelease = { it.player = null },
+                update = {
+                    it.player = player
+                    videoTexture = it.videoSurfaceView as? TextureView
+                },
+                onRelease = {
+                    videoTexture = null
+                    it.player = null
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -1441,6 +1474,17 @@ private fun DashboardVideo(
                 retryToken = retryToken,
                 onFailure = { mediaFailed = true },
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+        capturedFrame?.let { bitmap ->
+            val frameImage = remember(bitmap, capturedFrameVersion) { bitmap.asImageBitmap() }
+            Image(
+                bitmap = frameImage,
+                contentDescription = null,
+                contentScale = ContentScale.FillBounds,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .petTapBulge(petTapReaction, reducedMotion),
             )
         }
         if (mediaFailed) {

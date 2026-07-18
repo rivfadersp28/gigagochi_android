@@ -19,22 +19,54 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
+import kotlin.random.Random
 
 internal const val PetTapParticleIntervalMillis = 80L
-internal const val PetTapParticleCount = 16
+internal const val PetTapParticleCount = 9
 internal const val PetTapBulgeDurationMillis = 180
 internal const val PetTapBulgeAttackMillis = 45
 internal const val PetTapBulgeHoldMillis = 80
-internal const val PetTapParticleLifetimeMillis = 170
+internal const val PetTapParticleLifetimeMillis = 1_889
 internal const val PetTapBulgeStrength = .18f
 internal const val PetTapReducedBulgeStrength = .08f
+internal const val PetTapParticleLifetimeFrames = 136f
+internal const val PetTapParticleLifeDecayPerFrame = 1.2f
+internal const val PetTapParticleFriction = .99f
+internal const val PetTapParticleGravity = -.04f
+
+internal data class PetTapHeartParticleSpec(
+    val startOffsetX: Float,
+    val velocityX: Float,
+    val velocityY: Float,
+    val size: Float,
+    val rotation: Float,
+    val colorIndex: Int,
+)
+
+internal fun petTapHeartParticles(burstId: Int): List<PetTapHeartParticleSpec> {
+    val random = Random(burstId.toLong() * 7_919L + 17L)
+    return List(PetTapParticleCount) {
+        val angle = (-45f - random.nextFloat() * 90f) / 180f * PI.toFloat()
+        val speed = 11.2f + random.nextFloat() * 9.6f
+        PetTapHeartParticleSpec(
+            startOffsetX = -10f + random.nextFloat() * 20f,
+            velocityX = cos(angle) * speed,
+            velocityY = sin(angle) * speed,
+            size = 19.8f + random.nextFloat() * 19.8f,
+            rotation = -20f + random.nextFloat() * 40f,
+            colorIndex = random.nextInt(4),
+        )
+    }
+}
 
 internal data class PetTapReaction(
     val id: Int,
@@ -180,30 +212,49 @@ internal fun PetTapHeartBurst(
             Color(0xBDFF80AB),
         )
     }
+    val particles = remember(burst.id) { petTapHeartParticles(burst.id) }
 
     Canvas(modifier.fillMaxSize()) {
         val fraction = progress.value
-        val fade = (1f - ((fraction - .58f) / .42f).coerceIn(0f, 1f))
-        val pulse = if (fraction < .24f) {
-            .55f + fraction / .24f * .45f
-        } else {
-            1f - (fraction - .24f) / .76f * .14f
-        }
-        repeat(PetTapParticleCount) { index ->
-            val angleDegrees = -136f + 92f * index / (PetTapParticleCount - 1)
-            val angle = angleDegrees / 180f * PI.toFloat()
-            val travel = (30f + (index % 4) * 8f).dp.toPx() * fraction
+        val totalFrames = PetTapParticleLifetimeFrames / PetTapParticleLifeDecayPerFrame
+        val elapsedFrames = floor(fraction * totalFrames).toInt()
+        particles.forEach { particle ->
+            var x = burst.center.x + particle.startOffsetX.dp.toPx()
+            var y = burst.center.y
+            var velocityX = particle.velocityX.dp.toPx()
+            var velocityY = particle.velocityY.dp.toPx()
+            val gravity = PetTapParticleGravity.dp.toPx()
+            repeat(elapsedFrames) {
+                x += velocityX
+                y += velocityY
+                velocityY += gravity
+                velocityX *= PetTapParticleFriction
+                velocityY *= PetTapParticleFriction
+            }
+            val remainingLife = (
+                PetTapParticleLifetimeFrames - elapsedFrames * PetTapParticleLifeDecayPerFrame
+                ).coerceAtLeast(0f)
+            val opacity = (remainingLife / 100f).coerceIn(0f, 1f)
+            val pulse = 1f + sin(remainingLife * .2f) * .1f
             val center = Offset(
-                x = burst.center.x + cos(angle) * travel,
-                y = burst.center.y + sin(angle) * travel - 11.dp.toPx() * fraction * fraction,
+                x = x,
+                y = y,
             )
-            drawHeart(
-                center = center,
-                size = 42.dp.toPx() * pulse,
-                color = colors[index % colors.size].copy(
-                    alpha = colors[index % colors.size].alpha * fade,
-                ),
+            val color = colors[particle.colorIndex].copy(
+                alpha = colors[particle.colorIndex].alpha * opacity,
             )
+            rotate(particle.rotation, center) {
+                drawHeart(
+                    center = center,
+                    size = particle.size.dp.toPx() * pulse * 1.1f,
+                    color = color.copy(alpha = color.alpha * .2f),
+                )
+                drawHeart(
+                    center = center,
+                    size = particle.size.dp.toPx() * pulse,
+                    color = color,
+                )
+            }
         }
     }
 }
