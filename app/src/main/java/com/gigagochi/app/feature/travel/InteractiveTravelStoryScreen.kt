@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -30,6 +32,9 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -93,6 +98,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
@@ -142,6 +149,8 @@ fun InteractiveTravelStoryScreen(
     forcePoster: Boolean,
     scrollTarget: StoryScrollTarget,
     mediaUrlPolicy: com.gigagochi.app.core.network.StaticMediaUrlPolicy? = null,
+    navigationAction: ContextualNavigationAction? = null,
+    onNavigateBack: () -> Unit = {},
     onChoice: (String) -> Unit,
     onFinish: () -> Unit,
 ) {
@@ -150,54 +159,71 @@ fun InteractiveTravelStoryScreen(
     val isResult = state.phase == TravelEntryPhase.StoryResult || result != null
     val hazeState = rememberHazeState()
 
-    StoryReferenceFrame {
-        StoryBackdrop(
+    Box(Modifier.fillMaxSize()) {
+        StoryReferenceFrame {
+            StoryBackdrop(
             drawable = if (isResult) {
                 R.drawable.onboarding_bat_success
             } else {
                 R.drawable.onboarding_bat_situation
             },
             hazeState = hazeState,
-        )
+            )
 
-        if (state.phase != TravelEntryPhase.Finished) {
-            val contentIsInteractive = state.phase != TravelEntryPhase.ChoicePending
-            StoryScrollableContent(
-                story = story,
-                result = result,
-                reducedMotion = reducedMotion,
-                forcePoster = forcePoster,
-                scrollTarget = scrollTarget,
+            if (state.phase != TravelEntryPhase.Finished) {
+                val contentIsInteractive = state.phase != TravelEntryPhase.ChoicePending
+                StoryScrollableContent(
+                    story = story,
+                    result = result,
+                    reducedMotion = reducedMotion,
+                    forcePoster = forcePoster,
+                    scrollTarget = scrollTarget,
+                    hazeState = hazeState,
+                    contentIsInteractive = contentIsInteractive,
+                    mediaUrlPolicy = mediaUrlPolicy,
+                    onChoice = if (contentIsInteractive) onChoice else ({ _: String -> }),
+                    onFinish = if (contentIsInteractive) onFinish else ({ Unit }),
+                )
+            }
+            if (state.phase == TravelEntryPhase.ChoicePending) {
+                StoryThinkingIndicator(
+                    freezeFrame = reducedMotion,
+                    modifier = Modifier.offset(x = 161.dp, y = 567.1.dp),
+                )
+            }
+            if (state.error != null && state.phase == TravelEntryPhase.StoryQuestion) {
+                Text(
+                    text = state.error,
+                    color = Color.White,
+                    fontFamily = OpenRundeFontFamily,
+                    fontSize = 13.sp,
+                    lineHeight = 16.25.sp,
+                    modifier = Modifier
+                        .offset(x = 21.dp, y = 58.dp)
+                        .requiredWidth(360.dp)
+                        .background(Color(0xC2160A0A), RoundedCornerShape(14.dp))
+                        .border(1.dp, Color.White.copy(alpha = .2f), RoundedCornerShape(14.dp))
+                        .semantics {
+                            liveRegion = LiveRegionMode.Polite
+                            contentDescription = state.error
+                        }
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                )
+            }
+        }
+        navigationAction?.let { action ->
+            ContextualGlassNavigation(
+                action = action,
+                onClick = onNavigateBack,
                 hazeState = hazeState,
-                contentIsInteractive = contentIsInteractive,
-                mediaUrlPolicy = mediaUrlPolicy,
-                onChoice = if (contentIsInteractive) onChoice else ({ _: String -> }),
-                onFinish = if (contentIsInteractive) onFinish else ({ Unit }),
-            )
-        }
-        if (state.phase == TravelEntryPhase.ChoicePending) {
-            StoryThinkingIndicator(
-                freezeFrame = reducedMotion,
-                modifier = Modifier.offset(x = 161.dp, y = 567.1.dp),
-            )
-        }
-        if (state.error != null && state.phase == TravelEntryPhase.StoryQuestion) {
-            Text(
-                text = state.error,
-                color = Color.White,
-                fontFamily = OpenRundeFontFamily,
-                fontSize = 13.sp,
-                lineHeight = 16.25.sp,
                 modifier = Modifier
-                    .offset(x = 21.dp, y = 58.dp)
-                    .requiredWidth(360.dp)
-                    .background(Color(0xC2160A0A), RoundedCornerShape(14.dp))
-                    .border(1.dp, Color.White.copy(alpha = .2f), RoundedCornerShape(14.dp))
-                    .semantics {
-                        liveRegion = LiveRegionMode.Polite
-                        contentDescription = state.error
-                    }
-                    .padding(horizontal = 12.dp, vertical = 9.dp),
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                        ),
+                    )
+                    .padding(start = 16.dp, top = 16.dp),
             )
         }
     }

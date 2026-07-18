@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,6 +33,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.auth.HttpSessionRefreshExchange
 import com.gigagochi.app.core.auth.InMemoryAuthHeaderProvider
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
@@ -77,6 +79,18 @@ import com.gigagochi.app.feature.travel.StoryReceiptCoordinator
 import kotlinx.coroutines.launch
 
 internal enum class AppRoute { Auth, Create, Dashboard, Travel, Story, LocalDataError }
+
+internal fun contextualNavigationForAppRoute(
+    route: AppRoute,
+): ContextualNavigationAction? = when (route) {
+    AppRoute.Travel -> ContextualNavigationAction.Back
+    AppRoute.Story -> ContextualNavigationAction.Close
+    AppRoute.Auth,
+    AppRoute.Create,
+    AppRoute.Dashboard,
+    AppRoute.LocalDataError,
+    -> null
+}
 
 internal fun appRouteForOutcomeApplyConflict(): AppRoute = AppRoute.LocalDataError
 
@@ -149,6 +163,7 @@ class MainActivity : ComponentActivity() {
                 val activePet = remember { mutableStateOf<PetDashboardState?>(null) }
                 val activeStartup = remember { mutableStateOf<AccountStartupDestination?>(null) }
                 val activeStory = remember { mutableStateOf<LocalScheduledStory?>(null) }
+                var dashboardRecoveryRevision by remember { mutableIntStateOf(0) }
                 val sessionRepository = remember {
                     androidSessionRepository(applicationContext)
                 }
@@ -372,6 +387,10 @@ class MainActivity : ComponentActivity() {
                                 onOutcomeConflict = {
                                     route = appRouteForOutcomeApplyConflict()
                                 },
+                                onTerminalFailure = {
+                                    routeAuthenticatedSession(session)
+                                    dashboardRecoveryRevision += 1
+                                },
                             )
                         }
                         val lifecycleOwner = LocalLifecycleOwner.current
@@ -394,6 +413,7 @@ class MainActivity : ComponentActivity() {
                         }
                         DashboardRoute(
                             debugState = dashboardDebugState,
+                            recoveryRevision = dashboardRecoveryRevision,
                             initialPet = requireNotNull(activePet.value),
                             initialPendingOutfit = recovery?.pendingOutfit?.toUi(),
                             initialPendingTravel = recovery?.pendingTravel?.toUi(),
@@ -426,6 +446,9 @@ class MainActivity : ComponentActivity() {
                     AppRoute.Travel -> {
                         TravelEntryRoute(
                             debugState = travelDebugState,
+                            navigationAction = requireNotNull(
+                                contextualNavigationForAppRoute(AppRoute.Travel),
+                            ),
                             onNavigateDashboard = { route = AppRoute.Dashboard },
                         )
                     }
@@ -452,6 +475,9 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                             mediaUrlPolicy = mediaUrlPolicy,
+                            navigationAction = requireNotNull(
+                                contextualNavigationForAppRoute(AppRoute.Story),
+                            ),
                             onNavigateDashboard = {
                                 scope.launch { routeAuthenticatedSession(session) }
                             },

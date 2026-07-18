@@ -7,30 +7,17 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
+import com.gigagochi.app.core.designsystem.GlassActionSurfaceContract
 
 internal object DashboardGlassContract {
     const val MinimumSupportedSdk = 23
     const val NativeBlurMinimumSdk = 31
 
-    val ActionShape = RoundedCornerShape(24.dp)
-    val ActionTint = Color.White.copy(alpha = .15f)
-    val ActionStyle = HazeStyle(
-        backgroundColor = Color.Transparent,
-        tints = listOf(HazeTint(ActionTint)),
-        blurRadius = 12.dp,
-        noiseFactor = 0f,
-        fallbackTint = HazeTint(ActionTint),
-    )
-    val ActionHighlightInset = Shadow(
-        radius = 3.dp,
-        color = Color.White.copy(alpha = .2f),
-        offset = DpOffset(1.dp, 2.dp),
-    )
-    val ActionShadeInset = Shadow(
-        radius = 2.dp,
-        color = Color.Black.copy(alpha = .2f),
-        offset = DpOffset((-4).dp, (-4).dp),
-    )
+    val ActionShape = GlassActionSurfaceContract.Shape
+    val ActionTint = GlassActionSurfaceContract.Tint
+    val ActionStyle = GlassActionSurfaceContract.Style
+    val ActionHighlightInset = GlassActionSurfaceContract.HighlightInset
+    val ActionShadeInset = GlassActionSurfaceContract.ShadeInset
 
     val ConversationShape = RoundedCornerShape(56.dp)
     val FoodShape = RoundedCornerShape(28.dp)

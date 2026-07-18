@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -24,6 +26,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -87,6 +92,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -159,6 +166,7 @@ fun TravelEntryRoute(
         FakeOnboardingTravelStoryAdapter()
     },
     reducedMotionOverride: Boolean? = null,
+    navigationAction: ContextualNavigationAction = ContextualNavigationAction.Back,
     onNavigateDashboard: (TravelExitReason) -> Unit,
 ) {
     val systemReducedMotion = rememberTravelReducedMotionPreference()
@@ -292,11 +300,12 @@ fun TravelEntryRoute(
         state = reduceTravelEntry(state, event)
     }
 
-    BackHandler {
+    val navigateBack: () -> Unit = {
         keyboard?.hide()
         requestIme = false
         dispatch(TravelEntryEvent.Back)
     }
+    BackHandler(onBack = navigateBack)
 
     if (state.phase in StoryTravelPhases) {
         InteractiveTravelStoryScreen(
@@ -313,6 +322,8 @@ fun TravelEntryRoute(
                 else -> StoryScrollTarget.Top
             },
             mediaUrlPolicy = mediaUrlPolicy,
+            navigationAction = navigationAction,
+            onNavigateBack = navigateBack,
             onChoice = { choice ->
                 requestSequence += 1
                 dispatch(
@@ -368,6 +379,8 @@ fun TravelEntryRoute(
                     ),
                 )
             },
+            navigationAction = navigationAction,
+            onNavigateBack = navigateBack,
         )
     }
 }
@@ -381,63 +394,79 @@ fun TravelEntryScreen(
     onDraftChange: (String) -> Unit,
     onSelectSuggestion: (String) -> Unit,
     onSubmitCustomDestination: () -> Unit,
+    navigationAction: ContextualNavigationAction,
+    onNavigateBack: () -> Unit,
 ) {
-    TravelReferenceFrame {
-        TravelEntryBackground(
-            reducedMotion = reducedMotion,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Image(
-            painter = painterResource(R.drawable.video_filter_normal),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = .7f },
-        )
+    Box(Modifier.fillMaxSize()) {
+        TravelReferenceFrame {
+            TravelEntryBackground(
+                reducedMotion = reducedMotion,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Image(
+                painter = painterResource(R.drawable.video_filter_normal),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = .7f },
+            )
 
-        if (state.error != null && state.phase !in listOf(
+            if (state.error != null && state.phase !in listOf(
                 TravelEntryPhase.LoadingSuggestions,
                 TravelEntryPhase.StartPending,
             )
-        ) {
-            TravelErrorNotice(
-                message = state.error,
-                modifier = Modifier.offset(x = 21.dp, y = 58.dp),
-            )
+            ) {
+                TravelErrorNotice(
+                    message = state.error,
+                    modifier = Modifier.offset(x = 21.dp, y = 58.dp),
+                )
+            }
+
+            when (state.phase) {
+                TravelEntryPhase.LoadingSuggestions,
+                TravelEntryPhase.StartPending,
+                -> TravelThinkingIndicator(
+                    freezeFrame = reducedMotion,
+                    modifier = Modifier.offset(x = 161.dp, y = 567.1.dp),
+                )
+
+                TravelEntryPhase.Picker -> TravelDestinationPicker(
+                    petName = state.pet.name,
+                    suggestions = state.suggestions,
+                    reducedMotion = reducedMotion,
+                    onSelectSuggestion = onSelectSuggestion,
+                    onOpenCustomDestination = onOpenCustomDestination,
+                )
+
+                TravelEntryPhase.CustomDestination -> TravelCustomDestinationForm(
+                    petName = state.pet.name,
+                    draft = state.customDraft,
+                    requestIme = requestIme,
+                    reducedMotion = reducedMotion,
+                    onDraftChange = onDraftChange,
+                    onSubmit = onSubmitCustomDestination,
+                )
+
+                TravelEntryPhase.StoryQuestion,
+                TravelEntryPhase.ChoicePending,
+                TravelEntryPhase.StoryResult,
+                TravelEntryPhase.Finished,
+                -> Unit
+            }
         }
-
-        when (state.phase) {
-            TravelEntryPhase.LoadingSuggestions,
-            TravelEntryPhase.StartPending,
-            -> TravelThinkingIndicator(
-                freezeFrame = reducedMotion,
-                modifier = Modifier.offset(x = 161.dp, y = 567.1.dp),
-            )
-
-            TravelEntryPhase.Picker -> TravelDestinationPicker(
-                petName = state.pet.name,
-                suggestions = state.suggestions,
-                reducedMotion = reducedMotion,
-                onSelectSuggestion = onSelectSuggestion,
-                onOpenCustomDestination = onOpenCustomDestination,
-            )
-
-            TravelEntryPhase.CustomDestination -> TravelCustomDestinationForm(
-                petName = state.pet.name,
-                draft = state.customDraft,
-                requestIme = requestIme,
-                reducedMotion = reducedMotion,
-                onDraftChange = onDraftChange,
-                onSubmit = onSubmitCustomDestination,
-            )
-
-            TravelEntryPhase.StoryQuestion,
-            TravelEntryPhase.ChoicePending,
-            TravelEntryPhase.StoryResult,
-            TravelEntryPhase.Finished,
-            -> Unit
-        }
+        ContextualGlassNavigation(
+            action = navigationAction,
+            onClick = onNavigateBack,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                    ),
+                )
+                .padding(top = 16.dp, end = 16.dp),
+        )
     }
 }
 
@@ -998,6 +1027,8 @@ private fun TravelEntryPickerPreview() {
             onDraftChange = {},
             onSelectSuggestion = {},
             onSubmitCustomDestination = {},
+            navigationAction = ContextualNavigationAction.Back,
+            onNavigateBack = {},
         )
     }
 }

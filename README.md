@@ -22,6 +22,23 @@ $ANDROID_HOME/platform-tools/adb install -r app/build/outputs/apk/debug/app-debu
 $ANDROID_HOME/platform-tools/adb shell am start -n com.gigagochi.app/.MainActivity
 ```
 
+Debug-only bootstrap реальной backend session без Google UI принимает один Base64 JSON payload.
+Компонент отсутствует в release APK; значения токенов не добавлять в репозиторий или документацию:
+
+```bash
+SESSION_PAYLOAD_B64='<BASE64_OF_{accountId,accessToken,refreshToken,expiresAt}>'
+$ANDROID_HOME/platform-tools/adb shell am start -W \
+  -n com.gigagochi.app/.debug.DebugSessionBootstrapActivity \
+  --es gigagochi.debug.sessionPayload "$SESSION_PAYLOAD_B64"
+unset SESSION_PAYLOAD_B64
+```
+
+Activity принимает только canonical Base64, строгий JSON и future `expiresAt` в epoch milliseconds.
+Успех показывается нейтральным toast `Debug-сессия сохранена` и открывает обычный production startup
+без `gigagochi.route`; отказ показывает `Debug-сессия отклонена`. Payload и причины parsing failure
+не выводятся в UI/logcat. После проверки debug session следует очистить данные debug-приложения.
+Debug fixture получает 1000 XP исключительно для разблокировки generation controls при live-проверке.
+
 Детерминированные Create-состояния для review:
 
 ```bash

@@ -1,5 +1,6 @@
 package com.gigagochi.app.feature.dashboard
 
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -10,6 +11,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DashboardContractTest {
+    @Test
+    fun onlyNestedDashboardModesExposeContextualClose() {
+        assertNull(contextualNavigationForDashboardMode(DashboardMode.Idle))
+        listOf(
+            DashboardMode.Chat,
+            DashboardMode.Feed,
+            DashboardMode.Outfit,
+            DashboardMode.Travel,
+        ).forEach { mode ->
+            assertEquals(
+                ContextualNavigationAction.Close,
+                contextualNavigationForDashboardMode(mode),
+            )
+        }
+    }
+
     private fun pet(
         experience: Int = 0,
         hunger: Int = 50,

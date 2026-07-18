@@ -28,10 +28,16 @@ class AccountPetLifecycle(
             AccountStartupDestination.Dashboard(
                 pet = snapshot.pet,
                 pendingOutfit = recovery.pendingOutfits
-                    .filter { it.petId == snapshot.pet.petId }
+                    .filter {
+                        it.petId == snapshot.pet.petId &&
+                            it.backendState != PendingBackendState.Failed
+                    }
                     .maxByOrNull { it.acceptedAtEpochMillis },
                 pendingTravel = recovery.pendingTravels
-                    .filter { it.petId == snapshot.pet.petId }
+                    .filter {
+                        it.petId == snapshot.pet.petId &&
+                            it.backendState != PendingBackendState.Failed
+                    }
                     .maxByOrNull { it.acceptedAtEpochMillis },
                 travelPresentation = recovery.travelVideoAssets
                     .filter { it.petId == snapshot.pet.petId && it.consumedAtEpochMillis != null }

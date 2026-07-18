@@ -38,7 +38,11 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -133,6 +137,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.database.LocalTravelVideoAsset
@@ -183,6 +188,7 @@ internal object DashboardVideoTestProbe {
 @Composable
 fun DashboardRoute(
     debugState: DashboardDebugState = DashboardDebugState.Idle,
+    recoveryRevision: Int = 0,
     initialPet: PetDashboardState = DemoPet,
     initialPendingOutfit: PendingOutfitGeneration? = null,
     initialPendingTravel: PendingTravelGeneration? = null,
@@ -198,7 +204,7 @@ fun DashboardRoute(
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
 ) {
-    var state by remember(debugState, initialPet) {
+    var state by remember(debugState, initialPet, recoveryRevision) {
         val base = dashboardDebugFixture(debugState, initialPet)
         mutableStateOf(
             if (debugState == DashboardDebugState.Idle) {
@@ -714,21 +720,21 @@ private fun DashboardInlineScreen(
                 )
             }
 
-            // Back is the canonical close affordance; this invisible semantic node keeps the
-            // close action available to accessibility services without changing the web parity.
-            Box(
-                Modifier
-                    .requiredSize(1.dp)
-                    .alpha(0f)
-                    .semantics {
-                        contentDescription = "Закрыть режим"
-                        role = Role.Button
-                        onClick("Закрыть режим") {
-                            onClose()
-                            true
-                        }
-                    }
-                    .pointerInput(onClose) { detectTapGestures(onTap = { onClose() }) },
+        }
+
+        contextualNavigationForDashboardMode(state.mode)?.let { action ->
+            ContextualGlassNavigation(
+                action = action,
+                onClick = onClose,
+                hazeState = hazeState,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                        ),
+                    )
+                    .padding(start = 16.dp, top = 16.dp),
             )
         }
     }

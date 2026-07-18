@@ -10,6 +10,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.ScheduledStory
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.database.LocalScheduledStory
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
 import kotlinx.coroutines.launch
@@ -21,6 +22,7 @@ fun ScheduledStoryRoute(
     initialStory: LocalScheduledStory,
     coordinator: ScheduledStoryCoordinator,
     mediaUrlPolicy: StaticMediaUrlPolicy,
+    navigationAction: ContextualNavigationAction = ContextualNavigationAction.Close,
     onNavigateDashboard: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -50,6 +52,8 @@ fun ScheduledStoryRoute(
         forcePoster = false,
         scrollTarget = StoryScrollTarget.Top,
         mediaUrlPolicy = mediaUrlPolicy,
+        navigationAction = navigationAction,
+        onNavigateBack = onNavigateDashboard,
         onChoice = { choice ->
             if (state.phase != TravelEntryPhase.StoryQuestion) return@InteractiveTravelStoryScreen
             val requestKey = UUID.randomUUID().toString()

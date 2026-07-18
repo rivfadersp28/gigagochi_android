@@ -3,6 +3,7 @@ package com.gigagochi.app.feature.dashboard
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -123,6 +124,28 @@ class DashboardScreenTest {
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.runOnIdle { assertEquals(1, DashboardVideoTestProbe.createdPlayerCount) }
+    }
+
+    @Test
+    fun visibleCloseMatchesSystemBackAndKeepsIdleWithoutTopNavigation() {
+        composeRule.setContent {
+            GigagochiTheme { DashboardRoute(requestImeOverride = false) }
+        }
+
+        composeRule.onNodeWithContentDescription("Закрыть").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Поболтать").performClick()
+        composeRule.onNodeWithContentDescription("Закрыть")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeRule.onNodeWithContentDescription("Закрыть").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Поболтать").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("Покормить").performClick()
+        composeRule.onNodeWithContentDescription("Закрыть").assertIsDisplayed()
+        pressBack()
+        composeRule.onNodeWithContentDescription("Закрыть").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Покормить").assertIsDisplayed()
     }
 
     @Test

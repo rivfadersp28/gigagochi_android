@@ -2,6 +2,7 @@ package com.gigagochi.app
 
 
 import com.gigagochi.app.core.database.AccountStartupDestination
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -10,6 +11,22 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 
 class AppRouteTest {
+    @Test
+    fun contextualNavigationMatchesRouteSemanticsWithoutDecorativeForward() {
+        assertEquals(null, contextualNavigationForAppRoute(AppRoute.Auth))
+        assertEquals(null, contextualNavigationForAppRoute(AppRoute.Create))
+        assertEquals(null, contextualNavigationForAppRoute(AppRoute.Dashboard))
+        assertEquals(null, contextualNavigationForAppRoute(AppRoute.LocalDataError))
+        assertEquals(
+            ContextualNavigationAction.Back,
+            contextualNavigationForAppRoute(AppRoute.Travel),
+        )
+        assertEquals(
+            ContextualNavigationAction.Close,
+            contextualNavigationForAppRoute(AppRoute.Story),
+        )
+    }
+
     @Test
     fun productionStartupNeverRoutesToFourPartInteractiveTravel() {
         val destination = AccountStartupDestination.Dashboard(

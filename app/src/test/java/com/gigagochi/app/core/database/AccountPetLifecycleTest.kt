@@ -1,6 +1,11 @@
 package com.gigagochi.app.core.database
 
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.feature.dashboard.DashboardEvent
+import com.gigagochi.app.feature.dashboard.DashboardMode
+import com.gigagochi.app.feature.dashboard.DashboardUiState
+import com.gigagochi.app.feature.dashboard.reduceDashboard
+import com.gigagochi.app.feature.dashboard.toUi
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -101,6 +106,46 @@ class AccountPetLifecycleTest {
             ),
             AccountPetLifecycle(store).startup("acct_owner_a"),
         )
+    }
+
+    @Test
+    fun terminalFailuresRemainAuditButDoNotBlockANewOutfitRequest() = runBlocking {
+        val store = FakeStore()
+        val activePet = pet("pet-a", hunger = 70).copy(experience = 500)
+        val activeOutfit = pendingOutfit("acct_owner_a", activePet.petId, "outfit-active")
+            .copy(backendState = PendingBackendState.Attached, acceptedAtEpochMillis = 20)
+        val failedOutfit = pendingOutfit("acct_owner_a", activePet.petId, "outfit-failed")
+            .copy(backendState = PendingBackendState.Failed, acceptedAtEpochMillis = 99)
+        val readyTravel = pendingTravel("acct_owner_a", activePet.petId, "travel-ready")
+            .copy(backendState = PendingBackendState.Ready, acceptedAtEpochMillis = 30)
+        val failedTravel = pendingTravel("acct_owner_a", activePet.petId, "travel-failed")
+            .copy(backendState = PendingBackendState.Failed, acceptedAtEpochMillis = 100)
+        store.snapshots += snapshot("acct_owner_a", activePet, 10)
+        store.outfits += listOf(activeOutfit, failedOutfit)
+        store.travels += listOf(readyTravel, failedTravel)
+
+        val withActive = AccountPetLifecycle(store).startup("acct_owner_a")
+            as AccountStartupDestination.Dashboard
+        assertEquals(activeOutfit, withActive.pendingOutfit)
+        assertEquals(readyTravel, withActive.pendingTravel)
+
+        store.outfits.remove(activeOutfit)
+        val filtered = AccountPetLifecycle(store).startup("acct_owner_a")
+            as AccountStartupDestination.Dashboard
+        assertEquals(null, filtered.pendingOutfit)
+        var dashboard = DashboardUiState(
+            pet = filtered.pet,
+            mode = DashboardMode.Outfit,
+            outfitDraft = "В новый плащ",
+            pendingOutfit = filtered.pendingOutfit?.toUi(),
+        )
+        dashboard = reduceDashboard(
+            dashboard,
+            DashboardEvent.SubmitOutfit("new-outfit-request"),
+        )
+
+        assertEquals("new-outfit-request", dashboard.activeOutfit?.requestKey)
+        assertTrue(store.outfits.contains(failedOutfit))
     }
 
     private fun pendingCreate(owner: String, petId: String, key: String) =

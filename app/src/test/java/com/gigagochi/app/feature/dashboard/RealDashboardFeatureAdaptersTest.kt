@@ -162,6 +162,59 @@ class RealDashboardFeatureAdaptersTest {
     }
 
     @Test
+    fun recoveryReloadsOnceOnlyForNewOutfitAndTravelTerminalFailures() = runBlocking {
+        val oldFailed = outfit().copy(
+            requestKey = "old-failed-outfit",
+            backendState = PendingBackendState.Failed,
+        )
+        val store = InMemoryFeatureStore().apply {
+            outfits += oldFailed
+            outfits += outfit().copy(
+                backendJobId = "job-outfit",
+                backendState = PendingBackendState.Attached,
+            )
+            travels += travel(
+                backendJobId = "job-travel",
+                state = PendingBackendState.Attached,
+            )
+        }
+        var outfitPolls = 0
+        var travelPolls = 0
+        var terminalCallbacks = 0
+        val api = object : TestAndroidFeatureService() {
+            override suspend fun pollOutfit(jobId: String): FeatureApiResult<GenerationEnvelopeDto> {
+                outfitPolls += 1
+                return FeatureApiResult.Success(envelope(jobId, GenerationJobStatusDto.Failed))
+            }
+
+            override suspend fun pollTravel(jobId: String): FeatureApiResult<TravelVideoDto> {
+                travelPolls += 1
+                return FeatureApiResult.Success(travelDto(jobId, TravelVideoStatusDto.Failed))
+            }
+        }
+        val coordinator = ForegroundPendingRecoveryCoordinator(
+            "owner-a",
+            store,
+            RealDashboardOutfitAdapter("owner-a", store, store, store, api),
+            RealDashboardTravelAdapter("owner-a", store, store, store, api),
+            ForegroundRecoverySignal(),
+            pollDelayMillis = 1,
+            maxPollAttempts = 3,
+            onTerminalFailure = { terminalCallbacks += 1 },
+        )
+
+        coordinator.recoverForeground("pet-a")
+        coordinator.recoverForeground("pet-a")
+
+        assertEquals(1, outfitPolls)
+        assertEquals(1, travelPolls)
+        assertEquals(1, terminalCallbacks)
+        assertEquals(PendingBackendState.Failed, store.outfits.last().backendState)
+        assertEquals(PendingBackendState.Failed, store.travels.single().backendState)
+        assertEquals(PendingBackendState.Failed, oldFailed.backendState)
+    }
+
+    @Test
     fun readyApplyStorageFailureRetriesPersistenceOnlyThenSucceeds() = runBlocking {
         val store = FlakyOutcomeStore().apply {
             travels += travel(backendJobId = "job-travel", state = PendingBackendState.Ready)

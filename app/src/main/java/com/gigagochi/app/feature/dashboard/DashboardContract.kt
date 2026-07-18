@@ -1,5 +1,6 @@
 package com.gigagochi.app.feature.dashboard
 
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
 import kotlin.math.max
 
@@ -24,6 +25,17 @@ const val DeterministicTravelReply =
     "На ночной рынок духов? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь."
 
 enum class DashboardMode { Idle, Chat, Feed, Outfit, Travel }
+
+internal fun contextualNavigationForDashboardMode(
+    mode: DashboardMode,
+): ContextualNavigationAction? = when (mode) {
+    DashboardMode.Idle -> null
+    DashboardMode.Chat,
+    DashboardMode.Feed,
+    DashboardMode.Outfit,
+    DashboardMode.Travel,
+    -> ContextualNavigationAction.Close
+}
 
 enum class DashboardFood(val routeValue: String) {
     BerryBowl("berry-bowl"),

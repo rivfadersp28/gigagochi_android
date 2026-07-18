@@ -1,6 +1,7 @@
 package com.gigagochi.app.feature.travel
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.espresso.Espresso.pressBack
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +63,60 @@ class TravelEntryScreenTest {
         pressBack()
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals(1, dashboardNavigations) }
+    }
+
+    @Test
+    fun visibleBackUsesTheSameNestedThenExitSemanticsAsSystemBack() {
+        var dashboardNavigations = 0
+        composeRule.setContent {
+            GigagochiTheme {
+                TravelEntryRoute(
+                    debugState = TravelDebugState.Picker,
+                    reducedMotionOverride = true,
+                    onNavigateDashboard = { dashboardNavigations += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Назад")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithContentDescription("Свой вариант").performClick()
+        composeRule.onNodeWithContentDescription("Назад").performClick()
+        composeRule.onNodeWithContentDescription("В горы").assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(0, dashboardNavigations) }
+        composeRule.onNodeWithContentDescription("Назад").performClick()
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { assertEquals(1, dashboardNavigations) }
+    }
+
+    @Test
+    fun scheduledStoryShellExposesVisibleClose() {
+        var closes = 0
+        composeRule.setContent {
+            GigagochiTheme {
+                InteractiveTravelStoryScreen(
+                    state = TravelEntryState(
+                        pet = TravelEntryPet("pet", "Тото"),
+                        phase = TravelEntryPhase.StoryQuestion,
+                        story = onboardingBatStory("pet"),
+                    ),
+                    reducedMotion = true,
+                    forcePoster = true,
+                    scrollTarget = StoryScrollTarget.Top,
+                    navigationAction = ContextualNavigationAction.Close,
+                    onNavigateBack = { closes += 1 },
+                    onChoice = {},
+                    onFinish = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Закрыть")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeRule.runOnIdle { assertEquals(1, closes) }
     }
 
     @Test

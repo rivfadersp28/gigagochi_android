@@ -6,6 +6,7 @@ class StaticMediaUrlPolicy(
     baseUrl: String,
     allowDebugLoopbackHttp: Boolean,
 ) {
+    private val allowDebugTestPetMedia = allowDebugLoopbackHttp
     private val base = validatedFeatureBaseUrl(baseUrl, allowDebugLoopbackHttp)
         ?: throw IllegalArgumentException("Invalid backend base URL")
 
@@ -24,7 +25,7 @@ class StaticMediaUrlPolicy(
             require(resolved.userInfo == null && resolved.fragment == null)
             require(resolved.host.equals(base.host, ignoreCase = true))
             require(effectivePort(resolved) == effectivePort(base))
-            require(resolved.path.startsWith("/static/"))
+            require(isAllowedMediaPath(resolved.path))
             validateCacheQuery(resolved.rawQuery)
             URI(
                 resolved.scheme,
@@ -47,6 +48,10 @@ class StaticMediaUrlPolicy(
 
     private fun defaultPort(scheme: String): Int = if (scheme == "https") 443 else 80
 
+    private fun isAllowedMediaPath(path: String): Boolean =
+        path.startsWith("/static/") ||
+            (allowDebugTestPetMedia && path in ExactProductionTestPetPaths)
+
     private fun validateCacheQuery(rawQuery: String?) {
         if (rawQuery == null) return
         val pairs = rawQuery.split('&')
@@ -54,5 +59,16 @@ class StaticMediaUrlPolicy(
         val components = pairs.single().split('=', limit = 2)
         require(components.size == 2 && components[0] == "v")
         require(Regex("^[A-Za-z0-9_-]{1,64}$").matches(components[1]))
+    }
+
+    private companion object {
+        val ExactProductionTestPetPaths = setOf(
+            "/test-pet/openai-normal.png",
+            "/test-pet/openai-sad.png",
+            "/test-pet/openai-happy.png",
+            "/test-pet/openai-normal.mp4",
+            "/test-pet/openai-sad.mp4",
+            "/test-pet/openai-happy.mp4",
+        )
     }
 }

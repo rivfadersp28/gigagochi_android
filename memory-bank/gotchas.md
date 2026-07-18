@@ -72,3 +72,6 @@
   batching, Doze and network constraints may delay it. This MVP is local best-effort notification,
   not FCM/push. Never replace the one-pass `recoverForeground(maxPollAttempts=1)` with `watch()` or
   long polling inside the worker.
+- Terminal `Failed` Outfit/Travel rows are audit history, not active recovery pending. Startup must
+  exclude them, while foreground recovery reloads Main only for failures created during that pass;
+  treating old failures as an edge retriggers startup forever and blocks a new request key.

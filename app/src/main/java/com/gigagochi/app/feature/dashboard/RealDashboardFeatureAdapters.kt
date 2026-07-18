@@ -386,12 +386,17 @@ class ForegroundPendingRecoveryCoordinator(
     private val outcomeApplication: DashboardOutcomeApplicationCoordinator? = null,
     private val onOutcomeApplied: suspend (DashboardOutcomeRecoveryResult.Changed) -> Unit = {},
     private val onOutcomeConflict: suspend () -> Unit = {},
+    private val onTerminalFailure: suspend () -> Unit = {},
 ) {
     suspend fun watch(petId: String) {
         signal.collect { recoverForeground(petId) }
     }
 
     suspend fun recoverForeground(petId: String) {
+        val initialTerminalFailures = terminalFailureKeys(
+            store.loadOwnerRecovery(ownerId),
+            petId,
+        )
         repeat(maxPollAttempts) { attempt ->
             var recovery = store.loadOwnerRecovery(ownerId)
             val pet = recovery.petSnapshots.firstOrNull { it.pet.petId == petId }?.pet
@@ -422,6 +427,10 @@ class ForegroundPendingRecoveryCoordinator(
             }
             applyReadyOutcomes(petId)
             recovery = store.loadOwnerRecovery(ownerId)
+            if ((terminalFailureKeys(recovery, petId) - initialTerminalFailures).isNotEmpty()) {
+                onTerminalFailure()
+                return
+            }
             val pendingOutfits = recovery.pendingOutfits.filter {
                 it.petId == petId && it.backendJobId != null &&
                     it.backendState !in setOf(PendingBackendState.Ready, PendingBackendState.Failed)
@@ -439,8 +448,27 @@ class ForegroundPendingRecoveryCoordinator(
             pendingOutfits.forEach { cancellationSafe { outfit.pollOnce(it) } }
             pendingTravels.forEach { cancellationSafe { travel.pollOnce(it) } }
             applyReadyOutcomes(petId)
+            recovery = store.loadOwnerRecovery(ownerId)
+            if ((terminalFailureKeys(recovery, petId) - initialTerminalFailures).isNotEmpty()) {
+                onTerminalFailure()
+                return
+            }
             if (attempt + 1 < maxPollAttempts) delay(pollDelayMillis)
         }
+    }
+
+    private fun terminalFailureKeys(
+        recovery: com.gigagochi.app.core.database.OwnerRecoveryData,
+        petId: String,
+    ): Set<String> = buildSet {
+        recovery.pendingOutfits.filter {
+            it.petId == petId && it.backendState == PendingBackendState.Failed &&
+                it.backendErrorCode != "APPLY_CONFLICT"
+        }.forEach { add("outfit:${it.requestKey}") }
+        recovery.pendingTravels.filter {
+            it.petId == petId && it.backendState == PendingBackendState.Failed &&
+                it.backendErrorCode != "APPLY_CONFLICT"
+        }.forEach { add("travel:${it.requestKey}") }
     }
 
     private suspend fun applyReadyOutcomes(petId: String) {
