@@ -102,6 +102,9 @@ internal fun appRouteFromValue(value: String?): AppRoute = when (value) {
     else -> AppRoute.Auth
 }
 
+internal fun debugExtraValue(value: String?, isDebugBuild: Boolean): String? =
+    value.takeIf { isDebugBuild }
+
 internal fun shouldUseProductionRoom(explicitRouteValue: String?): Boolean =
     explicitRouteValue == null
 
@@ -135,20 +138,43 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             GigagochiTheme {
-                val explicitRouteValue = remember(intent) {
-                    intent.getStringExtra("gigagochi.route")
+                val explicitRouteValue = remember(intent, BuildConfig.DEBUG) {
+                    debugExtraValue(
+                        intent.getStringExtra("gigagochi.route"),
+                        BuildConfig.DEBUG,
+                    )
                 }
-                val authDebugState = remember(intent) {
-                    AuthDebugState.fromRouteValue(intent.getStringExtra("gigagochi.auth.state"))
+                val authDebugState = remember(intent, BuildConfig.DEBUG) {
+                    AuthDebugState.fromRouteValue(
+                        debugExtraValue(
+                            intent.getStringExtra("gigagochi.auth.state"),
+                            BuildConfig.DEBUG,
+                        ),
+                    )
                 }
-                val debugState = remember(intent) {
-                    CreateDebugState.fromRouteValue(intent.getStringExtra("gigagochi.create.state"))
+                val debugState = remember(intent, BuildConfig.DEBUG) {
+                    CreateDebugState.fromRouteValue(
+                        debugExtraValue(
+                            intent.getStringExtra("gigagochi.create.state"),
+                            BuildConfig.DEBUG,
+                        ),
+                    )
                 }
-                val dashboardDebugState = remember(intent) {
-                    DashboardDebugState.fromRouteValue(intent.getStringExtra("gigagochi.dashboard.state"))
+                val dashboardDebugState = remember(intent, BuildConfig.DEBUG) {
+                    DashboardDebugState.fromRouteValue(
+                        debugExtraValue(
+                            intent.getStringExtra("gigagochi.dashboard.state"),
+                            BuildConfig.DEBUG,
+                        ),
+                    )
                 }
-                val travelDebugState = remember(intent) {
-                    TravelDebugState.fromRouteValue(intent.getStringExtra("gigagochi.travel.state"))
+                val travelDebugState = remember(intent, BuildConfig.DEBUG) {
+                    TravelDebugState.fromRouteValue(
+                        debugExtraValue(
+                            intent.getStringExtra("gigagochi.travel.state"),
+                            BuildConfig.DEBUG,
+                        ),
+                    )
                 }
                 var pendingStoryDeepLink by remember(intent) {
                     mutableStateOf(intent.getStringExtra("gigagochi.storyId"))

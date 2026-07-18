@@ -60,6 +60,22 @@ class AppRouteTest {
     }
 
     @Test
+    fun allDebugExtrasAreIgnoredOutsideDebugBuilds() {
+        val debugExtraValues = listOf(
+            "dashboard",
+            "credential-pending",
+            "loader",
+            "chat-thinking",
+            "story-question-video",
+        )
+        debugExtraValues.forEach { value ->
+            assertEquals(value, debugExtraValue(value, true))
+            assertEquals(null, debugExtraValue(value, false))
+        }
+        assertEquals(null, debugExtraValue(null, true))
+    }
+
+    @Test
     fun localDataFailureHasDistinctRecoverableRouteInsteadOfAuth() {
         assertEquals(
             AppRoute.LocalDataError,

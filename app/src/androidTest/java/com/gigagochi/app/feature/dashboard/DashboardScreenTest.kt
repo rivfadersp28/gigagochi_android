@@ -171,9 +171,9 @@ class DashboardScreenTest {
         composeRule.onNodeWithContentDescription("Ягодная миска").performTouchInput {
             swipe(start = center, end = Offset(center.x + 68f, center.y - 252f), durationMillis = 320)
         }
-        composeRule.waitUntil(timeoutMillis = 4_000) {
-            composeRule.onAllNodesWithText(BerryReply).fetchSemanticsNodes().isNotEmpty()
-        }
+        composeRule.mainClock.advanceTimeBy(DashboardMinimumThinkingMillis)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
         composeRule.onNodeWithText(BerryReply).assertIsDisplayed()
     }
 
