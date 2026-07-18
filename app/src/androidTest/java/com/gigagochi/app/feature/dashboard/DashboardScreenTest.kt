@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
@@ -21,6 +22,7 @@ import com.gigagochi.app.core.model.PetDashboardState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 
 class DashboardScreenTest {
     @get:Rule
@@ -160,6 +162,23 @@ class DashboardScreenTest {
     }
 
     @Test
+    fun petTapHasAccessibleTargetAndShowsReaction() {
+        composeRule.setContent {
+            GigagochiTheme { DashboardRoute(reducedMotionOverride = true) }
+        }
+
+        repeat(PetTapsPerHappinessReward) {
+            composeRule.onNodeWithContentDescription("Погладить Без имени").performClick()
+        }
+        composeRule.waitForIdle()
+        assertTrue(
+            PetTapThanksReplies.any { reply ->
+                composeRule.onAllNodesWithText(reply).fetchSemanticsNodes().isNotEmpty()
+            },
+        )
+    }
+
+    @Test
     fun feedDragConsumesAndShowsDeterministicReply() {
         composeRule.setContent {
             GigagochiTheme {
@@ -170,6 +189,32 @@ class DashboardScreenTest {
         composeRule.onNodeWithContentDescription("Покормить").performClick()
         composeRule.onNodeWithContentDescription("Ягодная миска").performTouchInput {
             swipe(start = center, end = Offset(center.x + 68f, center.y - 252f), durationMillis = 320)
+        }
+        composeRule.mainClock.advanceTimeBy(DashboardMinimumThinkingMillis)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(BerryReply).assertIsDisplayed()
+    }
+
+    @Test
+    fun slowMouseFeedDragSurvivesRecomposition() {
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(feedAdapter = FakeDashboardFeedAdapter(adapterDelayMillis = 0))
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Покормить").performClick()
+        val food = composeRule.onNodeWithContentDescription("Ягодная миска")
+        food.performMouseInput {
+            moveTo(center)
+            press()
+            moveBy(Offset(12f, -40f))
+        }
+        composeRule.waitForIdle()
+        food.performMouseInput {
+            moveBy(Offset(56f, -212f))
+            release()
         }
         composeRule.mainClock.advanceTimeBy(DashboardMinimumThinkingMillis)
         composeRule.mainClock.advanceTimeByFrame()

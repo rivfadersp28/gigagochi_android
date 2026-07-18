@@ -236,6 +236,7 @@ fun DashboardRoute(
     val keyboard = LocalSoftwareKeyboardController.current
     val haptic = LocalHapticFeedback.current
     val feedAudio = remember(context) { DashboardFeedAudio(context.applicationContext) }
+    val petTapAudio = remember(context) { DashboardPetTapAudio(context.applicationContext) }
 
     fun dispatch(event: DashboardEvent) {
         state = reduceDashboard(state, event)
@@ -253,8 +254,11 @@ fun DashboardRoute(
         dispatch(DashboardEvent.CloseMode)
     }
 
-    DisposableEffect(feedAudio) {
-        onDispose(feedAudio::release)
+    DisposableEffect(feedAudio, petTapAudio) {
+        onDispose {
+            feedAudio.release()
+            petTapAudio.release()
+        }
     }
 
     LaunchedEffect(state.pet) {
@@ -413,10 +417,35 @@ fun DashboardRoute(
         dispatch(DashboardEvent.AdvanceReply(reply.requestKey))
     }
 
+    val petTapThanks = state.transientReply?.takeIf {
+        it.requestKey.startsWith("pet-tap-")
+    }
+    LaunchedEffect(petTapThanks?.requestKey) {
+        val reply = petTapThanks ?: return@LaunchedEffect
+        delay(PetTapThanksVisibleMillis)
+        dispatch(DashboardEvent.ClearReply(reply.requestKey))
+    }
+
     DashboardInlineScreen(
         state = state,
         debugState = debugState,
         onEvent = ::dispatch,
+        onPetTapFeedback = {
+            petTapAudio.play()
+            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            val willReward = (state.pet.petTapProgress + 1) % PetTapsPerHappinessReward == 0
+            val thanksMessage = if (willReward && PetTapThanksSession.claim(state.pet.petId)) {
+                PetTapThanksReplies.random()
+            } else {
+                null
+            }
+            dispatch(
+                DashboardEvent.PetTapped(
+                    thanksMessage = thanksMessage,
+                    replyRequestKey = thanksMessage?.let { nextRequestKey("pet-tap") },
+                ),
+            )
+        },
         onClose = ::closeMode,
         nextRequestKey = ::nextRequestKey,
         requestImeOverride = requestImeOverride,
@@ -526,6 +555,7 @@ private fun DashboardInlineScreen(
     state: DashboardUiState,
     debugState: DashboardDebugState,
     onEvent: (DashboardEvent) -> Unit,
+    onPetTapFeedback: () -> Unit,
     onClose: () -> Unit,
     nextRequestKey: (String) -> String,
     requestImeOverride: Boolean?,
@@ -536,6 +566,11 @@ private fun DashboardInlineScreen(
 ) {
     val hazeState = rememberHazeState()
     val density = LocalDensity.current
+    val reducedMotion = reducedMotionOverride ?: systemReducedMotionEnabled()
+    var nextPetTapReactionId by remember { mutableIntStateOf(0) }
+    var petTapReaction by remember { mutableStateOf<PetTapReaction?>(null) }
+    var petTapHeartBursts by remember { mutableStateOf<List<PetTapHeartBurst>>(emptyList()) }
+    var lastPetTapParticleAt by remember { mutableStateOf(Long.MIN_VALUE) }
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
     val mediaOffsetY = if (
         imeVisible && (
@@ -561,8 +596,10 @@ private fun DashboardInlineScreen(
                 DashboardVideo(
                     projection = mediaProjection,
                     urlPolicy = mediaUrlPolicy,
-                    reducedMotion = reducedMotionOverride ?: systemReducedMotionEnabled(),
-                    modifier = Modifier.fillMaxSize(),
+                    reducedMotion = reducedMotion,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .petTapBulge(petTapReaction, reducedMotion),
                 )
                 Image(
                     painter = painterResource(R.drawable.video_filter_normal),
@@ -573,12 +610,60 @@ private fun DashboardInlineScreen(
             }
 
             if (state.mode == DashboardMode.Idle) {
+                fun triggerPetTap(localPoint: Offset) {
+                    val center = Offset(
+                        x = with(density) { 37.dp.toPx() } + localPoint.x,
+                        y = with(density) { 219.dp.toPx() } + localPoint.y,
+                    )
+                    nextPetTapReactionId += 1
+                    petTapReaction = PetTapReaction(nextPetTapReactionId, center)
+                    val now = SystemClock.elapsedRealtime()
+                    if (
+                        !reducedMotion &&
+                        (
+                            lastPetTapParticleAt == Long.MIN_VALUE ||
+                                now - lastPetTapParticleAt >= PetTapParticleIntervalMillis
+                            )
+                    ) {
+                        lastPetTapParticleAt = now
+                        petTapHeartBursts = (
+                            petTapHeartBursts.takeLast(1) +
+                                PetTapHeartBurst(nextPetTapReactionId, center)
+                            )
+                    }
+                    onPetTapFeedback()
+                }
                 Box(
                     modifier = Modifier
-                        .requiredWidth(268.dp)
+                        .requiredWidth(328.dp)
                         .requiredHeight(491.dp)
-                        .offset(x = 67.dp, y = 219.dp)
-                        .pointerInput(Unit) { detectTapGestures(onTap = { onEvent(DashboardEvent.PetTapped) }) },
+                        .offset(x = 37.dp, y = 219.dp)
+                        .pointerInput(state.pet.petId) {
+                            detectTapGestures(onPress = { triggerPetTap(it) })
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "Погладить ${state.pet.name}"
+                            onClick {
+                                triggerPetTap(
+                                    Offset(
+                                        x = with(density) { 164.dp.toPx() },
+                                        y = with(density) { 245.5.dp.toPx() },
+                                    ),
+                                )
+                                true
+                            }
+                        },
+                )
+            }
+
+            petTapHeartBursts.forEach { burst ->
+                PetTapHeartBurst(
+                    burst = burst,
+                    onFinished = { finishedId ->
+                        petTapHeartBursts = petTapHeartBursts.filterNot { it.id == finishedId }
+                    },
+                    modifier = Modifier.fillMaxSize().zIndex(9f),
                 )
             }
 
@@ -1115,8 +1200,8 @@ private fun FeedFoodToken(
             .pointerInput(food, enabled) {
                 detectTapGestures(onTap = { if (enabled) activateByTap() })
             }
-            .pointerInput(food, enabled) {
-                if (!enabled) return@pointerInput
+            .pointerInput(food, state.activeFeed != null) {
+                if (state.activeFeed != null) return@pointerInput
                 detectDragGestures(
                     onDragStart = { onEvent(DashboardEvent.StartFoodDrag(food)) },
                     onDragCancel = { onEvent(DashboardEvent.CancelFoodDrag(food)) },

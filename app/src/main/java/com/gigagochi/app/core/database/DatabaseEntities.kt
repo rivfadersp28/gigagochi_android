@@ -24,6 +24,7 @@ internal data class PetSnapshotEntity(
     val energy: Int,
     val message: String,
     val firstSessionActive: Boolean,
+    val petTapProgress: Int,
     val generatedAt: String? = null,
     val videoUrl: String? = null,
     val sadVideoUrl: String? = null,

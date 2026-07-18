@@ -7,6 +7,7 @@ import kotlin.math.max
 const val DashboardPromptMaxLength = 1_000
 const val DashboardMinimumThinkingMillis = 1_000L
 const val DashboardReplyAutoAdvanceMillis = 3_000L
+const val PetTapThanksVisibleMillis = 5_000L
 const val OutfitExperienceCost = 200
 const val ChatFailureMessage = "Не получилось отправить сообщение. Попробуйте ещё раз."
 const val FeedFailureMessage = "Питомец поел, но не смог ответить. Попробуйте ещё раз."
@@ -19,6 +20,9 @@ const val DeterministicTravelPrompt = "На ночной рынок духов"
 const val DeterministicChatReply = "Слышал, почему лёд плавает?"
 const val BerryReply = "Ням-ням!"
 const val LeafReply = "Мне легче, но это ужасная гадость!!"
+const val PetTapsPerHappinessReward = 5
+const val PetTapHappinessReward = 15
+val PetTapThanksReplies = listOf("Приятно!", "Щекотно!", "Мне нравится!")
 const val DeterministicOutfitReply =
     "Футболка Metallica? Интересно. Я получу заказ примерно через 10 минут."
 const val DeterministicTravelReply =
@@ -184,7 +188,10 @@ sealed interface DashboardEvent {
     ) : DashboardEvent
     data class AdvanceReply(val requestKey: String) : DashboardEvent
     data class ClearReply(val requestKey: String) : DashboardEvent
-    data object PetTapped : DashboardEvent
+    data class PetTapped(
+        val thanksMessage: String? = null,
+        val replyRequestKey: String? = null,
+    ) : DashboardEvent
 }
 
 fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUiState = when (event) {
@@ -493,12 +500,28 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         transientReply = state.transientReply?.takeUnless { it.requestKey == event.requestKey },
     )
 
-    DashboardEvent.PetTapped -> state.copy(
-        pet = state.pet.copy(
-            happiness = (state.pet.happiness + 3).coerceAtMost(100),
-            message = "Ещё чуть-чуть за ушком…",
-        ),
-    )
+    is DashboardEvent.PetTapped -> {
+        val currentProgress = state.pet.petTapProgress.coerceIn(0, PetTapsPerHappinessReward - 1)
+        val nextProgress = (currentProgress + 1) % PetTapsPerHappinessReward
+        val rewarded = nextProgress == 0
+        state.copy(
+            pet = state.pet.copy(
+                petTapProgress = nextProgress,
+                happiness = if (rewarded) {
+                    (state.pet.happiness + PetTapHappinessReward).coerceAtMost(100)
+                } else {
+                    state.pet.happiness
+                },
+            ),
+            transientReply = if (
+                rewarded && event.thanksMessage != null && event.replyRequestKey != null
+            ) {
+                DashboardReply(event.replyRequestKey, event.thanksMessage)
+            } else {
+                state.transientReply
+            },
+        )
+    }
 
 }
 

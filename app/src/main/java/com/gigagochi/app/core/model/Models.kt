@@ -17,6 +17,7 @@ data class PetDashboardState(
     val message: String,
     val firstSessionActive: Boolean,
     val generatedMedia: PetGeneratedMedia = PetGeneratedMedia(),
+    val petTapProgress: Int = 0,
 )
 
 data class PetMoodImage(

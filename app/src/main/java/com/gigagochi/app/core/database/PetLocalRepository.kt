@@ -837,6 +837,7 @@ object LocalPersistenceValidation {
         require(value.pet.hunger in 0..100) { "hunger must be in 0..100" }
         require(value.pet.happiness in 0..100) { "happiness must be in 0..100" }
         require(value.pet.energy in 0..100) { "energy must be in 0..100" }
+        require(value.pet.petTapProgress in 0..4) { "petTapProgress must be in 0..4" }
         require(value.pet.message.length <= MessageMax) { "message is too long" }
         value.pet.generatedMedia.moodImages.forEach {
             bounded("media stage", it.stage, StateLabelMax)
@@ -1075,6 +1076,7 @@ private fun OwnedPetSnapshot.toEntity() = PetSnapshotEntity(
     energy = pet.energy,
     message = pet.message,
     firstSessionActive = pet.firstSessionActive,
+    petTapProgress = pet.petTapProgress,
     generatedAt = pet.generatedMedia.generatedAt,
     videoUrl = pet.generatedMedia.videoUrl,
     sadVideoUrl = pet.generatedMedia.sadVideoUrl,
@@ -1101,6 +1103,7 @@ private fun PetSnapshotEntity.toModel(images: List<PetMoodImageEntity>) = OwnedP
         energy = energy,
         message = message,
         firstSessionActive = firstSessionActive,
+        petTapProgress = petTapProgress,
         generatedMedia = PetGeneratedMedia(
             generatedAt = generatedAt,
             videoUrl = videoUrl,

@@ -70,7 +70,11 @@ class UrlConnectionFeatureHttpTransport(
                 }
                 val status = connection.responseCode
                 if (status in 300..399) throw FeatureTransportException("Redirect rejected")
-                if (connection.contentLengthLong > maxResponseBytes) {
+                val declaredLength = connection.getHeaderField("Content-Length")
+                    ?.trim()
+                    ?.toLongOrNull()
+                    ?: -1L
+                if (declaredLength > maxResponseBytes) {
                     throw FeatureTransportException("Response exceeds configured limit")
                 }
                 val stream = if (status >= 400) connection.errorStream else connection.inputStream

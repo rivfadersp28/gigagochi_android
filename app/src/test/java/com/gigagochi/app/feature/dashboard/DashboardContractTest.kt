@@ -30,7 +30,9 @@ class DashboardContractTest {
     private fun pet(
         experience: Int = 0,
         hunger: Int = 50,
+        happiness: Int = 100,
         energy: Int = 50,
+        petTapProgress: Int = 0,
     ) = PetDashboardState(
         petId = "pet-instance-17",
         assetSetId = "media-asset-set-99",
@@ -41,10 +43,11 @@ class DashboardContractTest {
         mood = "idle",
         experience = experience,
         hunger = hunger,
-        happiness = 100,
+        happiness = happiness,
         energy = energy,
         message = "Как тебя зовут?",
         firstSessionActive = false,
+        petTapProgress = petTapProgress,
     )
 
     @Test
@@ -126,6 +129,34 @@ class DashboardContractTest {
         state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.LeafCrunch, "feed-2"))
         assertEquals(100, state.pet.energy)
         assertEquals(1, state.activeFeed?.audioIndex)
+    }
+
+    @Test
+    fun petTapRewardsEveryFifthTapAndKeepsThanksOptional() {
+        var state = DashboardUiState(pet(happiness = 70))
+        repeat(PetTapsPerHappinessReward - 1) {
+            state = reduceDashboard(state, DashboardEvent.PetTapped())
+            assertEquals(70, state.pet.happiness)
+            assertEquals("Как тебя зовут?", state.pet.message)
+        }
+
+        state = reduceDashboard(
+            state,
+            DashboardEvent.PetTapped("Приятно!", replyRequestKey = "pet-tap-1"),
+        )
+        assertEquals(85, state.pet.happiness)
+        assertEquals(0, state.pet.petTapProgress)
+        assertEquals("Как тебя зовут?", state.pet.message)
+        assertEquals("Приятно!", state.transientReply?.text)
+
+        state = reduceDashboard(state, DashboardEvent.ClearReply("pet-tap-1"))
+        assertNull(state.transientReply)
+
+        repeat(PetTapsPerHappinessReward) {
+            state = reduceDashboard(state, DashboardEvent.PetTapped())
+        }
+        assertEquals(100, state.pet.happiness)
+        assertEquals("Как тебя зовут?", state.pet.message)
     }
 
     @Test

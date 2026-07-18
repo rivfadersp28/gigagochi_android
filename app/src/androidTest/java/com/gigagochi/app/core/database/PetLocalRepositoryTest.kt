@@ -43,11 +43,12 @@ class PetLocalRepositoryTest {
         val name = "mvp-v1-reopen-test.db"
         context.deleteDatabase(name)
         val first = Room.databaseBuilder(context, GigagochiDatabase::class.java, name).build()
-        PetLocalRepository(first).replacePetSnapshot(snapshot(experience = 321))
+        PetLocalRepository(first).replacePetSnapshot(snapshot(experience = 321, petTapProgress = 4))
         first.close()
 
         val reopened = Room.databaseBuilder(context, GigagochiDatabase::class.java, name).build()
         assertEquals(321, PetLocalRepository(reopened).getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(4, PetLocalRepository(reopened).getPetSnapshot(OwnerId, PetId)?.pet?.petTapProgress)
         reopened.close()
         context.deleteDatabase(name)
         Unit
@@ -404,6 +405,7 @@ class PetLocalRepositoryTest {
         happiness: Int = 100,
         energy: Int = 100,
         message: String = "Как тебя зовут?",
+        petTapProgress: Int = 0,
     ) = OwnedPetSnapshot(
         ownerId = ownerId,
         pet = PetDashboardState(
@@ -420,6 +422,7 @@ class PetLocalRepositoryTest {
             energy = energy,
             message = message,
             firstSessionActive = false,
+            petTapProgress = petTapProgress,
         ),
         updatedAtEpochMillis = 10,
     )

@@ -105,7 +105,10 @@ class UrlConnectionAuthHttpTransport(
                 }
 
                 val statusCode = connection.responseCode
-                val declaredLength = connection.contentLengthLong
+                val declaredLength = connection.getHeaderField("Content-Length")
+                    ?.trim()
+                    ?.toLongOrNull()
+                    ?: -1L
                 if (declaredLength > maxResponseBytes) throw AuthResponseTooLargeException()
                 val stream = if (statusCode in 200..299) {
                     connection.inputStream

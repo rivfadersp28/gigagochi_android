@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "7be550dbdd9db67f5e4eed125eb282d8",
+    "identityHash": "0a01b76d7d3a66f341d33b034b132765",
     "entities": [
       {
         "tableName": "pet_snapshots",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT NOT NULL, `stage` TEXT NOT NULL, `stageLabel` TEXT NOT NULL, `mood` TEXT NOT NULL, `experience` INTEGER NOT NULL, `hunger` INTEGER NOT NULL, `happiness` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `message` TEXT NOT NULL, `firstSessionActive` INTEGER NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT NOT NULL, `stage` TEXT NOT NULL, `stageLabel` TEXT NOT NULL, `mood` TEXT NOT NULL, `experience` INTEGER NOT NULL, `hunger` INTEGER NOT NULL, `happiness` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `message` TEXT NOT NULL, `firstSessionActive` INTEGER NOT NULL, `petTapProgress` INTEGER NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
         "fields": [
           {
             "fieldPath": "ownerId",
@@ -89,6 +89,12 @@
           {
             "fieldPath": "firstSessionActive",
             "columnName": "firstSessionActive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petTapProgress",
+            "columnName": "petTapProgress",
             "affinity": "INTEGER",
             "notNull": true
           },
@@ -1107,7 +1113,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7be550dbdd9db67f5e4eed125eb282d8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0a01b76d7d3a66f341d33b034b132765')"
     ]
   }
 }

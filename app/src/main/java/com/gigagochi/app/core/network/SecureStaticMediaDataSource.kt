@@ -73,7 +73,10 @@ class SecureStaticMediaDataSource(
             if (urlPolicy.resolve(connection.url.toString()) != safeUrl) {
                 throw StaticMediaIOException(StaticMediaFailure.UnsafeUrl)
             }
-            val contentLength = connection.contentLengthLong.takeIf { it >= 0L }
+            val contentLength = connection.getHeaderField("Content-Length")
+                ?.trim()
+                ?.toLongOrNull()
+                ?.takeIf { it >= 0L }
             val totalLength = parseTotalLength(connection.getHeaderField("Content-Range"))
                 ?: if (status == 200) contentLength else null
             if (status == 206 && totalLength == null) {
