@@ -6,6 +6,7 @@ import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.OutfitAcceptanceResult
 import com.gigagochi.app.core.database.OwnerRecoveryData
 import com.gigagochi.app.core.database.OwnedPetSnapshot
+import com.gigagochi.app.core.database.PendingBackendState
 import com.gigagochi.app.core.database.TestOwnerRecoveryStore
 import com.gigagochi.app.core.database.IdempotentInsertResult
 import com.gigagochi.app.core.model.PetDashboardState
@@ -68,6 +69,95 @@ class DashboardDurableOperationsTest {
         assertTrue(coordinator.acceptTravel(PendingTravelRequest("travel-2", "Марс"), store.pet) is DurableTravelResult.PersistedButQueueFailed)
         assertEquals(1, store.travels.size)
         assertEquals(0, queueCalls)
+    }
+
+    @Test
+    fun failedOutfitAuditAllowsNewRequestAndAdapterDispatch() = runBlocking {
+        val store = Store(pet(experience = 800)).apply {
+            outfits += LocalPendingOutfit(
+                "owner-a",
+                pet.petId,
+                "outfit-failed",
+                "local-failed",
+                "backend-failed",
+                "В старую футболку",
+                pet.assetSetId,
+                5,
+                backendState = PendingBackendState.Failed,
+                backendErrorCode = "GENERATION_FAILED",
+            )
+        }
+        val dispatchedKeys = mutableListOf<String>()
+        val adapter = object : DashboardOutfitAdapter {
+            override suspend fun queue(
+                request: PendingOutfitRequest,
+                pet: PetDashboardState,
+            ): PendingOutfitGeneration {
+                dispatchedKeys += request.requestKey
+                return PendingOutfitGeneration(
+                    petId = pet.petId,
+                    requestKey = request.requestKey,
+                    prompt = request.prompt,
+                    displayItem = "Новая футболка",
+                    localJobId = "outfit-${request.requestKey}",
+                    backendJobId = null,
+                    createdAtEpochMillis = 10,
+                )
+            }
+        }
+
+        val result = DashboardDurableOperations(
+            "owner-a", store, adapter, UnavailableDashboardTravelAdapter(), nowEpochMillis = { 10 },
+        ).acceptOutfit(PendingOutfitRequest("outfit-new", "В новую футболку"), store.pet)
+
+        assertTrue(result is DurableOutfitResult.Queued)
+        assertEquals(listOf("outfit-new"), dispatchedKeys)
+        assertEquals(600, store.pet.experience)
+        assertEquals(listOf("outfit-failed", "outfit-new"), store.outfits.map { it.requestKey })
+        assertEquals(PendingBackendState.Failed, store.outfits.first().backendState)
+    }
+
+    @Test
+    fun failedTravelAuditAllowsNewRequestAndAdapterDispatch() = runBlocking {
+        val store = Store(pet()).apply {
+            travels += LocalPendingTravelVideo(
+                "owner-a",
+                pet.petId,
+                "travel-failed",
+                "local-failed",
+                "backend-failed",
+                "Старая поездка",
+                5,
+                backendState = PendingBackendState.Failed,
+                backendErrorCode = "GENERATION_FAILED",
+            )
+        }
+        val dispatchedKeys = mutableListOf<String>()
+        val adapter = object : DashboardTravelAdapter {
+            override suspend fun queue(
+                request: PendingTravelRequest,
+                pet: PetDashboardState,
+            ): PendingTravelGeneration {
+                dispatchedKeys += request.requestKey
+                return PendingTravelGeneration(
+                    petId = pet.petId,
+                    requestKey = request.requestKey,
+                    prompt = request.prompt,
+                    localJobId = "travel-${request.requestKey}",
+                    backendJobId = null,
+                    createdAtEpochMillis = 10,
+                )
+            }
+        }
+
+        val result = DashboardDurableOperations(
+            "owner-a", store, UnavailableDashboardOutfitAdapter(), adapter, nowEpochMillis = { 10 },
+        ).acceptTravel(PendingTravelRequest("travel-new", "Новая поездка"), store.pet)
+
+        assertTrue(result is DurableTravelResult.Queued)
+        assertEquals(listOf("travel-new"), dispatchedKeys)
+        assertEquals(listOf("travel-failed", "travel-new"), store.travels.map { it.requestKey })
+        assertEquals(PendingBackendState.Failed, store.travels.first().backendState)
     }
 
     @Test

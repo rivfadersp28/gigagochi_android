@@ -6,6 +6,7 @@ import com.gigagochi.app.core.database.LocalPendingOutfit
 import com.gigagochi.app.core.database.LocalPendingTravelVideo
 import com.gigagochi.app.core.database.OutfitAcceptanceResult
 import com.gigagochi.app.core.database.OwnerRecoveryStore
+import com.gigagochi.app.core.database.PendingBackendState
 import com.gigagochi.app.core.model.PetDashboardState
 import kotlinx.coroutines.CancellationException
 
@@ -42,7 +43,9 @@ class DashboardDurableOperations(
     ): DurableOutfitResult {
         return try {
             val existingRecovery = store.loadOwnerRecovery(ownerId)
-            val existing = existingRecovery.pendingOutfits.firstOrNull { it.petId == pet.petId }
+            val existing = existingRecovery.pendingOutfits.firstOrNull {
+                it.petId == pet.petId && it.backendState != PendingBackendState.Failed
+            }
             if (existing != null) {
                 val persistedPet = existingRecovery.petSnapshots.firstOrNull {
                     it.pet.petId == pet.petId
@@ -114,7 +117,7 @@ class DashboardDurableOperations(
         return try {
             val recovery = store.loadOwnerRecovery(ownerId)
             val existing = recovery.pendingTravels.firstOrNull {
-                it.petId == pet.petId
+                it.petId == pet.petId && it.backendState != PendingBackendState.Failed
             }
             if (existing != null) {
                 return if (existing.backendJobId != null) {
