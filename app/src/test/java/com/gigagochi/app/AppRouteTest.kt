@@ -13,9 +13,9 @@ import androidx.work.NetworkType
 class AppRouteTest {
     @Test
     fun contextualNavigationMatchesRouteSemanticsWithoutDecorativeForward() {
-        assertEquals(null, contextualNavigationForAppRoute(AppRoute.Auth))
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.Create))
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.Dashboard))
+        assertEquals(null, contextualNavigationForAppRoute(AppRoute.ConnectionError))
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.LocalDataError))
         assertEquals(
             ContextualNavigationAction.Back,
@@ -51,12 +51,12 @@ class AppRouteTest {
     }
     @Test
     fun routeExtraKeepsTravelSeparateFromDashboardInlineTravel() {
-        assertEquals(AppRoute.Auth, appRouteFromValue("auth"))
+        assertEquals(AppRoute.Create, appRouteFromValue("auth"))
         assertEquals(AppRoute.Create, appRouteFromValue("create"))
         assertEquals(AppRoute.Travel, appRouteFromValue("travel"))
         assertEquals(AppRoute.Dashboard, appRouteFromValue("dashboard"))
-        assertEquals(AppRoute.Auth, appRouteFromValue(null))
-        assertEquals(AppRoute.Auth, appRouteFromValue("unknown"))
+        assertEquals(AppRoute.Create, appRouteFromValue(null))
+        assertEquals(AppRoute.Create, appRouteFromValue("unknown"))
     }
 
     @Test
@@ -92,8 +92,8 @@ class AppRouteTest {
     }
 
     @Test
-    fun defaultUsesAuthenticatedRealFeaturesAndEveryExplicitRouteUsesFixtures() {
-        assertEquals(FeatureAdapterMode.RealAuthenticated, featureAdapterMode(null))
+    fun defaultUsesBackendFeaturesWithoutUserLoginAndEveryExplicitRouteUsesFixtures() {
+        assertEquals(FeatureAdapterMode.RealBackend, featureAdapterMode(null))
         listOf("auth", "create", "dashboard", "travel").forEach {
             assertEquals(FeatureAdapterMode.ExplicitDebugFixture, featureAdapterMode(it))
         }

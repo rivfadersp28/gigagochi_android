@@ -13,14 +13,20 @@ fun String.asBuildConfigString(): String {
     return "\"" + replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 }
 
-val configuredGoogleWebClientId = providers
-    .gradleProperty("GIGAGOCHI_GOOGLE_WEB_CLIENT_ID")
-    .orElse(providers.environmentVariable("GIGAGOCHI_GOOGLE_WEB_CLIENT_ID"))
-    .getOrElse("")
 val configuredBackendBaseUrl = providers
     .gradleProperty("GIGAGOCHI_BACKEND_BASE_URL")
     .orElse(providers.environmentVariable("GIGAGOCHI_BACKEND_BASE_URL"))
     .getOrElse("https://gigagochi.serega.works/")
+val releaseKeystorePath = providers.environmentVariable("GIGAGOCHI_ANDROID_KEYSTORE_FILE").orNull
+val releaseKeystorePassword = providers.environmentVariable("GIGAGOCHI_ANDROID_KEYSTORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("GIGAGOCHI_ANDROID_KEY_ALIAS")
+    .getOrElse("gigagochi")
+val releaseKeyPassword = providers.environmentVariable("GIGAGOCHI_ANDROID_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseKeystorePath,
+    releaseKeystorePassword,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
 
 android {
     namespace = "com.gigagochi.app"
@@ -43,11 +49,23 @@ android {
             "BACKEND_BASE_URL",
             configuredBackendBaseUrl.asBuildConfigString(),
         )
-        buildConfigField(
-            "String",
-            "GOOGLE_WEB_CLIENT_ID",
-            configuredGoogleWebClientId.asBuildConfigString(),
-        )
+    }
+
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseKeystorePath))
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            signingConfig = signingConfigs.findByName("release")
+        }
     }
 
     buildFeatures {
@@ -85,9 +103,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.credentials:credentials:1.6.0")
-    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
-    implementation("com.google.android.libraries.identity.googleid:googleid:1.2.0")
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
     implementation("dev.chrisbanes.haze:haze:1.7.2")

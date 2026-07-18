@@ -14,17 +14,19 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 
-private const val GoogleAuthResponseMaxBytes = 64 * 1024
+private const val SessionResponseMaxBytes = 64 * 1024
 private const val SessionTokenMaxLength = 16 * 1024
 
-class GoogleAuthEndpoint private constructor(
+class AuthApiEndpoint private constructor(
     val url: String,
 ) {
     companion object {
         fun fromBaseUrl(
             baseUrl: String,
             allowDebugLoopbackHttp: Boolean,
-        ): GoogleAuthEndpoint? = runCatching {
+            endpointName: String,
+        ): AuthApiEndpoint? = runCatching {
+            require(endpointName.matches(Regex("[a-z]+")))
             val parsed = URI(baseUrl.trim())
             val normalized = parsed.normalize()
             val scheme = normalized.scheme?.lowercase()
@@ -40,7 +42,7 @@ class GoogleAuthEndpoint private constructor(
             require(normalized.fragment == null)
             require(parsed.rawPath == normalized.rawPath)
             val basePath = normalized.path.orEmpty().trimEnd('/')
-            val endpointPath = "$basePath/api/auth/google".let {
+            val endpointPath = "$basePath/api/auth/$endpointName".let {
                 if (it.startsWith('/')) it else "/$it"
             }
             val endpoint = URI(
@@ -52,7 +54,7 @@ class GoogleAuthEndpoint private constructor(
                 null,
                 null,
             )
-            GoogleAuthEndpoint(endpoint.toASCIIString())
+            AuthApiEndpoint(endpoint.toASCIIString())
         }.getOrNull()
     }
 }
@@ -78,7 +80,7 @@ private class AuthResponseTooLargeException : IOException()
 class UrlConnectionAuthHttpTransport(
     private val connectTimeoutMillis: Int = 10_000,
     private val readTimeoutMillis: Int = 15_000,
-    private val maxResponseBytes: Int = GoogleAuthResponseMaxBytes,
+    private val maxResponseBytes: Int = SessionResponseMaxBytes,
 ) : AuthHttpTransport {
     override suspend fun execute(request: AuthHttpRequest): AuthHttpResponse =
         withContext(Dispatchers.IO) {
@@ -135,142 +137,9 @@ class UrlConnectionAuthHttpTransport(
         }
 }
 
-class HttpGoogleSessionExchange(
-    baseUrl: String,
-    allowDebugLoopbackHttp: Boolean,
-    private val transport: AuthHttpTransport = UrlConnectionAuthHttpTransport(),
-    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
-) : SessionExchange {
-    private val endpoint = GoogleAuthEndpoint.fromBaseUrl(
-        baseUrl = baseUrl,
-        allowDebugLoopbackHttp = allowDebugLoopbackHttp,
-    )
-    private val identityEndpoint = AccountIdentityEndpoint.fromBaseUrl(
-        baseUrl = baseUrl,
-        allowDebugLoopbackHttp = allowDebugLoopbackHttp,
-    )
-
-    override suspend fun exchangeGoogleCredential(
-        credential: GoogleAuthCredential,
-    ): SessionExchangeResult {
-        val resolvedEndpoint = endpoint
-            ?: return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Configuration))
-        if (
-            credential.idToken.isBlank() ||
-            credential.idToken.length > SessionTokenMaxLength ||
-            credential.nonce.length !in 22..256 ||
-            credential.nonce.any { it !in UrlSafeNonceCharacters }
-        ) {
-            return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.CredentialParse))
-        }
-        val body = buildString {
-            append("{\"idToken\":\"")
-            append(credential.idToken.reveal().escapeJsonString())
-            append("\",\"nonce\":\"")
-            append(credential.nonce.escapeJsonString())
-            append("\"}")
-        }.toByteArray(StandardCharsets.UTF_8)
-
-        val response = try {
-            transport.execute(AuthHttpRequest(url = resolvedEndpoint.url, body = body))
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: AuthResponseTooLargeException) {
-            return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Server))
-        } catch (_: IOException) {
-            return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Network))
-        } catch (_: Exception) {
-            return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Network))
-        }
-
-        return when (response.statusCode) {
-            in 200..299 -> {
-                val session = StrictSessionJsonParser.parse(response.body)
-                    ?.takeIf { it.expiresAtEpochMillis > nowEpochMillis() }
-                    ?: return SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Server))
-                when (val identity = fetchAccountId(session.accessToken)) {
-                    is AccountIdentityFetchResult.Success -> SessionExchangeResult.Success(
-                        session.copy(accountId = identity.accountId),
-                    )
-                    is AccountIdentityFetchResult.Failure -> SessionExchangeResult.Failure(
-                        AuthFailure(identity.kind),
-                    )
-                }
-            }
-            400 -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.BadRequest))
-            401 -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Unauthorized))
-            409 -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Conflict))
-            429 -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.RateLimited))
-            in 500..599 -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Server))
-            else -> SessionExchangeResult.Failure(AuthFailure(AuthFailureKind.Server))
-        }
-    }
-
-    private suspend fun fetchAccountId(accessToken: SensitiveToken): AccountIdentityFetchResult {
-        val resolvedEndpoint = identityEndpoint
-            ?: return AccountIdentityFetchResult.Failure(AuthFailureKind.Configuration)
-        val response = try {
-            transport.execute(
-                AuthHttpRequest(
-                    url = resolvedEndpoint.url,
-                    body = ByteArray(0),
-                    method = "GET",
-                    authorizationHeader = "Bearer ${accessToken.reveal()}",
-                ),
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: AuthResponseTooLargeException) {
-            return AccountIdentityFetchResult.Failure(AuthFailureKind.Server)
-        } catch (_: IOException) {
-            return AccountIdentityFetchResult.Failure(AuthFailureKind.Network)
-        } catch (_: Exception) {
-            return AccountIdentityFetchResult.Failure(AuthFailureKind.Network)
-        }
-        return when (response.statusCode) {
-            in 200..299 -> StrictAccountIdentityJsonParser.parse(response.body)
-                ?.let(AccountIdentityFetchResult::Success)
-                ?: AccountIdentityFetchResult.Failure(AuthFailureKind.Server)
-            401 -> AccountIdentityFetchResult.Failure(AuthFailureKind.Unauthorized)
-            else -> AccountIdentityFetchResult.Failure(AuthFailureKind.Server)
-        }
-    }
-}
-
-private sealed interface AccountIdentityFetchResult {
-    data class Success(val accountId: String) : AccountIdentityFetchResult
-    data class Failure(val kind: AuthFailureKind) : AccountIdentityFetchResult
-}
-
-class AccountIdentityEndpoint private constructor(val url: String) {
-    companion object {
-        fun fromBaseUrl(baseUrl: String, allowDebugLoopbackHttp: Boolean): AccountIdentityEndpoint? =
-            GoogleAuthEndpoint.fromBaseUrl(baseUrl, allowDebugLoopbackHttp)?.let { google ->
-                AccountIdentityEndpoint(google.url.removeSuffix("/google") + "/me")
-            }
-    }
-}
-
-internal object StrictAccountIdentityJsonParser {
-    private val AccountIdPattern = Regex("acct_[A-Za-z0-9_-]{20,64}")
-
-    fun parse(bytes: ByteArray): String? = runCatching {
-        require(bytes.isNotEmpty() && bytes.size <= GoogleAuthResponseMaxBytes)
-        val text = StandardCharsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-            .decode(ByteBuffer.wrap(bytes))
-            .toString()
-        val match = Regex("""^\s*\{\s*"accountId"\s*:\s*"([^"]+)"\s*}\s*$""")
-            .matchEntire(text)
-            ?: return null
-        match.groupValues[1].takeIf(AccountIdPattern::matches)
-    }.getOrNull()
-}
-
 internal object StrictSessionJsonParser {
     fun parse(bytes: ByteArray): Session? = runCatching {
-        require(bytes.isNotEmpty() && bytes.size <= GoogleAuthResponseMaxBytes)
+        require(bytes.isNotEmpty() && bytes.size <= SessionResponseMaxBytes)
         val decoder = StandardCharsets.UTF_8.newDecoder()
             .onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT)
@@ -292,13 +161,13 @@ private class SessionObjectParser(
         if (!consume('}')) {
             while (true) {
                 val key = parseString()
-                require(key in setOf("accessToken", "refreshToken", "expiresAt"))
+                require(key in setOf("accountId", "accessToken", "refreshToken", "expiresAt"))
                 require(key !in values)
                 skipWhitespace()
                 expect(':')
                 skipWhitespace()
                 values[key] = when (key) {
-                    "accessToken", "refreshToken" -> parseStringOrNull()
+                    "accountId", "accessToken", "refreshToken" -> parseStringOrNull()
                     "expiresAt" -> parseLong()
                     else -> error("unreachable")
                 }
@@ -315,12 +184,14 @@ private class SessionObjectParser(
         require(!accessToken.isNullOrBlank() && accessToken.length <= SessionTokenMaxLength)
         require(expiresAt != null && expiresAt > 0)
         val refreshToken = values["refreshToken"] as? String
+        val accountId = values["accountId"] as? String
         require(
             refreshToken == null ||
                 (refreshToken.isNotBlank() && refreshToken.length <= SessionTokenMaxLength),
         )
+        require(accountId == null || Regex("acct_[A-Za-z0-9_-]{20,64}").matches(accountId))
         return Session(
-            accountId = "",
+            accountId = accountId.orEmpty(),
             accessToken = SensitiveToken.of(accessToken),
             refreshToken = refreshToken?.let(SensitiveToken::of),
             expiresAtEpochMillis = expiresAt,
@@ -397,26 +268,3 @@ private class SessionObjectParser(
 
     private fun peek(): Char? = source.getOrNull(position)
 }
-
-private fun String.escapeJsonString(): String = buildString(length) {
-    this@escapeJsonString.forEach { character ->
-        when (character) {
-            '"' -> append("\\\"")
-            '\\' -> append("\\\\")
-            '\b' -> append("\\b")
-            '\u000c' -> append("\\f")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> if (character.code < 0x20) {
-                append("\\u")
-                append(character.code.toString(16).padStart(4, '0'))
-            } else {
-                append(character)
-            }
-        }
-    }
-}
-
-private val UrlSafeNonceCharacters =
-    ('A'..'Z').toSet() + ('a'..'z') + ('0'..'9') + setOf('-', '_')

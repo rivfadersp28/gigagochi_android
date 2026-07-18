@@ -35,9 +35,12 @@ import androidx.lifecycle.repeatOnLifecycle
 import com.gigagochi.app.core.designsystem.GigagochiTheme
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.auth.HttpSessionRefreshExchange
+import com.gigagochi.app.core.auth.HttpGuestSessionExchange
 import com.gigagochi.app.core.auth.InMemoryAuthHeaderProvider
+import com.gigagochi.app.core.auth.AndroidInstallationIdProvider
+import com.gigagochi.app.core.auth.LocalSessionBootstrapCoordinator
+import com.gigagochi.app.core.auth.LocalSessionBootstrapOutcome
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
-import com.gigagochi.app.core.auth.SessionBootstrapOutcome
 import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.background.MvpSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
@@ -52,8 +55,6 @@ import com.gigagochi.app.core.network.AndroidFeatureApi
 import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
-import com.gigagochi.app.feature.auth.AuthDebugState
-import com.gigagochi.app.feature.auth.GoogleAuthRoute
 import com.gigagochi.app.feature.create.CreateDebugState
 import com.gigagochi.app.feature.create.CreatePetRoute
 import com.gigagochi.app.feature.create.CreateFinalizationCoordinator
@@ -78,16 +79,16 @@ import com.gigagochi.app.feature.travel.ScheduledStoryRoute
 import com.gigagochi.app.feature.travel.StoryReceiptCoordinator
 import kotlinx.coroutines.launch
 
-internal enum class AppRoute { Auth, Create, Dashboard, Travel, Story, LocalDataError }
+internal enum class AppRoute { Create, Dashboard, Travel, Story, ConnectionError, LocalDataError }
 
 internal fun contextualNavigationForAppRoute(
     route: AppRoute,
 ): ContextualNavigationAction? = when (route) {
     AppRoute.Travel -> ContextualNavigationAction.Back
     AppRoute.Story -> ContextualNavigationAction.Close
-    AppRoute.Auth,
     AppRoute.Create,
     AppRoute.Dashboard,
+    AppRoute.ConnectionError,
     AppRoute.LocalDataError,
     -> null
 }
@@ -95,11 +96,11 @@ internal fun contextualNavigationForAppRoute(
 internal fun appRouteForOutcomeApplyConflict(): AppRoute = AppRoute.LocalDataError
 
 internal fun appRouteFromValue(value: String?): AppRoute = when (value) {
-    "auth" -> AppRoute.Auth
+    "auth" -> AppRoute.Create
     "create" -> AppRoute.Create
     "dashboard" -> AppRoute.Dashboard
     "travel" -> AppRoute.Travel
-    else -> AppRoute.Auth
+    else -> AppRoute.Create
 }
 
 internal fun debugExtraValue(value: String?, isDebugBuild: Boolean): String? =
@@ -108,10 +109,10 @@ internal fun debugExtraValue(value: String?, isDebugBuild: Boolean): String? =
 internal fun shouldUseProductionRoom(explicitRouteValue: String?): Boolean =
     explicitRouteValue == null
 
-internal enum class FeatureAdapterMode { RealAuthenticated, ExplicitDebugFixture }
+internal enum class FeatureAdapterMode { RealBackend, ExplicitDebugFixture }
 
 internal fun featureAdapterMode(explicitRouteValue: String?): FeatureAdapterMode =
-    if (explicitRouteValue == null) FeatureAdapterMode.RealAuthenticated
+    if (explicitRouteValue == null) FeatureAdapterMode.RealBackend
     else FeatureAdapterMode.ExplicitDebugFixture
 
 internal fun shouldEnqueueBackgroundSync(
@@ -142,14 +143,6 @@ class MainActivity : ComponentActivity() {
                     debugExtraValue(
                         intent.getStringExtra("gigagochi.route"),
                         BuildConfig.DEBUG,
-                    )
-                }
-                val authDebugState = remember(intent, BuildConfig.DEBUG) {
-                    AuthDebugState.fromRouteValue(
-                        debugExtraValue(
-                            intent.getStringExtra("gigagochi.auth.state"),
-                            BuildConfig.DEBUG,
-                        ),
                     )
                 }
                 val debugState = remember(intent, BuildConfig.DEBUG) {
@@ -184,7 +177,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val isExplicitDebugRoute = explicitRouteValue != null
                 val usesRealFeatureAdapters = featureAdapterMode(explicitRouteValue) ==
-                    FeatureAdapterMode.RealAuthenticated
+                    FeatureAdapterMode.RealBackend
                 val inMemorySession = remember { mutableStateOf<Session?>(null) }
                 val activePet = remember { mutableStateOf<PetDashboardState?>(null) }
                 val activeStartup = remember { mutableStateOf<AccountStartupDestination?>(null) }
@@ -222,7 +215,8 @@ class MainActivity : ComponentActivity() {
                         onSessionInvalid = {
                             inMemorySession.value = null
                             authHeaderProvider.clear()
-                            route = AppRoute.Auth
+                            sessionRepository.clear()
+                            route = null
                         },
                     )
                 }
@@ -236,7 +230,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                suspend fun routeAuthenticatedSession(session: Session) {
+                suspend fun routeLocalSession(session: Session) {
                     inMemorySession.value = session
                     authHeaderProvider.update(session)
                     when (val destination = petLifecycle?.startup(session.accountId)) {
@@ -267,21 +261,29 @@ class MainActivity : ComponentActivity() {
                 }
                 LaunchedEffect(route) {
                     if (route != null) return@LaunchedEffect
-                    val outcome = SessionBootstrapCoordinator(
-                        repository = sessionRepository,
-                        refreshExchange = HttpSessionRefreshExchange(
+                    val outcome = LocalSessionBootstrapCoordinator(
+                        sessionBootstrap = SessionBootstrapCoordinator(
+                            repository = sessionRepository,
+                            refreshExchange = HttpSessionRefreshExchange(
+                                baseUrl = BuildConfig.BACKEND_BASE_URL,
+                                allowDebugLoopbackHttp = BuildConfig.DEBUG,
+                            ),
+                        ),
+                        sessionRepository = sessionRepository,
+                        installationIdProvider = AndroidInstallationIdProvider(applicationContext),
+                        guestSessionExchange = HttpGuestSessionExchange(
                             baseUrl = BuildConfig.BACKEND_BASE_URL,
                             allowDebugLoopbackHttp = BuildConfig.DEBUG,
                         ),
                     ).bootstrap()
                     when (outcome) {
-                        is SessionBootstrapOutcome.Authenticated -> {
-                            routeAuthenticatedSession(outcome.session)
+                        is LocalSessionBootstrapOutcome.Ready -> {
+                            routeLocalSession(outcome.session)
                         }
-                        SessionBootstrapOutcome.Unauthenticated -> {
+                        LocalSessionBootstrapOutcome.Unavailable -> {
                             inMemorySession.value = null
                             authHeaderProvider.clear()
-                            route = AppRoute.Auth
+                            route = AppRoute.ConnectionError
                         }
                     }
                 }
@@ -290,13 +292,6 @@ class MainActivity : ComponentActivity() {
                         Modifier
                             .fillMaxSize()
                             .background(Color(0xFF071219)),
-                    )
-                    AppRoute.Auth -> GoogleAuthRoute(
-                        debugState = authDebugState,
-                        sessionRepositoryOverride = sessionRepository,
-                        onAuthenticated = { session ->
-                            scope.launch { routeAuthenticatedSession(session) }
-                        },
                     )
                     AppRoute.Create -> CreatePetRoute(
                         debugState = debugState,
@@ -349,7 +344,7 @@ class MainActivity : ComponentActivity() {
                         onNavigateDashboard = {
                             val session = inMemorySession.value
                             if (session != null && !isExplicitDebugRoute) {
-                                scope.launch { routeAuthenticatedSession(session) }
+                                scope.launch { routeLocalSession(session) }
                             } else route = AppRoute.Dashboard
                         },
                     )
@@ -408,13 +403,13 @@ class MainActivity : ComponentActivity() {
                                 recoverySignal,
                                 outcomeApplication = outcomeApplication,
                                 onOutcomeApplied = {
-                                    routeAuthenticatedSession(session)
+                                    routeLocalSession(session)
                                 },
                                 onOutcomeConflict = {
                                     route = appRouteForOutcomeApplyConflict()
                                 },
                                 onTerminalFailure = {
-                                    routeAuthenticatedSession(session)
+                                    routeLocalSession(session)
                                     dashboardRecoveryRevision += 1
                                 },
                             )
@@ -505,15 +500,18 @@ class MainActivity : ComponentActivity() {
                                 contextualNavigationForAppRoute(AppRoute.Story),
                             ),
                             onNavigateDashboard = {
-                                scope.launch { routeAuthenticatedSession(session) }
+                                scope.launch { routeLocalSession(session) }
                             },
                         )
                     }
+                    AppRoute.ConnectionError -> StartupConnectionErrorRoute(
+                        onRetry = { route = null },
+                    )
                     AppRoute.LocalDataError -> LocalDataStartupErrorRoute(
                         onRetry = {
                             val session = inMemorySession.value
                             if (session != null) {
-                                scope.launch { routeAuthenticatedSession(session) }
+                                scope.launch { routeLocalSession(session) }
                             }
                         },
                     )
@@ -526,7 +524,23 @@ class MainActivity : ComponentActivity() {
 internal val LocalDataRetryMinimumTouchTarget = 48.dp
 
 @androidx.compose.runtime.Composable
+internal fun StartupConnectionErrorRoute(onRetry: () -> Unit) {
+    StartupErrorRoute(
+        message = "Не удалось подключиться к серверу. Проверьте интернет.",
+        onRetry = onRetry,
+    )
+}
+
+@androidx.compose.runtime.Composable
 internal fun LocalDataStartupErrorRoute(onRetry: () -> Unit) {
+    StartupErrorRoute(
+        message = "Не удалось открыть данные питомца.",
+        onRetry = onRetry,
+    )
+}
+
+@androidx.compose.runtime.Composable
+private fun StartupErrorRoute(message: String, onRetry: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize().background(Color(0xFF071219)),
         contentAlignment = Alignment.Center,
@@ -535,7 +549,7 @@ internal fun LocalDataStartupErrorRoute(onRetry: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "Не удалось открыть данные питомца.",
+                text = message,
                 color = Color.White,
                 fontSize = 16.sp,
             )
