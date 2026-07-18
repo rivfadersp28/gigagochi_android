@@ -32,7 +32,8 @@ class CreatePendingCoordinator(
             updatedAtEpochMillis = nowEpochMillis(),
         )
         return try {
-            val existing = store.loadOwnerRecovery(ownerId).pendingCreates.firstOrNull {
+            val recoveries = store.loadOwnerRecovery(ownerId).pendingCreates
+            val existing = recoveries.firstOrNull {
                 it.requestKey == request.requestKey
             }
             val durable = pending.copy(
@@ -40,7 +41,22 @@ class CreatePendingCoordinator(
                 backendState = existing?.backendState ?: pending.backendState,
                 backendErrorCode = existing?.backendErrorCode,
             )
-            store.savePendingCreate(durable)
+            val failedPrevious = if (existing == null) {
+                recoveries.filter {
+                    it.petId == request.petId &&
+                        it.requestKey != request.requestKey &&
+                        it.backendState == com.gigagochi.app.core.database.PendingBackendState.Failed
+                }.maxByOrNull { it.updatedAtEpochMillis }
+            } else {
+                null
+            }
+            if (failedPrevious != null) {
+                if (!store.replaceFailedPendingCreate(ownerId, failedPrevious.requestKey, durable)) {
+                    return LocalOperationResult.Failure
+                }
+            } else {
+                store.savePendingCreate(durable)
+            }
             LocalOperationResult.Success(durable)
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -72,6 +88,8 @@ class CreatePendingCoordinator(
             generation = if (canResumeGeneration) GenerationStatus.Running else {
                 GenerationStatus.Error(
                     "Создание питомца сохранено и продолжится после подключения сервера.",
+                    newRequestRequired = pending.backendState ==
+                        com.gigagochi.app.core.database.PendingBackendState.Failed,
                 )
             },
             generationAttempt = if (canResumeGeneration) 1 else 0,

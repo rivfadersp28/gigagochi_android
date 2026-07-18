@@ -4,7 +4,7 @@ import kotlinx.coroutines.CancellationException
 
 sealed interface PetGenerationExecutionResult {
     data class Success(val pet: GeneratedPetFixture) : PetGenerationExecutionResult
-    data object Failure : PetGenerationExecutionResult
+    data class Failure(val newRequestRequired: Boolean) : PetGenerationExecutionResult
 }
 
 suspend fun executePetGeneration(
@@ -14,6 +14,10 @@ suspend fun executePetGeneration(
     PetGenerationExecutionResult.Success(adapter.generate(request))
 } catch (cancelled: CancellationException) {
     throw cancelled
+} catch (failure: FeatureAdapterException) {
+    PetGenerationExecutionResult.Failure(
+        newRequestRequired = failure.failure.code == "GENERATION_FAILED",
+    )
 } catch (_: Exception) {
-    PetGenerationExecutionResult.Failure
+    PetGenerationExecutionResult.Failure(newRequestRequired = false)
 }

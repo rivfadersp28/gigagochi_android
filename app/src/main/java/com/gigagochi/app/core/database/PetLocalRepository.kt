@@ -30,6 +30,11 @@ data class OwnerRecoveryData(
 interface OwnerRecoveryStore : PetSnapshotStore {
     suspend fun loadOwnerRecovery(ownerId: String): OwnerRecoveryData
     suspend fun savePendingCreate(pending: LocalPendingCreateGeneration)
+    suspend fun replaceFailedPendingCreate(
+        ownerId: String,
+        failedRequestKey: String,
+        replacement: LocalPendingCreateGeneration,
+    ): Boolean
     suspend fun deletePendingCreate(ownerId: String, requestKey: String): Boolean
     suspend fun attachCreateBackendJob(
         ownerId: String,
@@ -129,6 +134,30 @@ class PetLocalRepository(
     override suspend fun savePendingCreate(pending: LocalPendingCreateGeneration) {
         LocalPersistenceValidation.pendingCreate(pending)
         dao.upsertPendingCreate(pending.toEntity())
+    }
+
+    override suspend fun replaceFailedPendingCreate(
+        ownerId: String,
+        failedRequestKey: String,
+        replacement: LocalPendingCreateGeneration,
+    ): Boolean {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.requestKey(failedRequestKey)
+        LocalPersistenceValidation.pendingCreate(replacement)
+        require(replacement.ownerId == ownerId && replacement.requestKey != failedRequestKey)
+        return database.withTransaction {
+            val failed = dao.getPendingCreate(ownerId, failedRequestKey)
+                ?: return@withTransaction false
+            if (
+                failed.petId != replacement.petId ||
+                failed.backendState != PendingBackendState.Failed
+            ) {
+                return@withTransaction false
+            }
+            dao.upsertPendingCreate(replacement.toEntity())
+            check(dao.deletePendingCreate(ownerId, failedRequestKey) == 1)
+            true
+        }
     }
 
     override suspend fun updateCreateBackendState(

@@ -225,7 +225,9 @@ fun CreatePetRoute(
                 ) ?: return@LaunchedEffect
             }
         ) {
-            PetGenerationExecutionResult.Failure -> state = state.markGenerationFailed()
+            is PetGenerationExecutionResult.Failure -> state = state.markGenerationFailed(
+                newRequestRequired = result.newRequestRequired,
+            )
             is PetGenerationExecutionResult.Success -> state = state.markGenerationReady(result.pet)
         }
     }

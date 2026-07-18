@@ -78,15 +78,25 @@ class CreatePetStateMachineTest {
     }
 
     @Test
-    fun failedGenerationRetriesSamePendingRequestWithoutRestartingQuestions() {
+    fun terminalFailedGenerationRetriesWithNewRequestWithoutRestartingQuestions() {
         val failed = CreatePetState()
             .answer("Ледяного дракона", requestKeyFactory = { "stable-key" })
-            .markGenerationFailed()
-        val retried = failed.retryGeneration()
+            .markGenerationFailed(newRequestRequired = true)
+        val retried = failed.retryGeneration(requestKeyFactory = { "retry-key" })
 
-        assertEquals("stable-key", retried.pending?.requestKey)
+        assertEquals("retry-key", retried.pending?.requestKey)
+        assertEquals(failed.pending?.petId, retried.pending?.petId)
         assertEquals(1, retried.step)
         assertEquals(2, retried.generationAttempt)
         assertEquals(GenerationStatus.Running, retried.generation)
+    }
+
+    @Test
+    fun transientFailureRetriesAttachedRequestWithoutChangingIdentity() {
+        val failed = CreatePetState()
+            .answer("Ледяного дракона", requestKeyFactory = { "stable-key" })
+            .markGenerationFailed()
+
+        assertEquals("stable-key", failed.retryGeneration().pending?.requestKey)
     }
 }

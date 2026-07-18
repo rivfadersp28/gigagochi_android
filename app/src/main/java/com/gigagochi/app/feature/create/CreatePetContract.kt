@@ -71,7 +71,10 @@ sealed interface GenerationStatus {
     data object Idle : GenerationStatus
     data object Running : GenerationStatus
     data class Ready(val pet: GeneratedPetFixture) : GenerationStatus
-    data class Error(val message: String) : GenerationStatus
+    data class Error(
+        val message: String,
+        val newRequestRequired: Boolean = false,
+    ) : GenerationStatus
 }
 
 data class CreatePetState(
@@ -167,13 +170,24 @@ fun CreatePetState.markGenerationReady(result: GeneratedPetFixture): CreatePetSt
 
 fun CreatePetState.markGenerationFailed(
     message: String = "Не получилось создать питомца. Попробуйте ещё раз.",
-): CreatePetState = copy(generation = GenerationStatus.Error(message))
+    newRequestRequired: Boolean = false,
+): CreatePetState = copy(
+    generation = GenerationStatus.Error(message, newRequestRequired),
+)
 
-fun CreatePetState.retryGeneration(): CreatePetState {
+fun CreatePetState.retryGeneration(
+    requestKeyFactory: () -> String = { UUID.randomUUID().toString() },
+): CreatePetState {
     if (pending == null || generation is GenerationStatus.Running) return this
+    val retryPending = if ((generation as? GenerationStatus.Error)?.newRequestRequired == true) {
+        pending.copy(requestKey = requestKeyFactory())
+    } else {
+        pending
+    }
     return copy(
         generation = GenerationStatus.Running,
         generationAttempt = generationAttempt + 1,
+        pending = retryPending,
     )
 }
 

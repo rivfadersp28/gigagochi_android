@@ -195,6 +195,31 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun terminalCreateRetryAtomicallyReplacesFailedRequest() = runBlocking {
+        repository.savePendingCreate(
+            create(
+                requestKey = "failed-request",
+                backendJobId = "failed-job",
+                backendState = PendingBackendState.Failed,
+            ),
+        )
+        val replacement = create(requestKey = "retry-request")
+
+        assertTrue(
+            repository.replaceFailedPendingCreate(
+                OwnerId,
+                "failed-request",
+                replacement,
+            ),
+        )
+
+        val pending = repository.getPendingCreates(OwnerId).single()
+        assertEquals("retry-request", pending.requestKey)
+        assertNull(pending.backendJobId)
+        assertEquals(PendingBackendState.Pending, pending.backendState)
+    }
+
+    @Test
     fun invalidDataIsRejectedBeforeAnyDatabaseWrite() = runBlocking {
         assertRejected {
             repository.replacePetSnapshot(snapshot(experience = 3_001))
@@ -427,11 +452,16 @@ class PetLocalRepositoryTest {
         updatedAtEpochMillis = 10,
     )
 
-    private fun create(ownerId: String = OwnerId) = LocalPendingCreateGeneration(
+    private fun create(
+        ownerId: String = OwnerId,
+        requestKey: String = "create-request",
+        backendJobId: String? = null,
+        backendState: PendingBackendState = PendingBackendState.Pending,
+    ) = LocalPendingCreateGeneration(
         ownerId = ownerId,
         petId = PetId,
-        requestKey = "create-request",
-        backendJobId = null,
+        requestKey = requestKey,
+        backendJobId = backendJobId,
         stage = PendingCreateStage.Generating,
         description = "Ледяной дракон",
         name = "Тото",
@@ -440,6 +470,7 @@ class PetLocalRepositoryTest {
         favoriteItem = null,
         currentStep = 4,
         updatedAtEpochMillis = 11,
+        backendState = backendState,
     )
 
     private fun outfit() = LocalPendingOutfit(

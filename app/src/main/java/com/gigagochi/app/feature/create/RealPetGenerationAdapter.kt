@@ -127,7 +127,12 @@ class RealPetGenerationAdapter(
                                 PendingBackendState.Failed,
                                 "GENERATION_FAILED",
                             )
-                            throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Server))
+                            throw FeatureAdapterException(
+                                FeatureFailure(
+                                    FeatureFailureKind.Server,
+                                    code = "GENERATION_FAILED",
+                                ),
+                            )
                         }
                         GenerationJobStatusDto.Queued,
                         GenerationJobStatusDto.Running,

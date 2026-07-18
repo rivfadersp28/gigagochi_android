@@ -12,6 +12,11 @@ open class TestOwnerRecoveryStore : OwnerRecoveryStore {
         storyReceipts = emptyList(),
     )
     override suspend fun savePendingCreate(pending: LocalPendingCreateGeneration) = Unit
+    override suspend fun replaceFailedPendingCreate(
+        ownerId: String,
+        failedRequestKey: String,
+        replacement: LocalPendingCreateGeneration,
+    ) = false
     override suspend fun deletePendingCreate(ownerId: String, requestKey: String) = false
     override suspend fun attachCreateBackendJob(
         ownerId: String,
