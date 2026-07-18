@@ -28,4 +28,16 @@ class PetTapReactionTest {
         assertEquals(petTapHeartParticles(3), petTapHeartParticles(3))
         assertNotEquals(petTapHeartParticles(3), petTapHeartParticles(4))
     }
+
+    @Test
+    fun bulgeTimingMatchesWebAttackHoldAndRelease() {
+        assertEquals(0f, petTapBulgeStrength(0f, reducedMotion = false))
+        assertEquals(.18f, petTapBulgeStrength(45f, reducedMotion = false))
+        assertEquals(.18f, petTapBulgeStrength(80f, reducedMotion = false))
+        assertEquals(.09f, petTapBulgeStrength(130f, reducedMotion = false), .0001f)
+        assertEquals(0f, petTapBulgeStrength(180f, reducedMotion = false))
+        assertEquals(.08f, petTapBulgeStrength(45f, reducedMotion = true))
+        assertEquals(.04f, petTapBulgeStrength(90f, reducedMotion = true), .0001f)
+        assertEquals(0f, petTapBulgeStrength(100f, reducedMotion = true))
+    }
 }

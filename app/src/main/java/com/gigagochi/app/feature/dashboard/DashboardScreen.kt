@@ -1,7 +1,6 @@
 package com.gigagochi.app.feature.dashboard
 
 import android.net.Uri
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.provider.Settings
 import android.os.SystemClock
@@ -1391,26 +1390,33 @@ private fun DashboardVideo(
         }
     }
     var videoTexture by remember(projection, retryToken) { mutableStateOf<TextureView?>(null) }
-    var capturedFrame by remember(projection, retryToken) { mutableStateOf<Bitmap?>(null) }
-    var capturedFrameVersion by remember(projection, retryToken) { mutableIntStateOf(0) }
+    var petTapGlOverlay by remember(projection, retryToken) {
+        mutableStateOf<PetTapGlOverlayView?>(null)
+    }
 
-    LaunchedEffect(petTapReaction?.id, videoTexture, reducedMotion) {
+    LaunchedEffect(petTapReaction?.id, videoTexture, petTapGlOverlay, reducedMotion) {
         val reaction = petTapReaction ?: return@LaunchedEffect
         val texture = videoTexture?.takeIf { it.isAvailable && it.width > 0 && it.height > 0 }
             ?: return@LaunchedEffect
-        val bitmap = Bitmap.createBitmap(texture.width, texture.height, Bitmap.Config.ARGB_8888)
-        capturedFrame = bitmap
+        val overlay = petTapGlOverlay ?: return@LaunchedEffect
         val durationMillis = if (reducedMotion) 100L else PetTapBulgeDurationMillis.toLong()
-        val deadlineNanos = System.nanoTime() + durationMillis * 1_000_000L
+        val startedAtNanos = withFrameNanos { it }
         try {
             do {
-                texture.getBitmap(bitmap)
-                capturedFrameVersion += 1
-                withFrameNanos { }
-            } while (System.nanoTime() < deadlineNanos && reaction.id == petTapReaction?.id)
+                val nowNanos = withFrameNanos { it }
+                val elapsedMillis = (nowNanos - startedAtNanos) / 1_000_000f
+                overlay.captureAndRender(
+                    source = texture,
+                    centerX = reaction.center.x,
+                    centerY = reaction.center.y,
+                    strength = petTapBulgeStrength(elapsedMillis, reducedMotion),
+                )
+            } while (
+                elapsedMillis < durationMillis &&
+                reaction.id == petTapReaction?.id
+            )
         } finally {
-            capturedFrame = null
-            bitmap.recycle()
+            overlay.clearEffect()
         }
     }
 
@@ -1476,17 +1482,17 @@ private fun DashboardVideo(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        capturedFrame?.let { bitmap ->
-            val frameImage = remember(bitmap, capturedFrameVersion) { bitmap.asImageBitmap() }
-            Image(
-                bitmap = frameImage,
-                contentDescription = null,
-                contentScale = ContentScale.FillBounds,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .petTapBulge(petTapReaction, reducedMotion),
-            )
-        }
+        AndroidView(
+            factory = { viewContext ->
+                PetTapGlOverlayView(viewContext).also { petTapGlOverlay = it }
+            },
+            update = { petTapGlOverlay = it },
+            onRelease = {
+                if (petTapGlOverlay === it) petTapGlOverlay = null
+                it.releaseRenderer()
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
         if (mediaFailed) {
             Text(
                 text = "Повторить медиа",
