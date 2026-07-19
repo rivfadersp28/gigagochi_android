@@ -4,7 +4,6 @@ import android.net.Uri
 import android.graphics.BitmapFactory
 import android.provider.Settings
 import android.os.SystemClock
-import android.view.TextureView
 import android.view.LayoutInflater
 import androidx.annotation.OptIn
 import androidx.activity.compose.BackHandler
@@ -134,6 +133,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.effect.Presentation
 import androidx.media3.datasource.DataSpec
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -1369,7 +1369,8 @@ private fun DashboardVideo(
     var showPoster by remember(projection, reducedMotion, retryToken, lifecycleStarted) {
         mutableStateOf(true)
     }
-    val player = remember(context, videoUrl, retryToken, lifecycleStarted) {
+    val petTapVideoEffect = remember(projection, retryToken) { PetTapVideoEffect() }
+    val player = remember(context, videoUrl, retryToken, lifecycleStarted, petTapVideoEffect) {
         if (videoUrl == null || !lifecycleStarted) return@remember null
         DashboardVideoTestProbe.recordPlayerCreation()
         val builder = if (videoUrl.startsWith("asset:///")) {
@@ -1384,31 +1385,34 @@ private fun DashboardVideo(
         builder.build().apply {
             volume = 0f
             repeatMode = Player.REPEAT_MODE_ONE
+            val displayMetrics = context.resources.displayMetrics
+            setVideoEffects(
+                listOf(
+                    Presentation.createForAspectRatio(
+                        displayMetrics.widthPixels.toFloat() / displayMetrics.heightPixels,
+                        Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
+                    ),
+                    petTapVideoEffect,
+                ),
+            )
             setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
             playWhenReady = lifecycleStarted
             prepare()
         }
     }
-    var videoTexture by remember(projection, retryToken) { mutableStateOf<TextureView?>(null) }
-    var petTapGlOverlay by remember(projection, retryToken) {
-        mutableStateOf<PetTapGlOverlayView?>(null)
-    }
-
-    LaunchedEffect(petTapReaction?.id, videoTexture, petTapGlOverlay, reducedMotion) {
+    LaunchedEffect(petTapReaction?.id, petTapVideoEffect, reducedMotion) {
         val reaction = petTapReaction ?: return@LaunchedEffect
-        val texture = videoTexture?.takeIf { it.isAvailable && it.width > 0 && it.height > 0 }
-            ?: return@LaunchedEffect
-        val overlay = petTapGlOverlay ?: return@LaunchedEffect
         val durationMillis = if (reducedMotion) 100L else PetTapBulgeDurationMillis.toLong()
         val startedAtNanos = withFrameNanos { it }
         try {
             do {
                 val nowNanos = withFrameNanos { it }
                 val elapsedMillis = (nowNanos - startedAtNanos) / 1_000_000f
-                overlay.captureAndRender(
-                    source = texture,
+                petTapVideoEffect.update(
                     centerX = reaction.center.x,
                     centerY = reaction.center.y,
+                    width = context.resources.displayMetrics.widthPixels.toFloat(),
+                    height = context.resources.displayMetrics.heightPixels.toFloat(),
                     strength = petTapBulgeStrength(elapsedMillis, reducedMotion),
                 )
             } while (
@@ -1416,7 +1420,7 @@ private fun DashboardVideo(
                 reaction.id == petTapReaction?.id
             )
         } finally {
-            overlay.clearEffect()
+            petTapVideoEffect.clear()
         }
     }
 
@@ -1459,15 +1463,10 @@ private fun DashboardVideo(
                         setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                         setKeepContentOnPlayerReset(true)
                         this.player = player
-                        videoTexture = videoSurfaceView as? TextureView
                     }
                 },
-                update = {
-                    it.player = player
-                    videoTexture = it.videoSurfaceView as? TextureView
-                },
+                update = { it.player = player },
                 onRelease = {
-                    videoTexture = null
                     it.player = null
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -1482,17 +1481,6 @@ private fun DashboardVideo(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        AndroidView(
-            factory = { viewContext ->
-                PetTapGlOverlayView(viewContext).also { petTapGlOverlay = it }
-            },
-            update = { petTapGlOverlay = it },
-            onRelease = {
-                if (petTapGlOverlay === it) petTapGlOverlay = null
-                it.releaseRenderer()
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
         if (mediaFailed) {
             Text(
                 text = "Повторить медиа",
