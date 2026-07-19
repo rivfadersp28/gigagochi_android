@@ -30,14 +30,17 @@ class PetTapReactionTest {
     }
 
     @Test
-    fun bulgeTimingMatchesWebAttackHoldAndRelease() {
+    fun bulgeTimingUsesSmoothedAttackHoldAndRelease() {
         assertEquals(0f, petTapBulgeStrength(0f, reducedMotion = false))
-        assertEquals(.18f, petTapBulgeStrength(45f, reducedMotion = false))
-        assertEquals(.18f, petTapBulgeStrength(80f, reducedMotion = false))
-        assertEquals(.09f, petTapBulgeStrength(130f, reducedMotion = false), .0001f)
-        assertEquals(0f, petTapBulgeStrength(180f, reducedMotion = false))
-        assertEquals(.08f, petTapBulgeStrength(45f, reducedMotion = true))
-        assertEquals(.04f, petTapBulgeStrength(90f, reducedMotion = true), .0001f)
+        assertEquals(.09f, petTapBulgeStrength(60f, reducedMotion = false), .0001f)
+        assertEquals(.18f, petTapBulgeStrength(120f, reducedMotion = false))
+        assertEquals(.18f, petTapBulgeStrength(170f, reducedMotion = false))
+        assertEquals(.09f, petTapBulgeStrength(265f, reducedMotion = false), .0001f)
+        assertEquals(0f, petTapBulgeStrength(360f, reducedMotion = false))
+        assertEquals(.04f, petTapBulgeStrength(17.5f, reducedMotion = true), .0001f)
+        assertEquals(.08f, petTapBulgeStrength(35f, reducedMotion = true))
+        assertEquals(.08f, petTapBulgeStrength(60f, reducedMotion = true))
+        assertEquals(.04f, petTapBulgeStrength(80f, reducedMotion = true), .0001f)
         assertEquals(0f, petTapBulgeStrength(100f, reducedMotion = true))
     }
 }

@@ -23,9 +23,12 @@ import kotlin.random.Random
 
 internal const val PetTapParticleIntervalMillis = 80L
 internal const val PetTapParticleCount = 9
-internal const val PetTapBulgeDurationMillis = 180
-internal const val PetTapBulgeAttackMillis = 45
-internal const val PetTapBulgeHoldMillis = 80
+internal const val PetTapBulgeDurationMillis = 360
+internal const val PetTapBulgeAttackMillis = 120
+internal const val PetTapBulgeHoldMillis = 170
+internal const val PetTapReducedBulgeDurationMillis = 100
+internal const val PetTapReducedBulgeAttackMillis = 35
+internal const val PetTapReducedBulgeHoldMillis = 60
 internal const val PetTapParticleLifetimeMillis = 1_889
 internal const val PetTapBulgeStrength = .18f
 internal const val PetTapReducedBulgeStrength = .08f
@@ -79,16 +82,35 @@ internal object PetTapThanksSession {
 }
 
 internal fun petTapBulgeStrength(elapsedMillis: Float, reducedMotion: Boolean): Float {
-    val duration = if (reducedMotion) 100f else PetTapBulgeDurationMillis.toFloat()
+    val duration = if (reducedMotion) {
+        PetTapReducedBulgeDurationMillis.toFloat()
+    } else {
+        PetTapBulgeDurationMillis.toFloat()
+    }
     if (elapsedMillis < 0f || elapsedMillis >= duration) return 0f
     val peak = if (reducedMotion) PetTapReducedBulgeStrength else PetTapBulgeStrength
-    val attack = (elapsedMillis / PetTapBulgeAttackMillis).coerceIn(0f, 1f)
-    val release = if (elapsedMillis <= PetTapBulgeHoldMillis) {
+    val attackMillis = if (reducedMotion) {
+        PetTapReducedBulgeAttackMillis
+    } else {
+        PetTapBulgeAttackMillis
+    }
+    val holdMillis = if (reducedMotion) {
+        PetTapReducedBulgeHoldMillis
+    } else {
+        PetTapBulgeHoldMillis
+    }
+    val attack = smoothStep(elapsedMillis / attackMillis)
+    val release = if (elapsedMillis <= holdMillis) {
         1f
     } else {
-        1f - (elapsedMillis - PetTapBulgeHoldMillis) / (duration - PetTapBulgeHoldMillis)
-    }.coerceIn(0f, 1f)
+        smoothStep(1f - (elapsedMillis - holdMillis) / (duration - holdMillis))
+    }
     return peak * minOf(attack, release)
+}
+
+private fun smoothStep(progress: Float): Float {
+    val value = progress.coerceIn(0f, 1f)
+    return value * value * (3f - 2f * value)
 }
 
 @Composable

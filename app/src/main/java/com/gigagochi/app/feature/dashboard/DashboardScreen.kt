@@ -1402,7 +1402,11 @@ private fun DashboardVideo(
     }
     LaunchedEffect(petTapReaction?.id, petTapVideoEffect, reducedMotion) {
         val reaction = petTapReaction ?: return@LaunchedEffect
-        val durationMillis = if (reducedMotion) 100L else PetTapBulgeDurationMillis.toLong()
+        val durationMillis = if (reducedMotion) {
+            PetTapReducedBulgeDurationMillis.toLong()
+        } else {
+            PetTapBulgeDurationMillis.toLong()
+        }
         val startedAtNanos = withFrameNanos { it }
         try {
             do {
