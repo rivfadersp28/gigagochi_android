@@ -19,6 +19,7 @@ class CreateFinalizationTest {
             ownerId = "acct_owner_a",
             lifecycle = AccountPetLifecycle(store, nowEpochMillis = { 55 }),
             store = store,
+            nowEpochMillis = { 55 },
         )
 
         val result = coordinator.finalize(readyState())

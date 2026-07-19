@@ -1,14 +1,28 @@
 package com.gigagochi.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -24,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.core.view.WindowCompat
@@ -72,20 +87,115 @@ import com.gigagochi.app.feature.dashboard.RealDashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.RealDashboardTravelAdapter
 import com.gigagochi.app.feature.dashboard.toUi
 import com.gigagochi.app.feature.dashboard.durableDashboardRequestKey
+import com.gigagochi.app.feature.events.EventHistoryScreen
+import com.gigagochi.app.feature.events.AndroidTravelVideoSharer
+import com.gigagochi.app.feature.events.eventHistoryUiState
 import com.gigagochi.app.feature.travel.TravelDebugState
 import com.gigagochi.app.feature.travel.TravelEntryRoute
 import com.gigagochi.app.feature.travel.ScheduledStoryCoordinator
 import com.gigagochi.app.feature.travel.ScheduledStoryRoute
 import com.gigagochi.app.feature.travel.StoryReceiptCoordinator
+import com.gigagochi.app.feature.travel.TravelEntryPet
+import com.gigagochi.app.feature.travel.onboardingBatStory
+import com.gigagochi.app.feature.travel.onboardingBatStoryResult
+import com.gigagochi.app.feature.travel.rememberTravelReducedMotionPreference
+import com.gigagochi.app.feature.travel.DurableOnboardingBatChoiceAdapter
+import com.gigagochi.app.feature.travel.DurableOnboardingBatFinishAdapter
+import com.gigagochi.app.core.database.FirstSessionStage
+import com.gigagochi.app.core.database.OwnedPetSnapshot
+import com.gigagochi.app.debugmenu.DebugMenuBindings
+import com.gigagochi.app.debugmenu.DebugMenuHost
+import com.gigagochi.app.debugmenu.clearDebugFixtureSelection
+import com.gigagochi.app.debugmenu.debugFixturePet
+import com.gigagochi.app.debugmenu.debugDeadPetId
+import com.gigagochi.app.debugmenu.debugPreferredPetId
+import com.gigagochi.app.debugmenu.debugSavedPetId
+import com.gigagochi.app.debugmenu.debugGenerationAdapter
+import com.gigagochi.app.debugmenu.debugChatAdapter
+import com.gigagochi.app.debugmenu.debugOutfitAdapter
+import com.gigagochi.app.debugmenu.debugTravelAdapter
+import com.gigagochi.app.debugmenu.debugScheduledStoryService
+import com.gigagochi.app.debugmenu.ensureDebugFixtureStories
+import com.gigagochi.app.debugmenu.setDebugFixtureSelection
+import com.gigagochi.app.debugmenu.setDebugDeadPetId
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
-internal enum class AppRoute { Create, Dashboard, Travel, Story, ConnectionError, LocalDataError }
+internal enum class AppRoute { Create, Dashboard, Events, Travel, Story, ConnectionError, LocalDataError }
+
+private const val AppRouteTransitionMillis = 300
+private val AppRouteTransitionEasing = CubicBezierEasing(.2f, 0f, 0f, 1f)
+
+internal fun appRouteDepth(route: AppRoute?): Int = when (route) {
+    AppRoute.Events,
+    AppRoute.Travel,
+    -> 1
+    AppRoute.Story -> 2
+    AppRoute.Create,
+    AppRoute.Dashboard,
+    AppRoute.ConnectionError,
+    AppRoute.LocalDataError,
+    null,
+    -> 0
+}
+
+internal fun isForwardAppRouteTransition(initial: AppRoute?, target: AppRoute?): Boolean =
+    appRouteDepth(target) > appRouteDepth(initial)
+
+internal fun isDashboardStackRoute(route: AppRoute?): Boolean = when (route) {
+    AppRoute.Dashboard,
+    AppRoute.Events,
+    AppRoute.Travel,
+    AppRoute.Story,
+    -> true
+    AppRoute.Create,
+    AppRoute.ConnectionError,
+    AppRoute.LocalDataError,
+    null,
+    -> false
+}
+
+private fun appRouteTransition(
+    initial: AppRoute?,
+    target: AppRoute?,
+    reducedMotion: Boolean,
+): ContentTransform {
+    if (initial == null || target == null || reducedMotion) {
+        return EnterTransition.None togetherWith ExitTransition.None
+    }
+    if (appRouteDepth(initial) == appRouteDepth(target)) {
+        return fadeIn(tween(180)) togetherWith fadeOut(tween(120))
+    }
+    val forward = isForwardAppRouteTransition(initial, target)
+    val enter = slideInHorizontally(
+        animationSpec = tween(AppRouteTransitionMillis, easing = AppRouteTransitionEasing),
+        initialOffsetX = { width -> if (forward) width else -width / 4 },
+    )
+    val exit = slideOutHorizontally(
+        animationSpec = tween(AppRouteTransitionMillis, easing = AppRouteTransitionEasing),
+        targetOffsetX = { width -> if (forward) -width / 4 else width },
+    )
+    return enter togetherWith exit
+}
+
+private fun dashboardOverlayTransition(
+    initial: AppRoute?,
+    target: AppRoute?,
+    reducedMotion: Boolean,
+): ContentTransform = appRouteTransition(
+    initial = initial ?: AppRoute.Dashboard,
+    target = target ?: AppRoute.Dashboard,
+    reducedMotion = reducedMotion,
+)
 
 internal fun contextualNavigationForAppRoute(
     route: AppRoute,
 ): ContextualNavigationAction? = when (route) {
     AppRoute.Travel -> ContextualNavigationAction.Back
-    AppRoute.Story -> ContextualNavigationAction.Close
+    AppRoute.Story,
+    AppRoute.Events,
+    -> ContextualNavigationAction.Back
     AppRoute.Create,
     AppRoute.Dashboard,
     AppRoute.ConnectionError,
@@ -130,6 +240,14 @@ internal fun appRouteForAccountStartup(destination: AccountStartupDestination): 
     }
 
 class MainActivity : ComponentActivity() {
+    private val incomingIntentRevision = MutableStateFlow(0)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        incomingIntentRevision.value += 1
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -139,6 +257,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             GigagochiTheme {
+                val latestIntentRevision by incomingIntentRevision.collectAsState()
                 val explicitRouteValue = remember(intent, BuildConfig.DEBUG) {
                     debugExtraValue(
                         intent.getStringExtra("gigagochi.route"),
@@ -172,6 +291,10 @@ class MainActivity : ComponentActivity() {
                 var pendingStoryDeepLink by remember(intent) {
                     mutableStateOf(intent.getStringExtra("gigagochi.storyId"))
                 }
+                var pendingTravelDeepLink by remember(intent) {
+                    mutableStateOf(intent.getStringExtra("gigagochi.travelRequestKey"))
+                }
+                var focusedTravelRequestKey by remember { mutableStateOf<String?>(null) }
                 var route by remember {
                     mutableStateOf(explicitRouteValue?.let(::appRouteFromValue))
                 }
@@ -182,7 +305,18 @@ class MainActivity : ComponentActivity() {
                 val activePet = remember { mutableStateOf<PetDashboardState?>(null) }
                 val activeStartup = remember { mutableStateOf<AccountStartupDestination?>(null) }
                 val activeStory = remember { mutableStateOf<LocalScheduledStory?>(null) }
+                val scheduledStories = remember {
+                    mutableStateOf<List<LocalScheduledStory>>(emptyList())
+                }
+                val travelVideoAssets = remember {
+                    mutableStateOf<List<com.gigagochi.app.core.database.LocalTravelVideoAsset>>(
+                        emptyList(),
+                    )
+                }
                 var dashboardRecoveryRevision by remember { mutableIntStateOf(0) }
+                var debugTravelDemo by remember { mutableStateOf(false) }
+                var debugVisualMoodOverride by remember { mutableStateOf<String?>(null) }
+                var debugDeadRevision by remember { mutableIntStateOf(0) }
                 val sessionRepository = remember {
                     androidSessionRepository(applicationContext)
                 }
@@ -230,25 +364,86 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                LaunchedEffect(
+                    petRepository,
+                    inMemorySession.value?.accountId,
+                    activePet.value?.petId,
+                ) {
+                    val repository = petRepository
+                    val session = inMemorySession.value
+                    val pet = activePet.value
+                    if (repository == null || session == null || pet == null) {
+                        scheduledStories.value = emptyList()
+                        travelVideoAssets.value = emptyList()
+                        return@LaunchedEffect
+                    }
+                    scheduledStories.value = emptyList()
+                    travelVideoAssets.value = emptyList()
+                    launch {
+                        repository.observeScheduledStories(session.accountId, pet.petId).collect {
+                            scheduledStories.value = it
+                        }
+                    }
+                    launch {
+                        repository.observeTravelVideoAssets(session.accountId, pet.petId).collect {
+                            travelVideoAssets.value = it
+                        }
+                    }
+                }
+
                 suspend fun routeLocalSession(session: Session) {
                     inMemorySession.value = session
                     authHeaderProvider.update(session)
-                    when (val destination = petLifecycle?.startup(session.accountId)) {
+                    when (val destination = petLifecycle?.startup(
+                        session.accountId,
+                        debugPreferredPetId(applicationContext),
+                    )) {
                         is AccountStartupDestination.Dashboard -> {
+                            val repository = requireNotNull(petRepository)
+                            if (!ensureDebugFixtureStories(
+                                    session.accountId,
+                                    destination.pet,
+                                    repository,
+                                )
+                            ) {
+                                route = AppRoute.LocalDataError
+                                return
+                            }
                             activePet.value = destination.pet
                             activeStartup.value = destination
                             val storyId = pendingStoryDeepLink
-                            pendingStoryDeepLink = null
                             val story = if (storyId != null) {
                                 petRepository?.getScheduledStory(session.accountId, storyId)
                             } else null
-                            activeStory.value = story
-                            if (shouldEnqueueBackgroundSync(isExplicitDebugRoute, destination)) {
+                            val travelRequestKey = pendingTravelDeepLink
+                            val travelAsset = if (travelRequestKey != null) {
+                                petRepository?.getTravelVideoAsset(
+                                    session.accountId,
+                                    travelRequestKey,
+                                )
+                            } else null
+                            if (storyId != null) {
+                                pendingStoryDeepLink = null
+                                activeStory.value = story
+                            }
+                            if (travelRequestKey != null) {
+                                pendingTravelDeepLink = null
+                                focusedTravelRequestKey = travelAsset
+                                    ?.takeIf { it.petId == destination.pet.petId }
+                                    ?.requestKey
+                            }
+                            if (
+                                shouldEnqueueBackgroundSync(isExplicitDebugRoute, destination) &&
+                                destination.pet.petId != debugFixturePet()?.petId
+                            ) {
                                 MvpSyncScheduler.enqueue(applicationContext)
                             }
-                            route = if (story != null && story.story.petId == destination.pet.petId) {
-                                AppRoute.Story
-                            } else appRouteForAccountStartup(destination)
+                            route = when {
+                                story != null && story.story.petId == destination.pet.petId ->
+                                    AppRoute.Story
+                                focusedTravelRequestKey != null -> AppRoute.Events
+                                else -> appRouteForAccountStartup(destination)
+                            }
                         }
                         is AccountStartupDestination.Create -> {
                             activeStartup.value = destination
@@ -258,6 +453,12 @@ class MainActivity : ComponentActivity() {
                             appRouteForAccountStartup(destination)
                         null -> route = AppRoute.LocalDataError
                     }
+                }
+                LaunchedEffect(latestIntentRevision) {
+                    if (latestIntentRevision == 0) return@LaunchedEffect
+                    pendingStoryDeepLink = intent.getStringExtra("gigagochi.storyId")
+                    pendingTravelDeepLink = intent.getStringExtra("gigagochi.travelRequestKey")
+                    inMemorySession.value?.let { routeLocalSession(it) }
                 }
                 LaunchedEffect(route) {
                     if (route != null) return@LaunchedEffect
@@ -287,69 +488,23 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                when (route) {
-                    null -> Box(
+                @Composable
+                fun DashboardLayer(active: Boolean) {
+                    val dashboardModifier = if (active) {
                         Modifier
-                            .fillMaxSize()
-                            .background(Color(0xFF071219)),
-                    )
-                    AppRoute.Create -> CreatePetRoute(
-                        debugState = debugState,
-                        initialStateOverride = if (isExplicitDebugRoute) null else {
-                            val pending = (activeStartup.value as? AccountStartupDestination.Create)
-                                ?.pending
-                            val repository = petRepository
-                            val session = inMemorySession.value
-                            if (pending != null && repository != null && session != null) {
-                                CreatePendingCoordinator(session.accountId, repository).restore(pending)
-                            } else null
-                        },
-                        generationAdapter = if (isExplicitDebugRoute) {
-                            com.gigagochi.app.feature.create.FakePetGenerationAdapter()
-                        } else {
-                            val session = requireNotNull(inMemorySession.value)
-                            val repository = requireNotNull(petRepository)
-                            remember(session.accountId, repository, featureApi) {
-                                RealPetGenerationAdapter(
-                                    session.accountId,
-                                    repository,
-                                    repository,
-                                    requireNotNull(featureApi),
-                                )
-                            }
-                        },
-                        finalizationCoordinator = if (isExplicitDebugRoute) {
-                            null
-                        } else {
-                            val session = inMemorySession.value
-                            val lifecycle = petLifecycle
-                            if (session != null && lifecycle != null) {
-                                CreateFinalizationCoordinator(
-                                    session.accountId,
-                                    lifecycle,
-                                    requireNotNull(petRepository),
-                                )
-                            } else {
-                                null
-                            }
-                        },
-                        pendingCoordinator = if (isExplicitDebugRoute) null else {
-                            val session = inMemorySession.value
-                            val repository = petRepository
-                            if (session != null && repository != null) {
-                                CreatePendingCoordinator(session.accountId, repository)
-                            } else null
-                        },
-                        onPetPersisted = { activePet.value = it },
-                        onNavigateDashboard = {
-                            val session = inMemorySession.value
-                            if (session != null && !isExplicitDebugRoute) {
-                                scope.launch { routeLocalSession(session) }
-                            } else route = AppRoute.Dashboard
-                        },
-                    )
-                    AppRoute.Dashboard -> if (isExplicitDebugRoute) {
-                        DashboardRoute(debugState = dashboardDebugState)
+                    } else {
+                        Modifier.clearAndSetSemantics { }
+                    }
+                    if (isExplicitDebugRoute) {
+                        DashboardRoute(
+                            debugState = dashboardDebugState,
+                            onEvents = {
+                                focusedTravelRequestKey = null
+                                route = AppRoute.Events
+                            },
+                            mediaActive = active,
+                            modifier = dashboardModifier,
+                        )
                     } else {
                         RequestNotificationPermissionOnce(enabled = true)
                         val recovery = activeStartup.value as? AccountStartupDestination.Dashboard
@@ -370,7 +525,10 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 repository,
                                 api,
-                                onJobAttached = recoverySignal::request,
+                                onJobAttached = {
+                                    recoverySignal.request()
+                                    scope.launch { routeLocalSession(session) }
+                                },
                             )
                         }
                         val travelAdapter = remember(session.accountId, repository, api, recoverySignal) {
@@ -382,6 +540,12 @@ class MainActivity : ComponentActivity() {
                                 api,
                                 onJobAttached = recoverySignal::request,
                             )
+                        }
+                        val debugDashboardOutfitAdapter = remember(outfitAdapter) {
+                            debugOutfitAdapter(outfitAdapter)
+                        }
+                        val debugDashboardTravelAdapter = remember(travelAdapter) {
+                            debugTravelAdapter(travelAdapter)
                         }
                         val pendingRecovery = remember(
                             session.accountId,
@@ -415,8 +579,9 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                         val lifecycleOwner = LocalLifecycleOwner.current
-                        val scheduledStoryCoordinator = remember(session.accountId, repository, api) {
-                            ScheduledStoryCoordinator(session.accountId, repository, api)
+                        val storyApi = remember(api) { debugScheduledStoryService(api) }
+                        val scheduledStoryCoordinator = remember(session.accountId, repository, storyApi) {
+                            ScheduledStoryCoordinator(session.accountId, repository, storyApi)
                         }
                         LaunchedEffect(
                             scheduledStoryCoordinator,
@@ -435,22 +600,53 @@ class MainActivity : ComponentActivity() {
                         DashboardRoute(
                             debugState = dashboardDebugState,
                             recoveryRevision = dashboardRecoveryRevision,
-                            initialPet = requireNotNull(activePet.value),
+                            initialPet = requireNotNull(activePet.value).let { pet ->
+                                debugVisualMoodOverride?.let(pet::copyMood) ?: pet
+                            },
                             initialPendingOutfit = recovery?.pendingOutfit?.toUi(),
                             initialPendingTravel = recovery?.pendingTravel?.toUi(),
+                            initialFirstSession = recovery?.firstSession,
+                            firstSessionOwnerId = session.accountId,
+                            firstSessionStore = repository,
+                            onFirstSessionTravel = { route = AppRoute.Travel },
+                            onFirstSessionChanged = { firstSession ->
+                                val current = activeStartup.value as? AccountStartupDestination.Dashboard
+                                if (current != null) activeStartup.value = current.copy(
+                                    firstSession = firstSession,
+                                )
+                            },
                             travelPresentation = recovery?.travelPresentation,
                             mediaUrlPolicy = mediaUrlPolicy,
-                            chatAdapter = remember(api) { RealDashboardChatAdapter(api) },
+                            chatAdapter = remember(api, session.accountId, repository, scope) {
+                                debugChatAdapter(
+                                    RealDashboardChatAdapter(
+                                        api,
+                                        session.accountId,
+                                        repository,
+                                        scope,
+                                    ),
+                                )
+                            },
                             feedAdapter = remember { DeterministicLocalDashboardFeedAdapter() },
-                            outfitAdapter = outfitAdapter,
-                            travelAdapter = travelAdapter,
+                            outfitAdapter = debugDashboardOutfitAdapter,
+                            travelAdapter = debugDashboardTravelAdapter,
                             durableOperations = DashboardDurableOperations(
                                 ownerId = requireNotNull(inMemorySession.value).accountId,
                                 store = requireNotNull(petRepository),
-                                outfitAdapter = outfitAdapter,
-                                travelAdapter = travelAdapter,
+                                outfitAdapter = debugDashboardOutfitAdapter,
+                                travelAdapter = debugDashboardTravelAdapter,
                             ),
                             requestKeyFactory = ::durableDashboardRequestKey,
+                            unansweredEventCount = eventHistoryUiState(
+                                scheduledStories.value,
+                                travelVideoAssets.value,
+                            ).unansweredCount,
+                            onEvents = {
+                                focusedTravelRequestKey = null
+                                route = AppRoute.Events
+                            },
+                            mediaActive = active,
+                            modifier = dashboardModifier,
                             onPetChanged = { pet ->
                                 val session = inMemorySession.value
                                 val lifecycle = petLifecycle
@@ -464,30 +660,100 @@ class MainActivity : ComponentActivity() {
                             },
                         )
                     }
-                    AppRoute.Travel -> {
-                        TravelEntryRoute(
-                            debugState = travelDebugState,
-                            navigationAction = requireNotNull(
-                                contextualNavigationForAppRoute(AppRoute.Travel),
-                            ),
-                            onNavigateDashboard = { route = AppRoute.Dashboard },
-                        )
-                    }
-                    AppRoute.Story -> {
-                        val session = requireNotNull(inMemorySession.value)
-                        val repository = requireNotNull(petRepository)
-                        val api = requireNotNull(featureApi)
+                }
+
+                @Composable
+                fun DashboardOverlay(overlayRoute: AppRoute?) {
+                    when (overlayRoute) {
+                        null,
+                        AppRoute.Dashboard,
+                        -> Box(Modifier.fillMaxSize())
+                        AppRoute.Events -> {
                         val mediaUrlPolicy = remember {
                             StaticMediaUrlPolicy(BuildConfig.BACKEND_BASE_URL, BuildConfig.DEBUG)
                         }
-                        ScheduledStoryRoute(
+                        EventHistoryScreen(
+                            stories = scheduledStories.value,
+                            travelVideos = travelVideoAssets.value,
+                            mediaUrlPolicy = mediaUrlPolicy,
+                            travelVideoSharer = remember(mediaUrlPolicy) {
+                                AndroidTravelVideoSharer(this@MainActivity, mediaUrlPolicy)
+                            },
+                            initialFocusTravelRequestKey = focusedTravelRequestKey,
+                            onHelp = { story ->
+                                activeStory.value = story
+                                route = AppRoute.Story
+                            },
+                            onBack = {
+                                focusedTravelRequestKey = null
+                                route = AppRoute.Dashboard
+                            },
+                        )
+                        }
+                        AppRoute.Travel -> {
+                        val session = inMemorySession.value
+                        val repository = petRepository
+                        val pet = activePet.value
+                        val recovery = activeStartup.value as? AccountStartupDestination.Dashboard
+                        val firstSession = recovery?.firstSession
+                        val isOnboardingBat = !debugTravelDemo && !isExplicitDebugRoute &&
+                            session != null && repository != null && pet != null &&
+                            firstSession?.stage == FirstSessionStage.AwaitingTravel
+                        val batStory = when {
+                            debugTravelDemo && pet != null -> onboardingBatStory(pet.petId)
+                            isOnboardingBat -> onboardingBatStory(pet!!.petId)
+                            else -> null
+                        }
+                        val batReceipt = recovery?.storyReceipts?.firstOrNull {
+                            it.travelId == batStory?.travelId && it.partKey == "choice-result"
+                        }
+                        TravelEntryRoute(
+                            debugState = travelDebugState,
+                            initialPet = pet?.let { TravelEntryPet(it.petId, it.name, it.experience) }
+                                ?: TravelEntryPet("debug-test-pet", "Без имени"),
+                            initialStory = batStory,
+                            initialStoryResult = if (batStory != null && batReceipt != null) {
+                                onboardingBatStoryResult(batStory, batReceipt.receiptKey)
+                            } else null,
+                            storyChoiceAdapter = if (isOnboardingBat) {
+                                DurableOnboardingBatChoiceAdapter(
+                                    session!!.accountId, pet!!.petId, repository!!,
+                                )
+                            } else com.gigagochi.app.feature.travel.FakeOnboardingTravelStoryAdapter(),
+                            resultConsumptionAdapter = if (isOnboardingBat) {
+                                DurableOnboardingBatFinishAdapter(
+                                    session!!.accountId, pet!!.petId, repository!!,
+                                )
+                            } else com.gigagochi.app.feature.travel.ImmediateTravelResultConsumptionAdapter,
+                            requestKeyFactory = ::durableDashboardRequestKey,
+                            navigationAction = requireNotNull(
+                                contextualNavigationForAppRoute(AppRoute.Travel),
+                            ),
+                            onNavigateDashboard = {
+                                debugTravelDemo = false
+                                route = AppRoute.Dashboard
+                                if (session != null && !isExplicitDebugRoute) {
+                                    scope.launch { routeLocalSession(session) }
+                                }
+                            },
+                        )
+                        }
+                        AppRoute.Story -> {
+                        val session = requireNotNull(inMemorySession.value)
+                        val repository = requireNotNull(petRepository)
+                        val api = requireNotNull(featureApi)
+                        val story = activeStory.value
+                        val mediaUrlPolicy = remember {
+                            StaticMediaUrlPolicy(BuildConfig.BACKEND_BASE_URL, BuildConfig.DEBUG)
+                        }
+                        if (story != null) ScheduledStoryRoute(
                             pet = requireNotNull(activePet.value),
-                            initialStory = requireNotNull(activeStory.value),
+                            initialStory = story,
                             coordinator = remember(session.accountId, repository, api) {
                                 ScheduledStoryCoordinator(
                                     session.accountId,
                                     repository,
-                                    api,
+                                    debugScheduledStoryService(api),
                                     StoryReceiptCoordinator(
                                         session.accountId,
                                         requireNotNull(activePet.value).petId,
@@ -500,26 +766,279 @@ class MainActivity : ComponentActivity() {
                                 contextualNavigationForAppRoute(AppRoute.Story),
                             ),
                             onNavigateDashboard = {
+                                route = AppRoute.Dashboard
                                 scope.launch { routeLocalSession(session) }
                             },
                         )
+                        }
+                        AppRoute.Create,
+                        AppRoute.ConnectionError,
+                        AppRoute.LocalDataError,
+                        -> Unit
                     }
-                    AppRoute.ConnectionError -> StartupConnectionErrorRoute(
-                        onRetry = { route = null },
-                    )
-                    AppRoute.LocalDataError -> LocalDataStartupErrorRoute(
-                        onRetry = {
-                            val session = inMemorySession.value
-                            if (session != null) {
-                                scope.launch { routeLocalSession(session) }
+                }
+
+                @Composable
+                fun RootRouteContent(rootRoute: AppRoute?) {
+                    when (rootRoute) {
+                        null -> Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(Color(0xFF071219)),
+                        )
+                        AppRoute.Create -> CreatePetRoute(
+                            debugState = debugState,
+                            initialStateOverride = if (isExplicitDebugRoute) null else {
+                                val pending = (activeStartup.value as? AccountStartupDestination.Create)
+                                    ?.pending
+                                val repository = petRepository
+                                val session = inMemorySession.value
+                                if (pending != null && repository != null && session != null) {
+                                    CreatePendingCoordinator(session.accountId, repository).restore(pending)
+                                } else null
+                            },
+                            generationAdapter = debugGenerationAdapter(
+                                if (isExplicitDebugRoute) {
+                                    com.gigagochi.app.feature.create.FakePetGenerationAdapter()
+                                } else {
+                                    val session = requireNotNull(inMemorySession.value)
+                                    val repository = requireNotNull(petRepository)
+                                    remember(session.accountId, repository, featureApi) {
+                                        RealPetGenerationAdapter(
+                                            session.accountId,
+                                            repository,
+                                            repository,
+                                            requireNotNull(featureApi),
+                                        )
+                                    }
+                                },
+                            ),
+                            finalizationCoordinator = if (isExplicitDebugRoute) {
+                                null
+                            } else {
+                                val session = inMemorySession.value
+                                val lifecycle = petLifecycle
+                                if (session != null && lifecycle != null) {
+                                    CreateFinalizationCoordinator(
+                                        session.accountId,
+                                        lifecycle,
+                                        requireNotNull(petRepository),
+                                    )
+                                } else null
+                            },
+                            pendingCoordinator = if (isExplicitDebugRoute) null else {
+                                val session = inMemorySession.value
+                                val repository = petRepository
+                                if (session != null && repository != null) {
+                                    CreatePendingCoordinator(session.accountId, repository)
+                                } else null
+                            },
+                            onPetPersisted = { activePet.value = it },
+                            onNavigateDashboard = {
+                                val session = inMemorySession.value
+                                if (session != null && !isExplicitDebugRoute) {
+                                    scope.launch { routeLocalSession(session) }
+                                } else route = AppRoute.Dashboard
+                            },
+                        )
+                        AppRoute.ConnectionError -> StartupConnectionErrorRoute(
+                            onRetry = { route = null },
+                        )
+                        AppRoute.LocalDataError -> LocalDataStartupErrorRoute(
+                            onRetry = {
+                                val session = inMemorySession.value
+                                if (session != null) {
+                                    scope.launch { routeLocalSession(session) }
+                                }
+                            },
+                        )
+                        AppRoute.Dashboard,
+                        AppRoute.Events,
+                        AppRoute.Travel,
+                        AppRoute.Story,
+                        -> Unit
+                    }
+                }
+
+                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    val reducedMotion = rememberTravelReducedMotionPreference()
+                    AnimatedContent(
+                        targetState = isDashboardStackRoute(route),
+                        transitionSpec = {
+                            if (reducedMotion) {
+                                EnterTransition.None togetherWith ExitTransition.None
+                            } else {
+                                fadeIn(tween(220)) togetherWith fadeOut(tween(120))
                             }
                         },
-                    )
+                        modifier = Modifier.fillMaxSize(),
+                        label = "app-root-transition",
+                    ) { dashboardStackActive ->
+                        if (dashboardStackActive) {
+                            Box(Modifier.fillMaxSize()) {
+                                DashboardLayer(active = route == AppRoute.Dashboard)
+                                AnimatedContent(
+                                    targetState = route.takeUnless { it == AppRoute.Dashboard },
+                                    transitionSpec = {
+                                        dashboardOverlayTransition(
+                                            initialState,
+                                            targetState,
+                                            reducedMotion,
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                    label = "dashboard-overlay-transition",
+                                ) { overlayRoute ->
+                                    DashboardOverlay(overlayRoute)
+                                }
+                            }
+                        } else {
+                            AnimatedContent(
+                                targetState = route,
+                                transitionSpec = {
+                                    appRouteTransition(initialState, targetState, reducedMotion)
+                                },
+                                modifier = Modifier.fillMaxSize(),
+                                label = "root-route-transition",
+                            ) { rootRoute ->
+                                RootRouteContent(rootRoute)
+                            }
+                        }
+                    }
                 }
+                DebugMenuHost(
+                    DebugMenuBindings(
+                        routeName = route?.name ?: "Startup",
+                        pet = activePet.value,
+                        firstSession = (activeStartup.value as? AccountStartupDestination.Dashboard)
+                            ?.firstSession,
+                        onboardingActive = (activeStartup.value as? AccountStartupDestination.Dashboard)
+                            ?.firstSession
+                            ?.stage
+                            ?.let { it != FirstSessionStage.Completed } == true,
+                        savedPetAvailable = debugSavedPetId(applicationContext) != null,
+                        fixtureActive = activePet.value?.petId == debugFixturePet()?.petId,
+                        visualMoodOverride = debugVisualMoodOverride,
+                        isPetDead = debugDeadRevision.let {
+                            activePet.value?.petId?.let { petId ->
+                                debugDeadPetId(applicationContext) == petId
+                            } == true
+                        },
+                        onToggleOnboarding = {
+                            val session = inMemorySession.value
+                            val pet = activePet.value
+                            val repository = petRepository
+                            if (session != null && pet != null && repository != null) scope.launch {
+                                val active = (activeStartup.value as? AccountStartupDestination.Dashboard)
+                                    ?.firstSession
+                                    ?.stage
+                                    ?.let { it != FirstSessionStage.Completed } == true
+                                if (active) {
+                                    repository.disableFirstSession(session.accountId, pet.petId)
+                                } else {
+                                    repository.restartFirstSession(session.accountId, pet.petId)
+                                }
+                                routeLocalSession(session)
+                                dashboardRecoveryRevision += 1
+                            }
+                        },
+                        onOpenFixture = {
+                            val session = inMemorySession.value
+                            val repository = petRepository
+                            val fixture = debugFixturePet()
+                            if (session != null && repository != null && fixture != null) scope.launch {
+                                setDebugFixtureSelection(
+                                    applicationContext,
+                                    fixture.petId,
+                                    activePet.value?.petId,
+                                )
+                                repository.replacePetSnapshot(
+                                    OwnedPetSnapshot(
+                                        session.accountId,
+                                        fixture,
+                                        System.currentTimeMillis(),
+                                    ),
+                                )
+                                routeLocalSession(session)
+                            }
+                        },
+                        onRestoreSavedPet = {
+                            val session = inMemorySession.value
+                            val repository = petRepository
+                            val fixtureId = debugPreferredPetId(applicationContext)
+                            if (session != null && repository != null) scope.launch {
+                                clearDebugFixtureSelection(applicationContext)
+                                if (fixtureId != null) {
+                                    repository.deletePetSnapshot(session.accountId, fixtureId)
+                                }
+                                routeLocalSession(session)
+                            }
+                        },
+                        onOpenTravelDemo = {
+                            debugTravelDemo = true
+                            route = AppRoute.Travel
+                        },
+                        onResetStats = {
+                            val session = inMemorySession.value
+                            val pet = activePet.value
+                            val lifecycle = petLifecycle
+                            if (session != null && pet != null && lifecycle != null) scope.launch {
+                                val reset = pet.copy(
+                                    hunger = 0,
+                                    happiness = 0,
+                                    energy = 0,
+                                    mood = "sad",
+                                )
+                                if (lifecycle.save(session.accountId, reset)) {
+                                    activePet.value = reset
+                                    routeLocalSession(session)
+                                }
+                            }
+                        },
+                        onVisualMoodOverride = { mood ->
+                            debugVisualMoodOverride = mood
+                            dashboardRecoveryRevision += 1
+                            if (activePet.value != null) route = AppRoute.Dashboard
+                        },
+                        onKillPet = {
+                            val session = inMemorySession.value
+                            val pet = activePet.value
+                            val lifecycle = petLifecycle
+                            if (session != null && pet != null && lifecycle != null) scope.launch {
+                                val dead = pet.copy(hunger = 0, happiness = 0, energy = 0, mood = "sad")
+                                if (lifecycle.save(session.accountId, dead)) {
+                                    activePet.value = dead
+                                    setDebugDeadPetId(applicationContext, pet.petId)
+                                    debugDeadRevision += 1
+                                }
+                            }
+                        },
+                        onRevivePet = {
+                            val session = inMemorySession.value
+                            val pet = activePet.value
+                            val lifecycle = petLifecycle
+                            if (session != null && pet != null && lifecycle != null) scope.launch {
+                                val revived = pet.copy(hunger = 80, happiness = 80, energy = 80, mood = "idle")
+                                if (lifecycle.save(session.accountId, revived)) {
+                                    activePet.value = revived
+                                    setDebugDeadPetId(applicationContext, null)
+                                    debugDeadRevision += 1
+                                    routeLocalSession(session)
+                                }
+                            }
+                        },
+                        onCreateNewPet = {
+                            debugTravelDemo = false
+                            route = AppRoute.Create
+                        },
+                    ),
+                    )
             }
         }
     }
 }
+
+private fun PetDashboardState.copyMood(mood: String): PetDashboardState = copy(mood = mood)
 
 internal val LocalDataRetryMinimumTouchTarget = 48.dp
 

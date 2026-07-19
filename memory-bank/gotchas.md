@@ -5,6 +5,7 @@
 - `local.properties` в Android-проекте отсутствует; CLI build должен явно получить `ANDROID_HOME=/Users/sergejegorov/Library/Android/sdk`, иначе AGP останавливается до task execution с `SDK location not found`.
 - OpenRunde в исходном frontend хранится как WOFF2, который Android `res/font` не принимает. Проверенный путь: `fontTools 4.59.0` + WOFF2 extras, `TTFont.flavor = None`, статические TTF в `res/font`; dashboard использует их, а не system sans.
 - SF Pro упоминается в web CSS как системный fallback, но лицензированного файла в Android не переносится.
+- SB Sans Display из Paper нельзя адресовать на Android по имени установленного macOS-шрифта: Bold-файл должен оставаться bundled в `res/font`, иначе реплики незаметно откатятся к системному sans.
 - SVG из web содержат CSS custom properties (`var(--fill-0, ...)`) и не являются Android VectorDrawable. Оригиналы сохранены byte-for-byte в `res/raw`; status paths рендерятся Compose Canvas, XP/action paths перенесены в VectorDrawable, speech SVG с inner-shadow filter заранее rasterized в lossless PNG 360×203 и масштабируется до baseline bounds.
 - Координаты `PathParser` находятся в единицах SVG viewBox, а Compose Canvas рисует в физических px. Status glyphs надо масштабировать из viewBox 54×54 в фактический размер Canvas; без этого при density 420 они выглядят как почти невидимые штрихи.
 - Масштаб reference-плоскости через `min(widthRatio, heightRatio)` даёт letterbox на viewport другого aspect ratio. Dashboard использует cover через `max(...)`; poster, видео и noise overlay разделяют одну геометрию.
@@ -23,7 +24,7 @@
 - В Compose `Modifier.offset` меняет placement, но не measured height. Create gradient panels нельзя делать `fillMaxSize().offset(...)`: web bounds требуют явных `402×519` от y=355 и `402×262` от y=612, иначе gradient не достигает bottom viewport.
 - Create timeline режется по frame boundaries при 24 fps (`170/267/447`), а не приблизительным миллисекундам. Initial/formed должны loop, transition — закончиться один раз и перевести state в formed; recovery сразу formed.
 - Create Haze, как и dashboard, требует `TextureView` внутри source. Alpha-white surface не эквивалентен `backdrop-filter`; на API ниже 31 действует fallback tint.
-- SB Sans Display OTF присутствует в web, но отдельная лицензия рядом не найдена. Он не включён в APK; используется OpenRunde. Для Create option labels финальная двухшаговая калибровка остановлена на `letterSpacing=-0.45sp`. Любое будущее включение SB Sans требует `LICENSE REVIEW REQUIRED` до релиза.
+- SB Sans Display Bold включён в APK для реплик по новому Paper-макету, но отдельная лицензия рядом не найдена: перед release остаётся `LICENSE REVIEW REQUIRED`. Для Create option labels по-прежнему используется OpenRunde с `letterSpacing=-0.45sp`.
 - Android 14+ может открыть Gboard stylus-handwriting toolbar для Compose text field. Это состояние IME/AVD, не app layout и не повод отключать handwriting API. Для inline gate внешний Gboard preference «Use stylus to write in text fields» отключён только на AVD; app-код не менялся. Docked QWERTY после этого отдаёт IME inset: keyboard top `y=542`, input panel `y=463`.
 - Web Create error CSS реально накладывает `ErrorNotice` (`y=810`) на retry (`y≈809`). Supervisor принял native исправление без overlap: error поднят к `y=724`, retry остаётся у bottom. Это намеренное расхождение, а не ошибка измерения.
 - Web `img-fx` loader темнит и абстрагирует источники сильнее простого pixel scaling. Native gate использует требуемый nearest-neighbor contract 18/21/24 px и сохраняет больше исходного цвета; interior loader-card исключён из UI-mask как motion/media region.
@@ -31,8 +32,7 @@
 - `PendingPetGeneration` в production обязан иметь Room counterpart с теми же stable `petId/requestKey`; startup восстанавливает именно эту identity. Review/debug route остаётся fixture-only и не открывает production Room.
 - `petId` и `assetSetId` нельзя взаимозаменять: первый адресует identity/Room/API recovery, второй — media asset set. Pending Outfit обязан сохранять `petId`.
 - То же правило обязательно для Travel pending: queue adapter принимает отдельный stable `petId`; `assetSetId` нельзя использовать как ключ background job/recovery.
-- В web 3000 ms reply timer переключает следующую sentence portion и не очищает последнюю реплику. Native reducer использует `AdvanceReply`, а не auto-clear.
-- Web continuation-dots привязаны inline к последнему слову для любой не-final portion, а не только к bubble одного размера. В Compose `appendInlineContent` требует непустой `alternateText`; пустая строка падает в runtime с `IllegalArgumentException`.
+- Native 3000 ms reply timer переключает следующую трёхстрочную portion и не очищает последнюю реплику. Reducer использует `AdvanceReply`, а не auto-clear.
 - Ветвление целого Dashboard composable по mode пересоздаёт ExoPlayer и даёт poster/black flash. Media root должен оставаться одной и той же composable group, а mode менять только overlays.
 - Android `RenderEffect` на `TextureView` либо его `PlayerView`-родителе не искажает отдельный video hardware layer. Нельзя возвращаться к bitmap/второму `TextureView` overlay: он меняет presentation geometry. Pet bulge должен оставаться одним Media3 `GlEffect`; нулевая strength даёт обычное семплирование без пересборки player pipeline.
 - Horizontal actions сохраняют `scrollLeft`. Web/native side-by-side допустим только при одинаковом offset; иначе actions надо исключить из mask и явно зафиксировать mismatch.
@@ -66,17 +66,45 @@
 - Media3 `DataSpec.Builder` сам запрещает `length=0`; datasource всё равно имеет defensive zero-length branch, но основной контракт тестируется как pre-connection rejection. Для unknown Content-Length лимит требует extra-byte probe: достижение ровно лимита ещё не доказывает EOF.
 - Encoded image byte cap не защищает от decompression bomb. Перед bitmap allocation надо читать bounds, ограничивать source dimensions/pixels и выбирать `inSampleSize` для viewport.
 - AVD visual gate может сохранить transient system bars, show-taps pointer или global dim overlay. Такие captures хранятся только как rejected evidence; pass screenshot снимается после `show_touches=0`, `pointer_location=0`, скрытия bars и stable frame. Fixture screenshot доказывает common chrome, но не remote-content rendering.
-- Пока Android-приложение не выпущено, Room history намеренно схлопнута в один clean schema v1 без runtime migrations и destructive fallback. Локальный APK со старой pre-release schema надо удалить и установить заново; после первого релиза такой reset уже недопустим и следующая версия потребует обычную migration.
+- Memory tables добавлены обычной Room migration 1→2; удалять приложение для обновления нельзя, иначе пропадут owner-scoped pet и история. Любое следующее изменение схемы требует новой явной migration и экспортированного JSON schema.
+- Проактивность Android — локальный WorkManager/notification queue, поэтому системный Doze может задержать вопрос. Генерация требует развернутых `/api/android/proactive` и memory endpoints; deterministic имя/срок и recall работают на клиенте, но LLM extraction/consolidation без этих routes не выполняются.
 - Удаление pending после успешного apply не означает, что mutation key можно забыть: Outfit replay должен проверять applied receipt до debit, а Travel replay — durable asset до нового submit. Иначе тот же requestKey после restart повторяет платную/долгую операцию уже после очистки pending.
 - Terminal failed Create job нельзя «ретраить» повторным poll того же backendJobId: серверный status неизменяем и мгновенно вернёт старую ошибку. Явный retry сохраняет pet/ответы, но получает новый requestKey и транзакционно заменяет только локальную pending-row со state `Failed`; transient/unknown ошибки продолжают использовать исходную identity, чтобы не задвоить платную генерацию.
 - Production Create занял около 12 минут. Polling window Android должен быть заметно длиннее: короткий client timeout показывает ложную ошибку, пока backend продолжает и успешно завершает job.
-- Dashboard speech bubble имеет несколько фиксированных высот. `maxLines` обязан соответствовать высоте: 99dp — 2 строки, промежуточная — 3, 150dp — 4; общий лимит в 2 строки молча обрезает реальные ответы персонажа.
+- Splitter реплик целится в 4 строки через консервативную оценку ширины glyph в em, чтобы pure reducer не зависел от Compose/Android font measurement. Compose и контейнер допускают аварийные 6 строк. При изменении SB Sans, размера 20sp или ширины 356dp одновременно калибруй `DashboardReplyLineWidthEm`, иначе шестистрочный предел снова может скрыть хвост реплики.
+- Dashboard reveal синхронизирован с прежним web `PetCharacterMessage`: 300/700/24 ms и те же cubic-bezier. Loader нельзя заменять generic dots — его source of truth остаются три `thinking_frame_*` drawable, переключаемые каждые 200 ms.
+- Не ключуй `pointerInput` нестабильной callback-лямбдой у анимируемой Compose-кнопки: собственная
+  scale/reveal recomposition перезапускает gesture detector и отменяет текущий press. Храни callback
+  через `rememberUpdatedState`, а стабильный detector ключуй `Unit`.
 - `partycles` измеряет heart `lifetime` в simulation frames, уменьшая life на 1.2 при 60 fps; это не миллисекунды. Mobile web оптимизирует 16/170/42 до 9 частиц, 136 frames и 33px, поэтому native burst длится около 1.889s. Media3 `GlEffect` обновляет динамический shader на decoded video frames, а `setVideoEffects` без явного `Presentation` crop меняет aspect/letterbox; native tap использует smoothstep envelope 250 мс при постоянном cover-crop, без snapshot и смены геометрии.
 - WorkManager periodic interval 15 minutes is only a legal minimum, not a delivery deadline: OS
   batching, Doze and network constraints may delay it. This MVP is local best-effort notification,
   not FCM/push. Never replace the one-pass `recoverForeground(maxPollAttempts=1)` with `watch()` or
   long polling inside the worker.
+- `AnimatedContent` продолжает компоновать уходящий route до конца exit-анимации. Нельзя очищать
+  payload активного экрана (`activeStory` и аналоги) одновременно со сменой route, если исходная
+  ветка делает `requireNotNull(payload)`: сначала переключай route, сохраняй snapshot payload внутри
+  content lambda и очищай его только после выхода либо допускай `null` без падения.
 - Terminal `Failed` Outfit/Travel rows are audit history, not active recovery pending. Startup must
   exclude them, and durable acceptance lookup must not coalesce a new request into them. Foreground
   recovery reloads Main only for failures created during that pass; treating old failures as an
   edge retriggers startup forever and blocks a new request key.
+- First-session bat receipt и stage намеренно разделены: correct choice атомарно даёт ровно +200 XP,
+  но оставляет `AwaitingTravel`; только durable Finish переводит в `AwaitingCompletionMessage`.
+  Иначе process death между result и Finish либо повторно начисляет XP, либо пропускает финальный экран.
+- Debug prompt/event logging нельзя встраивать прямо в production adapters: строки и вызовы тогда
+  попадают в release. Оборачивай adapters variant-specific функциями из `src/debug`; `src/release`
+  обязан возвращать исходный delegate.
+- Apple debug fixture не запускает повторную генерацию, но его `/static/generated` изображения и
+  видео остаются сетевыми same-origin URL. Это стабильный сохранённый персонаж, не offline fixture.
+- Debug scheduled-story wrapper не должен всегда возвращать пустой `dueStory` для тестового pet:
+  это маскирует реальные server stories. Story fixture не использует idle media персонажа как
+  обложку; при неполном комплекте situation/outcome media backend не переводит story в ready.
+- Dashboard action `События` резервирует дополнительную ширину только при видимом badge: без badge
+  `184.dp`, с badge `216.dp`. Постоянные `216.dp` дают визуально лишние горизонтальные поля.
+- Compose `painterResource` не умеет загружать XML `<shape>` как painter. Placeholder для story/event
+  media должен быть vector/raster drawable, иначе экран падает до завершения сетевой загрузки.
+- Нельзя шарить remote travel URL как `text/plain` или отдавать `file://`: мессенджерам нужен сам MP4
+  через read-only `content://`. Копирование использует ограниченный same-origin media datasource,
+  отдельный cache-path `shared-travel-videos/` и `FLAG_GRANT_READ_URI_PERMISSION`; весь `cacheDir`
+  через `FileProvider` не публикуется.

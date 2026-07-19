@@ -23,7 +23,6 @@ internal data class PetSnapshotEntity(
     val happiness: Int,
     val energy: Int,
     val message: String,
-    val firstSessionActive: Boolean,
     val petTapProgress: Int,
     val generatedAt: String? = null,
     val videoUrl: String? = null,
@@ -33,6 +32,141 @@ internal data class PetSnapshotEntity(
     val spriteSheetUrl: String? = null,
     val characterBibleJson: String? = null,
     val updatedAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "chat_messages",
+    primaryKeys = ["ownerId", "petId", "messageId"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "createdAtEpochMillis"],
+            name = "index_chat_owner_pet_created",
+        ),
+    ],
+)
+internal data class ChatMessageEntity(
+    val ownerId: String,
+    val petId: String,
+    val messageId: String,
+    val role: String,
+    val text: String,
+    val createdAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "user_memories",
+    primaryKeys = ["ownerId", "petId", "memoryId"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "normalizedKey"],
+            name = "index_memory_owner_pet_key",
+        ),
+        Index(
+            value = ["ownerId", "petId", "dueAtEpochMillis"],
+            name = "index_memory_owner_pet_due",
+        ),
+    ],
+)
+internal data class UserMemoryEntity(
+    val ownerId: String,
+    val petId: String,
+    val memoryId: String,
+    val kind: String,
+    val text: String,
+    val normalizedKey: String,
+    val confidence: Double,
+    val importance: Double,
+    val memoryClass: String,
+    val recordedAtEpochMillis: Long,
+    val occurredAtEpochMillis: Long?,
+    val dueAtEpochMillis: Long?,
+    val expiresAtEpochMillis: Long?,
+    val lastMentionedAtEpochMillis: Long?,
+    val mentionCount: Int,
+    val tagsJson: String,
+    val updatedAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "memory_learnings",
+    primaryKeys = ["ownerId", "petId", "learningId"],
+    indices = [Index(value = ["ownerId", "petId", "status"], name = "index_learning_owner_pet_status")],
+)
+internal data class MemoryLearningEntity(
+    val ownerId: String,
+    val petId: String,
+    val learningId: String,
+    val status: String,
+    val observation: String,
+    val patternKey: String?,
+    val kind: String?,
+    val confidence: Double,
+    val importance: Double,
+    val recurrenceCount: Int,
+    val firstSeenAtEpochMillis: Long,
+    val lastSeenAtEpochMillis: Long,
+    val occurredAtEpochMillis: Long?,
+    val dueAtEpochMillis: Long?,
+)
+
+@Entity(tableName = "pet_memory_state", primaryKeys = ["ownerId", "petId"])
+internal data class PetMemoryStateEntity(
+    val ownerId: String,
+    val petId: String,
+    val summary: String?,
+    val userProfile: String?,
+    val lastExtractionAtEpochMillis: Long?,
+    val lastConsolidationAtEpochMillis: Long?,
+    val lastProactiveAtEpochMillis: Long?,
+    val proactiveLogJson: String,
+    val updatedAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "proactive_notifications",
+    primaryKeys = ["ownerId", "petId", "notificationId"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "notifiedAtEpochMillis"],
+            name = "index_proactive_owner_pet_notified",
+        ),
+    ],
+)
+internal data class ProactiveNotificationEntity(
+    val ownerId: String,
+    val petId: String,
+    val notificationId: String,
+    val reply: String,
+    val memoryIdsJson: String,
+    val createdAtEpochMillis: Long,
+    val notifiedAtEpochMillis: Long?,
+)
+
+@Entity(
+    tableName = "first_sessions",
+    primaryKeys = ["ownerId", "petId"],
+    indices = [Index(value = ["ownerId", "stage"], name = "index_first_session_owner_stage")],
+)
+internal data class FirstSessionEntity(
+    val ownerId: String,
+    val petId: String,
+    val stage: String,
+    val selectedDestination: String?,
+    val lastActionKey: String?,
+    val updatedAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "first_session_action_receipts",
+    primaryKeys = ["ownerId", "petId", "actionKey"],
+    indices = [Index(value = ["ownerId", "petId"], name = "index_first_session_action_owner_pet")],
+)
+internal data class FirstSessionActionReceiptEntity(
+    val ownerId: String,
+    val petId: String,
+    val actionKey: String,
+    val actionKind: String,
+    val appliedAtEpochMillis: Long,
 )
 
 @Entity(

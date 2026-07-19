@@ -8,15 +8,15 @@ import android.view.LayoutInflater
 import androidx.annotation.OptIn
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
@@ -105,19 +106,16 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -134,18 +132,33 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.effect.Presentation
-import androidx.media3.datasource.DataSpec
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
 import com.gigagochi.app.core.designsystem.GigagochiTheme
 import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
+import com.gigagochi.app.core.designsystem.LocalButtonPressFeedback
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
+import com.gigagochi.app.core.designsystem.SbSansDisplayFontFamily
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.database.LocalTravelVideoAsset
-import com.gigagochi.app.core.network.SecureStaticMediaDataSource
+import com.gigagochi.app.core.database.FirstSessionStage
+import com.gigagochi.app.core.database.FirstSessionStore
+import com.gigagochi.app.core.database.FirstSessionMutationResult
+import com.gigagochi.app.core.database.LocalFirstSession
+import com.gigagochi.app.core.network.StaticMediaCache
 import com.gigagochi.app.core.network.StaticImageMaxBytes
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterChat
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterChatFallback
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterFirstFood
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterName
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterNameFallback
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedyPortions
+import com.gigagochi.app.feature.onboarding.FirstSessionMainAction
+import com.gigagochi.app.feature.onboarding.firstSessionMainAction
+import com.gigagochi.app.feature.onboarding.firstSessionReactionReply
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
@@ -154,7 +167,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
-import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.min
 
@@ -171,8 +183,14 @@ private val DemoPet = PetDashboardState(
     happiness = 100,
     energy = 100,
     message = "Как тебя зовут?",
-    firstSessionActive = false,
 )
+
+private val ClosedConversationTop = 755.dp
+private val OpenConversationTop = 463.dp
+private val ClosedDialogueTop = 663.dp
+private val OpenDialogueTop = 371.dp
+private const val ImeMotionStartInsetDp = 40f
+private const val ImeMotionTravelDp = 292f
 
 internal object DashboardVideoTestProbe {
     var createdPlayerCount: Int = 0
@@ -194,6 +212,11 @@ fun DashboardRoute(
     initialPet: PetDashboardState = DemoPet,
     initialPendingOutfit: PendingOutfitGeneration? = null,
     initialPendingTravel: PendingTravelGeneration? = null,
+    initialFirstSession: LocalFirstSession? = null,
+    firstSessionOwnerId: String? = null,
+    firstSessionStore: FirstSessionStore? = null,
+    onFirstSessionTravel: () -> Unit = {},
+    onFirstSessionChanged: (LocalFirstSession) -> Unit = {},
     onPetChanged: suspend (PetDashboardState) -> Boolean = { true },
     chatAdapter: DashboardChatAdapter = remember { FakeDashboardChatAdapter() },
     feedAdapter: DashboardFeedAdapter = remember { FakeDashboardFeedAdapter() },
@@ -205,12 +228,20 @@ fun DashboardRoute(
     travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
+    unansweredEventCount: Int = 0,
+    onEvents: () -> Unit = {},
+    mediaActive: Boolean = true,
+    modifier: Modifier = Modifier,
 ) {
     var state by remember(debugState, initialPet, recoveryRevision) {
         val base = dashboardDebugFixture(debugState, initialPet)
         mutableStateOf(
             if (debugState == DashboardDebugState.Idle) {
                 base.copy(
+                    firstSession = initialFirstSession,
+                    firstSessionIdleReply = initialFirstSession?.let {
+                        firstSessionIdleReply(base.pet, it)
+                    },
                     pendingOutfit = initialPendingOutfit,
                     chargedOutfitRequestKeys = initialPendingOutfit?.let {
                         setOf(it.requestKey)
@@ -242,6 +273,12 @@ fun DashboardRoute(
 
     fun dispatch(event: DashboardEvent) {
         state = reduceDashboard(state, event)
+        if (event is DashboardEvent.FirstSessionSynced) onFirstSessionChanged(event.session)
+    }
+
+    LaunchedEffect(initialFirstSession) {
+        val externalSession = initialFirstSession ?: return@LaunchedEffect
+        state = hydrateExternalFirstSession(state, externalSession)
     }
 
     fun nextRequestKey(prefix: String): String {
@@ -278,7 +315,51 @@ fun DashboardRoute(
         when (val result = executeDashboardAdapter { chatAdapter.reply(request, state.pet) }) {
             is DashboardAdapterResult.Success -> {
                 delay(remainingThinkingDelayMillis(startedAt, SystemClock.elapsedRealtime()))
-                dispatch(DashboardEvent.ChatSucceeded(request.requestKey, result.value))
+                val session = state.firstSession
+                if (session != null && session.stage in setOf(
+                        FirstSessionStage.AwaitingChat,
+                        FirstSessionStage.AwaitingChatFollowup,
+                    )
+                ) {
+                    val next = if (session.stage == FirstSessionStage.AwaitingChat) {
+                        FirstSessionStage.AwaitingChatFollowup
+                    } else FirstSessionStage.AwaitingFirstFood
+                    val mutation = firstSessionStore?.advanceFirstSession(
+                        requireNotNull(firstSessionOwnerId),
+                        state.pet.petId,
+                        session.stage,
+                        next,
+                        request.requestKey,
+                        nowEpochMillis = System.currentTimeMillis(),
+                    )
+                    if (mutation is FirstSessionMutationResult.Applied ||
+                        mutation is FirstSessionMutationResult.AlreadyApplied
+                    ) {
+                        val durableSession = when (mutation) {
+                            is FirstSessionMutationResult.Applied -> mutation.session
+                            is FirstSessionMutationResult.AlreadyApplied -> mutation.session
+                            else -> error("unreachable")
+                        }
+                        val durablePet = when (mutation) {
+                            is FirstSessionMutationResult.Applied -> mutation.pet
+                            is FirstSessionMutationResult.AlreadyApplied -> mutation.pet
+                            else -> error("unreachable")
+                        }
+                        dispatch(DashboardEvent.FirstSessionSynced(durableSession, durablePet))
+                        val reaction = firstSessionReactionReply(
+                            result.value,
+                            if (session.stage == FirstSessionStage.AwaitingChat) {
+                                FirstSessionAfterNameFallback
+                            } else FirstSessionAfterChatFallback,
+                        )
+                        val prompt = if (session.stage == FirstSessionStage.AwaitingChat) {
+                            FirstSessionAfterName
+                        } else FirstSessionAfterChat
+                        dispatch(DashboardEvent.ChatSucceeded(request.requestKey, "$reaction $prompt"))
+                    } else dispatch(DashboardEvent.ChatFailed(request.requestKey))
+                } else {
+                    dispatch(DashboardEvent.ChatSucceeded(request.requestKey, result.value))
+                }
             }
             DashboardAdapterResult.Failure -> {
                 delay(remainingThinkingDelayMillis(startedAt, SystemClock.elapsedRealtime()))
@@ -293,6 +374,48 @@ fun DashboardRoute(
         feedAudio.play(request.audioIndex)
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         val startedAt = SystemClock.elapsedRealtime()
+        val session = state.firstSession
+        if (session != null && session.stage in setOf(
+                FirstSessionStage.AwaitingFirstFood,
+                FirstSessionStage.AwaitingRemedy,
+            )
+        ) {
+            val mutation = firstSessionStore?.applyFirstSessionFood(
+                requireNotNull(firstSessionOwnerId),
+                state.pet.petId,
+                request.food.routeValue,
+                request.requestKey,
+                System.currentTimeMillis(),
+            )
+            delay(remainingThinkingDelayMillis(startedAt, SystemClock.elapsedRealtime()))
+            if (mutation is FirstSessionMutationResult.Applied ||
+                mutation is FirstSessionMutationResult.AlreadyApplied
+            ) {
+                val durableSession = if (mutation is FirstSessionMutationResult.Applied) mutation.session
+                    else (mutation as FirstSessionMutationResult.AlreadyApplied).session
+                val durablePet = if (mutation is FirstSessionMutationResult.Applied) mutation.pet
+                    else (mutation as FirstSessionMutationResult.AlreadyApplied).pet
+                dispatch(DashboardEvent.FirstSessionSynced(durableSession, durablePet))
+                val reply = when {
+                    session.stage == FirstSessionStage.AwaitingFirstFood -> FirstSessionAfterFirstFood
+                    request.food == DashboardFood.LeafCrunch -> FirstSessionAfterRemedy
+                    else -> BerryReply
+                }
+                dispatch(
+                    DashboardEvent.FeedSucceeded(
+                        requestKey = request.requestKey,
+                        reply = reply,
+                        explicitPortions = if (request.food == DashboardFood.LeafCrunch) {
+                            FirstSessionAfterRemedyPortions
+                        } else null,
+                        autoAdvanceDelayMillis = if (request.food == DashboardFood.LeafCrunch) {
+                            OnboardingBlockAutoAdvanceMillis
+                        } else DashboardReplyAutoAdvanceMillis,
+                    ),
+                )
+            } else dispatch(DashboardEvent.FeedFailed(request.requestKey))
+            return@LaunchedEffect
+        }
         when (val result = executeDashboardAdapter { feedAdapter.reply(request, state.pet) }) {
             is DashboardAdapterResult.Success -> {
                 delay(remainingThinkingDelayMillis(startedAt, SystemClock.elapsedRealtime()))
@@ -346,6 +469,10 @@ fun DashboardRoute(
                 DurableOutfitResult.Unavailable,
                 -> dispatch(DashboardEvent.OutfitFailed(request.requestKey))
             }
+            firstSessionStore?.getFirstSession(
+                requireNotNull(firstSessionOwnerId),
+                state.pet.petId,
+            )?.let { session -> dispatch(DashboardEvent.FirstSessionSynced(session, state.pet)) }
         } else {
             when (val result = executeDashboardAdapter { outfitAdapter.queue(request, state.pet) }) {
                 is DashboardAdapterResult.Success -> {
@@ -412,10 +539,11 @@ fun DashboardRoute(
     }
 
     val advancingReply = state.chatReply ?: state.feedReply ?: state.transientReply
+        ?: state.firstSessionIdleReply.takeIf { state.mode == DashboardMode.Idle }
     LaunchedEffect(advancingReply?.requestKey, advancingReply?.portionIndex) {
         val reply = advancingReply ?: return@LaunchedEffect
         if (debugState.freezesReplyAdvance || !reply.hasNextPortion) return@LaunchedEffect
-        delay(DashboardReplyAutoAdvanceMillis)
+        delay(reply.autoAdvanceDelayMillis)
         dispatch(DashboardEvent.AdvanceReply(reply.requestKey))
     }
 
@@ -459,6 +587,11 @@ fun DashboardRoute(
         ),
         mediaUrlPolicy = mediaUrlPolicy,
         reducedMotionOverride = reducedMotionOverride,
+        unansweredEventCount = unansweredEventCount,
+        onEvents = onEvents,
+        onFirstSessionTravel = onFirstSessionTravel,
+        mediaActive = mediaActive,
+        modifier = modifier,
     )
 }
 
@@ -470,12 +603,15 @@ fun DashboardScreen(
     onTravel: () -> Unit,
     onPetTap: () -> Unit,
     onOutfit: () -> Unit = {},
+    onEvents: () -> Unit = {},
+    unansweredEventCount: Int = 0,
     modifier: Modifier = Modifier,
     travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
 ) {
     val hazeState = rememberHazeState()
+    val actionScrollState = rememberDashboardActionScrollState()
     Box(modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)), contentAlignment = Alignment.TopCenter) {
         BoxWithReferenceFrame {
             Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
@@ -531,19 +667,26 @@ fun DashboardScreen(
                 StatusRing(state.energy, StatusKind.Energy)
             }
 
-            SpeechBubble(
+            CharacterDialogueText(
                 message = state.message,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 237.dp),
             )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(19.dp),
                 modifier = Modifier
                     .offset(y = 762.dp)
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(actionScrollState)
                     .padding(start = 28.dp, end = 29.dp),
             ) {
                 GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+                GlassAction(
+                    "События",
+                    ActionKind.Events,
+                    eventActionWidth(unansweredEventCount),
+                    hazeState,
+                    onEvents,
+                    badgeCount = unansweredEventCount,
+                )
                 GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
                 GlassAction("В путешествие", ActionKind.Travel, 241.dp, hazeState, onTravel)
                 GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
@@ -564,6 +707,10 @@ private fun DashboardInlineScreen(
     mediaProjection: DashboardMediaProjection,
     mediaUrlPolicy: StaticMediaUrlPolicy?,
     reducedMotionOverride: Boolean?,
+    unansweredEventCount: Int,
+    onEvents: () -> Unit,
+    onFirstSessionTravel: () -> Unit,
+    mediaActive: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val hazeState = rememberHazeState()
@@ -573,16 +720,27 @@ private fun DashboardInlineScreen(
     var petTapReaction by remember { mutableStateOf<PetTapReaction?>(null) }
     var petTapHeartBursts by remember { mutableStateOf<List<PetTapHeartBurst>>(emptyList()) }
     var lastPetTapParticleAt by remember { mutableStateOf(Long.MIN_VALUE) }
-    val imeVisible = WindowInsets.ime.getBottom(density) > 0
+    val imeBottomDp = with(density) { WindowInsets.ime.getBottom(this).toDp().value }
+    val imeMotionProgress = (
+        (imeBottomDp - ImeMotionStartInsetDp) / ImeMotionTravelDp
+        ).coerceIn(0f, 1f)
+    val conversationTop = ClosedConversationTop -
+        (ClosedConversationTop - OpenConversationTop) * imeMotionProgress
+    val dialogueTop = ClosedDialogueTop -
+        (ClosedDialogueTop - OpenDialogueTop) * imeMotionProgress
     val mediaOffsetY = if (
-        imeVisible && (
+        imeMotionProgress > 0f && (
             state.mode == DashboardMode.Chat ||
                 state.mode == DashboardMode.Outfit ||
                 state.mode == DashboardMode.Travel
             )
-    ) -240.dp else 0.dp
+    ) (-240).dp * imeMotionProgress else 0.dp
     val promptMode = state.mode == DashboardMode.Outfit || state.mode == DashboardMode.Travel
-    val showDefaultStatus = !promptMode
+    val showDefaultStatus = !promptMode && state.firstSession?.stage in setOf(
+        null,
+        FirstSessionStage.AwaitingCompletionMessage,
+        FirstSessionStage.Completed,
+    )
 
     Box(
         modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)),
@@ -600,6 +758,7 @@ private fun DashboardInlineScreen(
                     urlPolicy = mediaUrlPolicy,
                     reducedMotion = reducedMotion,
                     petTapReaction = petTapReaction,
+                    active = mediaActive,
                     modifier = Modifier.fillMaxSize(),
                 )
                 Image(
@@ -681,17 +840,16 @@ private fun DashboardInlineScreen(
             when (state.mode) {
                 DashboardMode.Chat -> {
                     if (state.activeChat != null) {
-                        DashboardThinkingIndicator(
+                        CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            modifier = Modifier.offset(x = 161.dp, y = 235.dp),
+                            top = dialogueTop,
                         )
                     } else {
                         state.chatReply?.let { reply ->
-                            AnchoredSpeechBubble(
+                            CharacterDialogueText(
                                 message = reply.visibleText,
-                                anchorBottom = 291.dp,
-                                showContinuation = reply.hasNextPortion,
-                                freezeContinuationMotion = debugState.freezesMotion,
+                                top = dialogueTop,
+                                animateEntrance = !debugState.freezesMotion && !reducedMotion,
                             )
                         }
                     }
@@ -699,40 +857,41 @@ private fun DashboardInlineScreen(
 
                 DashboardMode.Feed -> {
                     if (state.activeFeed != null) {
-                        DashboardThinkingIndicator(
+                        CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            modifier = Modifier.offset(x = 161.dp, y = 235.dp),
+                            top = 630.dp,
                         )
                     } else {
                         state.feedReply?.let { reply ->
-                            AnchoredSpeechBubble(
+                            CharacterDialogueText(
                                 message = reply.visibleText,
-                                anchorBottom = 336.dp,
-                                showContinuation = reply.hasNextPortion,
-                                freezeContinuationMotion = debugState.freezesMotion,
+                                top = 630.dp,
+                                animateEntrance = !debugState.freezesMotion && !reducedMotion,
                             )
                         }
                     }
                 }
 
-                DashboardMode.Outfit -> PromptSpeechBubble(
+                DashboardMode.Outfit -> CharacterDialogueText(
                     message = OutfitPrompt,
-                    modifier = Modifier.offset(x = 65.dp, y = 190.dp),
+                    top = dialogueTop,
+                    animateEntrance = !debugState.freezesMotion && !reducedMotion,
                 )
 
-                DashboardMode.Travel -> PromptSpeechBubble(
+                DashboardMode.Travel -> CharacterDialogueText(
                     message = TravelPrompt,
-                    modifier = Modifier.offset(x = 65.dp, y = 190.dp),
+                    top = dialogueTop,
+                    animateEntrance = !debugState.freezesMotion && !reducedMotion,
                 )
 
                 DashboardMode.Idle -> {
                     val transientReply = state.transientReply
-                    val message = transientReply?.visibleText ?: state.pet.message
-                    AnchoredSpeechBubble(
+                    val message = transientReply?.visibleText
+                        ?: state.firstSessionIdleReply?.visibleText
+                        ?: state.pet.message
+                    CharacterDialogueText(
                         message = message,
-                        anchorBottom = 336.dp,
-                        showContinuation = transientReply?.hasNextPortion == true,
-                        freezeContinuationMotion = debugState.freezesMotion,
+                        animateEntrance = !debugState.freezesMotion && !reducedMotion,
                     )
                 }
             }
@@ -764,7 +923,8 @@ private fun DashboardInlineScreen(
                     hazeState = hazeState,
                     requestIme = requestImeOverride
                         ?: (debugState.requestsIme || debugState == DashboardDebugState.Idle),
-                    imeVisible = imeVisible,
+                    top = conversationTop,
+                    reducedMotion = reducedMotion,
                     onValueChange = { value ->
                         onEvent(
                             when {
@@ -799,9 +959,16 @@ private fun DashboardInlineScreen(
             if (state.mode == DashboardMode.Idle) {
                 DashboardActions(
                     hazeState = hazeState,
+                    firstSessionAction = firstSessionMainAction(state.firstSession),
                     onChat = { onEvent(DashboardEvent.OpenChat) },
+                    onEvents = onEvents,
+                    unansweredEventCount = unansweredEventCount,
                     onFeed = { onEvent(DashboardEvent.OpenFeed) },
-                    onTravel = { onEvent(DashboardEvent.OpenTravel) },
+                    onTravel = {
+                        if (firstSessionMainAction(state.firstSession) == FirstSessionMainAction.Travel) {
+                            onFirstSessionTravel()
+                        } else onEvent(DashboardEvent.OpenTravel)
+                    },
                     onOutfit = { onEvent(DashboardEvent.OpenOutfit) },
                 )
             }
@@ -858,23 +1025,66 @@ private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: Ha
 @Composable
 private fun BoxScope.DashboardActions(
     hazeState: HazeState,
+    firstSessionAction: FirstSessionMainAction?,
     onChat: () -> Unit,
+    onEvents: () -> Unit,
+    unansweredEventCount: Int,
     onFeed: () -> Unit,
     onTravel: () -> Unit,
     onOutfit: () -> Unit,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(19.dp),
-        modifier = Modifier
+    val actionScrollState = rememberDashboardActionScrollState()
+    val actionModifier = if (firstSessionAction == null) {
+        Modifier
             .offset(y = 762.dp)
-            .horizontalScroll(rememberScrollState())
-            .padding(start = 28.dp, end = 29.dp),
-    ) {
-        GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
-        GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
-        GlassAction("В путешествие", ActionKind.Travel, 241.dp, hazeState, onTravel)
-        GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+            .horizontalScroll(actionScrollState)
+            .padding(start = 28.dp, end = 29.dp)
+    } else {
+        Modifier
+            .requiredWidth(402.dp)
+            .offset(y = 762.dp)
     }
+    Row(
+        horizontalArrangement = if (firstSessionAction == null) {
+            Arrangement.spacedBy(19.dp)
+        } else Arrangement.Center,
+        modifier = actionModifier,
+    ) {
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Chat) {
+            GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+        }
+        if (firstSessionAction == null) {
+            GlassAction(
+                "События",
+                ActionKind.Events,
+                eventActionWidth(unansweredEventCount),
+                hazeState,
+                onEvents,
+                badgeCount = unansweredEventCount,
+            )
+        }
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Feed) {
+            GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
+        }
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Travel) {
+            GlassAction(
+                if (firstSessionAction == FirstSessionMainAction.Travel) "Помочь летучей мыши" else "В путешествие",
+                ActionKind.Travel,
+                if (firstSessionAction == FirstSessionMainAction.Travel) 300.dp else 241.dp,
+                hazeState,
+                onTravel,
+            )
+        }
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
+            GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+        }
+    }
+}
+
+@Composable
+private fun rememberDashboardActionScrollState(): ScrollState {
+    val density = LocalDensity.current
+    return rememberScrollState(initial = with(density) { 68.dp.roundToPx() })
 }
 
 @Composable
@@ -885,10 +1095,12 @@ private fun ConversationInputPanel(
     busy: Boolean,
     hazeState: HazeState,
     requestIme: Boolean,
-    imeVisible: Boolean,
+    top: Dp,
+    reducedMotion: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
 ) {
+    val buttonPressFeedback = LocalButtonPressFeedback.current
     val isOutfit = mode == DashboardMode.Outfit
     val isTravel = mode == DashboardMode.Travel
     val placeholder = when {
@@ -904,19 +1116,33 @@ private fun ConversationInputPanel(
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val submit by rememberUpdatedState(onSubmit)
+    val entranceAlpha = remember(mode, requestIme, reducedMotion) {
+        Animatable(if (requestIme && !reducedMotion) 0f else 1f)
+    }
 
-    LaunchedEffect(requestIme) {
+    LaunchedEffect(requestIme, mode) {
         if (requestIme) {
-            delay(120)
             focusRequester.requestFocus()
             keyboard?.show()
+        }
+    }
+    LaunchedEffect(mode, requestIme, reducedMotion) {
+        if (requestIme && !reducedMotion) {
+            entranceAlpha.animateTo(
+                1f,
+                animationSpec = tween(
+                    durationMillis = 220,
+                    easing = CubicBezierEasing(.16f, 1f, .3f, 1f),
+                ),
+            )
         }
     }
 
     Box(
         modifier = Modifier
             .requiredSize(362.dp, 62.dp)
-            .offset(x = 20.dp, y = if (imeVisible) 463.dp else 755.dp),
+            .offset(x = 20.dp, y = top)
+            .graphicsLayer { alpha = entranceAlpha.value },
     ) {
         Box(
             Modifier
@@ -995,13 +1221,19 @@ private fun ConversationInputPanel(
                     .clip(RoundedCornerShape(36.429.dp))
                     .background(Color.White)
                     .pointerInput(value, busy) {
-                        detectTapGestures(onTap = { if (!busy && value.trim().isNotEmpty()) submit() })
+                        detectTapGestures(onTap = {
+                            if (!busy && value.trim().isNotEmpty()) {
+                                buttonPressFeedback()
+                                submit()
+                            }
+                        })
                     }
                     .semantics {
                         role = Role.Button
                         contentDescription = "Создать наряд за 200 монет"
                         onClick("Создать наряд за 200 монет") {
                             if (!busy && value.trim().isNotEmpty()) {
+                                buttonPressFeedback()
                                 submit()
                                 true
                             } else {
@@ -1028,13 +1260,19 @@ private fun ConversationInputPanel(
                     .offset(x = 306.dp, y = 8.dp)
                     .clip(RoundedCornerShape(50))
                     .pointerInput(value, busy) {
-                        detectTapGestures(onTap = { if (!busy && value.trim().isNotEmpty()) submit() })
+                        detectTapGestures(onTap = {
+                            if (!busy && value.trim().isNotEmpty()) {
+                                buttonPressFeedback()
+                                submit()
+                            }
+                        })
                     }
                     .semantics {
                         role = Role.Button
                         contentDescription = "Отправить"
                         onClick("Отправить") {
                             if (!busy && value.trim().isNotEmpty()) {
+                                buttonPressFeedback()
                                 submit()
                                 true
                             } else {
@@ -1140,11 +1378,14 @@ private fun FeedFoodToken(
     nextRequestKey: (String) -> String,
     onEvent: (DashboardEvent) -> Unit,
 ) {
+    val buttonPressFeedback = LocalButtonPressFeedback.current
     val density = LocalDensity.current
     val isActiveToken = state.feedToken.food == food
     val motion = if (isActiveToken) state.feedToken else FoodTokenMotion()
     val latestMotion by rememberUpdatedState(motion)
-    val enabled = state.activeFeed == null && motion.phase == FoodTokenPhase.Idle
+    val enabled = state.activeFeed == null && motion.phase == FoodTokenPhase.Idle &&
+        !(state.firstSession?.stage == FirstSessionStage.AwaitingFirstFood &&
+            food != DashboardFood.BerryBowl)
     val scale = remember(food) { Animatable(1f) }
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
@@ -1164,6 +1405,7 @@ private fun FeedFoodToken(
 
     fun activateByTap() {
         if (state.activeFeed == null) {
+            buttonPressFeedback()
             onEvent(DashboardEvent.TapFood(food, nextRequestKey("feed")))
         }
     }
@@ -1257,7 +1499,7 @@ private fun FeedFoodToken(
 }
 
 @Composable
-private fun DashboardThinkingIndicator(freezeFrame: Boolean, modifier: Modifier = Modifier) {
+private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
     var frame by remember { mutableIntStateOf(0) }
     LaunchedEffect(freezeFrame) {
         if (freezeFrame) return@LaunchedEffect
@@ -1275,35 +1517,11 @@ private fun DashboardThinkingIndicator(freezeFrame: Boolean, modifier: Modifier 
         painter = painterResource(drawables[if (freezeFrame) 0 else frame]),
         contentDescription = "Персонаж думает",
         contentScale = ContentScale.FillBounds,
-        modifier = modifier.requiredSize(80.dp, 55.5.dp),
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .offset(y = top + 8.dp)
+            .requiredSize(80.dp, 55.5.dp),
     )
-}
-
-@Composable
-private fun PromptSpeechBubble(message: String, modifier: Modifier = Modifier) {
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = modifier.requiredSize(272.dp, 146.dp),
-    ) {
-        Image(
-            painter = painterResource(R.drawable.speech_bubble_new),
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Text(
-            text = message,
-            color = Color(0xFF333333),
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = OpenRundeFontFamily,
-            letterSpacing = (-0.25).sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 29.9.sp,
-            maxLines = 3,
-            modifier = Modifier.requiredWidth(232.dp).padding(bottom = 5.dp),
-        )
-    }
 }
 
 @Composable
@@ -1331,6 +1549,7 @@ private fun DashboardVideo(
     urlPolicy: StaticMediaUrlPolicy?,
     reducedMotion: Boolean,
     petTapReaction: PetTapReaction? = null,
+    active: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (LocalInspectionMode.current) {
@@ -1366,19 +1585,19 @@ private fun DashboardVideo(
         is DashboardMediaProjection.RemotePoster -> projection.posterUrl
         DashboardMediaProjection.Fixture -> null
     }
-    var showPoster by remember(projection, reducedMotion, retryToken, lifecycleStarted) {
+    var showPoster by remember(projection, reducedMotion, retryToken) {
         mutableStateOf(true)
     }
     val petTapVideoEffect = remember(projection, retryToken) { PetTapVideoEffect() }
-    val player = remember(context, videoUrl, retryToken, lifecycleStarted, petTapVideoEffect) {
-        if (videoUrl == null || !lifecycleStarted) return@remember null
+    val player = remember(context, videoUrl, retryToken, petTapVideoEffect) {
+        if (videoUrl == null) return@remember null
         DashboardVideoTestProbe.recordPlayerCreation()
         val builder = if (videoUrl.startsWith("asset:///")) {
             ExoPlayer.Builder(context)
         } else {
             ExoPlayer.Builder(context).setMediaSourceFactory(
                 DefaultMediaSourceFactory(
-                    SecureStaticMediaDataSource.Factory(requireNotNull(urlPolicy)),
+                    StaticMediaCache.dataSourceFactory(context, requireNotNull(urlPolicy)),
                 ),
             )
         }
@@ -1396,9 +1615,13 @@ private fun DashboardVideo(
                 ),
             )
             setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
-            playWhenReady = lifecycleStarted
+            playWhenReady = lifecycleStarted && active
             prepare()
         }
+    }
+    val currentActive by rememberUpdatedState(active)
+    LaunchedEffect(player, lifecycleStarted, active) {
+        player?.playWhenReady = lifecycleStarted && active
     }
     LaunchedEffect(petTapReaction?.id, petTapVideoEffect, reducedMotion) {
         val reaction = petTapReaction ?: return@LaunchedEffect
@@ -1443,7 +1666,7 @@ private fun DashboardVideo(
         }
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> player.play()
+                Lifecycle.Event.ON_START -> if (currentActive) player.play()
                 Lifecycle.Event.ON_STOP -> player.pause()
                 else -> Unit
             }
@@ -1476,13 +1699,23 @@ private fun DashboardVideo(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        if (showPoster) {
+        val posterAlpha by animateFloatAsState(
+            targetValue = if (showPoster) 1f else 0f,
+            animationSpec = tween(durationMillis = 120),
+            label = "dashboard-poster-crossfade",
+        )
+        if (posterAlpha > 0f) {
             RemoteOrFixturePoster(
                 posterUrl = posterUrl,
                 urlPolicy = urlPolicy,
                 retryToken = retryToken,
                 onFailure = { mediaFailed = true },
-                modifier = Modifier.fillMaxSize(),
+                fallbackDrawable = if (projection == DashboardMediaProjection.Fixture) {
+                    R.drawable.test_pet_poster
+                } else {
+                    null
+                },
+                modifier = Modifier.fillMaxSize().graphicsLayer { alpha = posterAlpha },
             )
         }
         if (mediaFailed) {
@@ -1515,39 +1748,43 @@ internal fun RemoteOrFixturePoster(
     urlPolicy: StaticMediaUrlPolicy?,
     retryToken: Int,
     onFailure: () -> Unit,
-    fallbackDrawable: Int = R.drawable.test_pet_poster,
+    fallbackDrawable: Int? = R.drawable.test_pet_poster,
     modifier: Modifier = Modifier,
 ) {
-    val image by produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, posterUrl, retryToken) {
+    val context = LocalContext.current.applicationContext
+    val cachedBitmap = remember(posterUrl) {
+        posterUrl?.let(StaticMediaCache::decodedImage)
+    }
+    val bitmap by produceState(cachedBitmap, posterUrl, retryToken) {
         if (posterUrl == null || urlPolicy == null) return@produceState
+        if (value != null) return@produceState
         value = withContext(Dispatchers.IO) {
             runCatching {
-                val source = SecureStaticMediaDataSource(urlPolicy, StaticImageMaxBytes)
-                try {
-                    source.open(DataSpec(Uri.parse(posterUrl)))
-                    val output = ByteArrayOutputStream()
-                    val buffer = ByteArray(16 * 1024)
-                    while (true) {
-                        val read = source.read(buffer, 0, buffer.size)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                    }
-                    val bytes = output.toByteArray()
-                    require(bytes.isNotEmpty() && bytes.size <= StaticImageMaxBytes)
-                    requireNotNull(decodeBoundedStaticImage(bytes)).asImageBitmap()
-                } finally {
-                    source.close()
+                val bytes = StaticMediaCache.readBytes(
+                    context,
+                    posterUrl,
+                    urlPolicy,
+                    StaticImageMaxBytes,
+                )
+                requireNotNull(decodeBoundedStaticImage(bytes)).also {
+                    StaticMediaCache.putDecodedImage(posterUrl, it)
                 }
             }.getOrNull()
         }
         if (value == null) onFailure()
     }
-    Image(
-        painter = image?.let(::BitmapPainter) ?: painterResource(fallbackDrawable),
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        modifier = modifier,
-    )
+    val painter = bitmap?.asImageBitmap()?.let(::BitmapPainter)
+        ?: fallbackDrawable?.let { painterResource(it) }
+    if (painter != null) {
+        Image(
+            painter = painter,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Box(modifier.background(Color(0xFF242424)))
+    }
 }
 
 internal fun boundedImageSampleSize(width: Int, height: Int): Int? {
@@ -1655,178 +1892,159 @@ private fun StatusRing(value: Int, kind: StatusKind) {
     }
 }
 
-private data class SpeechBubbleGeometry(val width: Dp, val height: Dp)
-
-private fun speechBubbleGeometry(message: String): SpeechBubbleGeometry = when (message) {
-    "Как тебя зовут?" -> SpeechBubbleGeometry(288.dp, 99.dp)
-    BerryReply -> SpeechBubbleGeometry(248.dp, 99.dp)
-    DeterministicChatReply, LeafReply -> SpeechBubbleGeometry(360.dp, 150.dp)
-    "Футболка Metallica?" -> SpeechBubbleGeometry(341.dp, 99.dp)
-    "Интересно" -> SpeechBubbleGeometry(248.dp, 99.dp)
-    "Я получу заказ примерно через 10 минут" -> SpeechBubbleGeometry(360.dp, 132.dp)
-    else -> if (message.length <= 19) {
-        SpeechBubbleGeometry(288.dp, 99.dp)
-    } else {
-        SpeechBubbleGeometry(360.dp, 150.dp)
-    }
-}
-
 @Composable
-private fun BoxScope.AnchoredSpeechBubble(
+private fun BoxScope.CharacterDialogueText(
     message: String,
-    anchorBottom: Dp,
-    showContinuation: Boolean = false,
-    freezeContinuationMotion: Boolean = false,
+    top: Dp = 663.dp,
+    animateEntrance: Boolean = true,
 ) {
-    val geometry = speechBubbleGeometry(message)
-    SpeechBubble(
-        message = message,
-        showContinuation = showContinuation,
-        freezeContinuationMotion = freezeContinuationMotion,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .offset(y = anchorBottom - geometry.height),
-    )
-}
-
-@Composable
-private fun SpeechBubble(
-    message: String,
-    showContinuation: Boolean = false,
-    freezeContinuationMotion: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    val geometry = speechBubbleGeometry(message)
-    val bottomPadding = if (geometry.height > 99.dp) 10.dp else 5.dp
-    val maxMessageLines = when {
-        geometry.height >= 150.dp -> 4
-        geometry.height > 99.dp -> 3
-        else -> 2
+    val context = LocalContext.current
+    val inspectionMode = LocalInspectionMode.current
+    val speechAudio = remember(context, inspectionMode) {
+        if (inspectionMode) null else DashboardSpeechAudio(context.applicationContext)
     }
-    val messageWidth = if (
-        showContinuation && geometry == SpeechBubbleGeometry(341.dp, 99.dp)
-    ) {
-        geometry.width - 40.dp
+    DisposableEffect(speechAudio) {
+        onDispose { speechAudio?.release() }
+    }
+    var elapsedMillis by remember(message, animateEntrance) {
+        mutableStateOf(if (animateEntrance) 0f else Float.POSITIVE_INFINITY)
+    }
+    val animatedUnitCount = remember(message) {
+        message.count { !it.isWhitespace() }.coerceAtMost(CharacterMessageMaxAnimatedUnits)
+    }
+    val revealDurationMillis = CharacterMessageUnitDurationMillis +
+        (animatedUnitCount - 1).coerceAtLeast(0) * CharacterMessageUnitStaggerMillis
+    LaunchedEffect(message, animateEntrance) {
+        if (!animateEntrance || animatedUnitCount == 0) {
+            elapsedMillis = Float.POSITIVE_INFINITY
+            return@LaunchedEffect
+        }
+        val startedAtNanos = withFrameNanos { it }
+        launch { speechAudio?.playSequence(revealDurationMillis.toLong()) }
+        do {
+            val nowNanos = withFrameNanos { it }
+            elapsedMillis = (nowNanos - startedAtNanos) / 1_000_000f
+        } while (elapsedMillis < revealDurationMillis)
+        elapsedMillis = Float.POSITIVE_INFINITY
+    }
+    val entranceFraction = if (elapsedMillis.isFinite()) {
+        CharacterMessageEnterEasing.transform(
+            (elapsedMillis / CharacterMessageEnterDurationMillis).coerceIn(0f, 1f),
+        )
     } else {
-        geometry.width - 90.dp
+        1f
+    }
+    val animatedMessage = buildAnnotatedString {
+        var unitIndex = 0
+        message.forEach { character ->
+            if (character.isWhitespace()) {
+                append(character)
+            } else if (unitIndex < CharacterMessageMaxAnimatedUnits) {
+                val unitFraction = if (elapsedMillis.isFinite()) {
+                    CharacterMessageUnitEasing.transform(
+                        (
+                            (elapsedMillis - unitIndex * CharacterMessageUnitStaggerMillis) /
+                                CharacterMessageUnitDurationMillis
+                            ).coerceIn(0f, 1f),
+                    )
+                } else {
+                    1f
+                }
+                withStyle(SpanStyle(color = Color.White.copy(alpha = unitFraction))) {
+                    append(character)
+                }
+                unitIndex += 1
+            } else {
+                val tailVisible = !elapsedMillis.isFinite() || elapsedMillis >= revealDurationMillis
+                withStyle(SpanStyle(color = Color.White.copy(alpha = if (tailVisible) 1f else 0f))) {
+                    append(character)
+                }
+            }
+        }
     }
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier
-            .requiredSize(geometry.width, geometry.height),
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .offset(y = top - CharacterMessageOverflowExpansion / 2)
+            .requiredSize(356.dp, CharacterMessageMaxHeight)
+            .graphicsLayer {
+                alpha = entranceFraction
+                scaleX = 1.035f - .035f * entranceFraction
+                scaleY = 1.035f - .035f * entranceFraction
+            },
     ) {
-        Image(
-            painter = painterResource(R.drawable.speech_bubble_new),
-            contentDescription = null,
-            contentScale = ContentScale.FillBounds,
-            modifier = Modifier.fillMaxSize(),
+        Text(
+            text = animatedMessage,
+            color = Color.White,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = SbSansDisplayFontFamily,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp,
+            maxLines = 6,
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+            modifier = Modifier.requiredWidth(356.dp),
         )
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize().padding(start = 45.dp, end = 45.dp, bottom = bottomPadding),
-        ) {
-            val displayText = if (showContinuation) {
-                buildAnnotatedString {
-                    append(message)
-                    append(" ")
-                    appendInlineContent("continuation", "...")
-                }
-            } else {
-                AnnotatedString(message)
-            }
-            val inlineContent = if (showContinuation) {
-                mapOf(
-                    "continuation" to InlineTextContent(
-                        placeholder = Placeholder(
-                            width = 24.6.sp,
-                            height = 8.sp,
-                            placeholderVerticalAlign = PlaceholderVerticalAlign.TextCenter,
-                        ),
-                    ) {
-                        ContinuationDots(freezeMotion = freezeContinuationMotion)
-                    },
-                )
-            } else {
-                emptyMap()
-            }
-            Text(
-                text = displayText,
-                inlineContent = inlineContent,
-                color = Color(0xFF333333),
-                fontSize = 24.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = OpenRundeFontFamily,
-                letterSpacing = (-0.25).sp,
-                textAlign = TextAlign.Center,
-                lineHeight = 29.9.sp,
-                maxLines = maxMessageLines,
-                softWrap = true,
-                modifier = Modifier.requiredWidth(messageWidth).offset(y = (-1).dp),
-            )
-        }
     }
 }
 
-@Composable
-private fun ContinuationDots(freezeMotion: Boolean) {
-    val transition = rememberInfiniteTransition(label = "reply-continuation")
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.requiredSize(24.6.dp, 8.dp),
-    ) {
-        repeat(3) { index ->
-            val offset = if (freezeMotion) {
-                0f
-            } else {
-                val animated by transition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = -2.3f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 360, delayMillis = index * 120),
-                        repeatMode = RepeatMode.Reverse,
-                    ),
-                    label = "reply-continuation-$index",
-                )
-                animated
-            }
-            Box(
-                modifier = Modifier
-                    .requiredSize(5.4.dp)
-                    .graphicsLayer { translationY = offset.dp.toPx() }
-                    .background(Color(0xFF333333), CircleShape),
-            )
-        }
-    }
-}
+private const val CharacterMessageEnterDurationMillis = 300f
+private val CharacterMessageMaxHeight = 132.dp
+private val CharacterMessageOverflowExpansion = 44.dp
+private const val CharacterMessageUnitDurationMillis = 700f
+private const val CharacterMessageUnitStaggerMillis = 24f
+private const val CharacterMessageMaxAnimatedUnits = 80
+private val CharacterMessageEnterEasing = CubicBezierEasing(.16f, 1f, .3f, 1f)
+private val CharacterMessageUnitEasing = CubicBezierEasing(.2f, .8f, .2f, 1f)
 
-private enum class ActionKind { Chat, Feed, Travel, Outfit }
+private enum class ActionKind { Chat, Events, Feed, Travel, Outfit }
+
+internal fun eventActionWidth(unansweredEventCount: Int): Dp =
+    if (unansweredEventCount > 0) 216.dp else 184.dp
 
 @Composable
-private fun GlassAction(label: String, kind: ActionKind, width: Dp, hazeState: HazeState, onClick: () -> Unit) {
+private fun GlassAction(
+    label: String,
+    kind: ActionKind,
+    width: Dp,
+    hazeState: HazeState,
+    onClick: () -> Unit,
+    badgeCount: Int = 0,
+) {
     val scale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val buttonPressFeedback = LocalButtonPressFeedback.current
+    val latestOnClick by rememberUpdatedState(onClick)
+    val latestButtonPressFeedback by rememberUpdatedState(buttonPressFeedback)
     Box(
         modifier = Modifier
             .requiredWidth(width)
             .height(58.203.dp)
             .scale(scale.value)
             .clip(DashboardGlassContract.ActionShape)
-            .pointerInput(onClick) {
+            .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
                         scope.launch { scale.animateTo(.92f, spring(stiffness = Spring.StiffnessHigh)) }
                         val released = tryAwaitRelease()
                         scope.launch { scale.animateTo(1f, spring(dampingRatio = .55f, stiffness = Spring.StiffnessMedium)) }
-                        if (released) onClick()
+                        if (released) {
+                            latestButtonPressFeedback()
+                            latestOnClick()
+                        }
                     },
                 )
             }
             .semantics {
                 role = Role.Button
-                contentDescription = label
+                contentDescription = if (badgeCount > 0) {
+                    "$label, без ответа: $badgeCount"
+                } else label
                 onClick(label) {
-                    onClick()
+                    latestButtonPressFeedback()
+                    latestOnClick()
                     true
                 }
             },
@@ -1864,7 +2082,35 @@ private fun GlassAction(label: String, kind: ActionKind, width: Dp, hazeState: H
                 fontFamily = OpenRundeFontFamily,
                 maxLines = 1,
             )
+            if (badgeCount > 0) {
+                Spacer(Modifier.width(8.dp))
+                EventBadge(badgeCount)
+            }
         }
+    }
+}
+
+@Composable
+private fun EventBadge(count: Int) {
+    val label = if (count > 99) "99+" else count.toString()
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .height(24.dp)
+            .widthIn(min = 24.dp)
+            .clip(CircleShape)
+            .background(Color.Red)
+            .padding(horizontal = if (label.length > 1) 5.dp else 0.dp),
+    ) {
+        Text(
+            text = label,
+            color = Color.White,
+            fontFamily = OpenRundeFontFamily,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.ExtraBold,
+            lineHeight = 22.sp,
+            maxLines = 1,
+        )
     }
 }
 
@@ -1873,6 +2119,7 @@ private fun ActionGlyph(kind: ActionKind) {
     if (kind == ActionKind.Outfit) return
     val drawable = when (kind) {
         ActionKind.Chat -> R.drawable.action_chat
+        ActionKind.Events -> R.drawable.action_events
         ActionKind.Feed -> R.drawable.action_feed
         ActionKind.Travel -> R.drawable.action_travel
         ActionKind.Outfit -> error("handled above")

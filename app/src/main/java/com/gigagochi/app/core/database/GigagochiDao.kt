@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 internal interface GigagochiDao {
@@ -19,6 +20,84 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM pet_snapshots WHERE ownerId = :ownerId AND petId = :petId")
     suspend fun deletePet(ownerId: String, petId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertChatMessages(entities: List<ChatMessageEntity>)
+
+    @Query("SELECT * FROM chat_messages WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAtEpochMillis DESC LIMIT :limit")
+    suspend fun getRecentChatMessages(
+        ownerId: String,
+        petId: String,
+        limit: Int,
+    ): List<ChatMessageEntity>
+
+    @Query("DELETE FROM chat_messages WHERE ownerId = :ownerId AND petId = :petId AND messageId NOT IN (SELECT messageId FROM chat_messages WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAtEpochMillis DESC LIMIT :keep)")
+    suspend fun trimChatMessages(ownerId: String, petId: String, keep: Int): Int
+
+    @Query("DELETE FROM chat_messages WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteChatMessages(ownerId: String, petId: String): Int
+
+    @Upsert
+    suspend fun upsertUserMemory(entity: UserMemoryEntity)
+
+    @Query("SELECT * FROM user_memories WHERE ownerId = :ownerId AND petId = :petId ORDER BY importance DESC, updatedAtEpochMillis DESC")
+    suspend fun getUserMemories(ownerId: String, petId: String): List<UserMemoryEntity>
+
+    @Query("SELECT * FROM user_memories WHERE ownerId = :ownerId AND petId = :petId AND normalizedKey = :normalizedKey ORDER BY updatedAtEpochMillis DESC")
+    suspend fun getUserMemoriesByKey(
+        ownerId: String,
+        petId: String,
+        normalizedKey: String,
+    ): List<UserMemoryEntity>
+
+    @Query("DELETE FROM user_memories WHERE ownerId = :ownerId AND petId = :petId AND normalizedKey = :normalizedKey")
+    suspend fun deleteUserMemoriesByKey(ownerId: String, petId: String, normalizedKey: String): Int
+
+    @Query("DELETE FROM user_memories WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteUserMemories(ownerId: String, petId: String): Int
+
+    @Upsert
+    suspend fun upsertMemoryLearning(entity: MemoryLearningEntity)
+
+    @Query("SELECT * FROM memory_learnings WHERE ownerId = :ownerId AND petId = :petId ORDER BY lastSeenAtEpochMillis DESC")
+    suspend fun getMemoryLearnings(ownerId: String, petId: String): List<MemoryLearningEntity>
+
+    @Query("DELETE FROM memory_learnings WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteMemoryLearnings(ownerId: String, petId: String): Int
+
+    @Query("UPDATE memory_learnings SET status = :status, lastSeenAtEpochMillis = :updatedAt WHERE ownerId = :ownerId AND petId = :petId AND learningId = :learningId")
+    suspend fun updateMemoryLearningStatus(
+        ownerId: String,
+        petId: String,
+        learningId: String,
+        status: String,
+        updatedAt: Long,
+    ): Int
+
+    @Upsert
+    suspend fun upsertPetMemoryState(entity: PetMemoryStateEntity)
+
+    @Query("SELECT * FROM pet_memory_state WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun getPetMemoryState(ownerId: String, petId: String): PetMemoryStateEntity?
+
+    @Query("DELETE FROM pet_memory_state WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deletePetMemoryState(ownerId: String, petId: String): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertProactiveNotification(entity: ProactiveNotificationEntity): Long
+
+    @Query("SELECT * FROM proactive_notifications WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL ORDER BY createdAtEpochMillis")
+    suspend fun getUnnotifiedProactiveNotifications(
+        ownerId: String,
+        petId: String,
+    ): List<ProactiveNotificationEntity>
+
+    @Query("UPDATE proactive_notifications SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND notificationId = :notificationId AND notifiedAtEpochMillis IS NULL")
+    suspend fun markProactiveNotificationNotified(
+        ownerId: String,
+        notificationId: String,
+        notifiedAt: Long,
+    ): Int
 
     @Query(
         """
@@ -41,13 +120,40 @@ internal interface GigagochiDao {
         updatedAtEpochMillis: Long,
     ): Int
 
-    @Query("UPDATE pet_snapshots SET firstSessionActive = :active, updatedAtEpochMillis = :updatedAt WHERE ownerId = :ownerId AND petId = :petId")
-    suspend fun updateFirstSessionActive(
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFirstSession(entity: FirstSessionEntity): Long
+
+    @Upsert
+    suspend fun upsertFirstSession(entity: FirstSessionEntity)
+
+    @Query("SELECT * FROM first_sessions WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun getFirstSession(ownerId: String, petId: String): FirstSessionEntity?
+
+    @Query("SELECT * FROM first_sessions WHERE ownerId = :ownerId ORDER BY updatedAtEpochMillis")
+    suspend fun getFirstSessions(ownerId: String): List<FirstSessionEntity>
+
+    @Query("DELETE FROM first_sessions WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteFirstSession(ownerId: String, petId: String): Int
+
+    @Query("UPDATE first_sessions SET stage = :nextStage, selectedDestination = :destination, lastActionKey = :actionKey, updatedAtEpochMillis = :updatedAt WHERE ownerId = :ownerId AND petId = :petId AND stage = :expectedStage")
+    suspend fun advanceFirstSession(
         ownerId: String,
         petId: String,
-        active: Boolean,
+        expectedStage: String,
+        nextStage: String,
+        destination: String?,
+        actionKey: String,
         updatedAt: Long,
     ): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertFirstSessionActionReceipt(entity: FirstSessionActionReceiptEntity): Long
+
+    @Query("SELECT * FROM first_session_action_receipts WHERE ownerId = :ownerId AND petId = :petId AND actionKey = :actionKey")
+    suspend fun getFirstSessionActionReceipt(ownerId: String, petId: String, actionKey: String): FirstSessionActionReceiptEntity?
+
+    @Query("DELETE FROM first_session_action_receipts WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteFirstSessionActionReceipts(ownerId: String, petId: String): Int
 
     @Upsert
     suspend fun upsertMoodImages(entities: List<PetMoodImageEntity>)
@@ -142,6 +248,9 @@ internal interface GigagochiDao {
     @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId ORDER BY completedAtEpochMillis")
     suspend fun getTravelVideoAssets(ownerId: String, petId: String): List<TravelVideoAssetEntity>
 
+    @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId ORDER BY completedAtEpochMillis DESC")
+    fun observeTravelVideoAssets(ownerId: String, petId: String): Flow<List<TravelVideoAssetEntity>>
+
     @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND requestKey = :requestKey")
     suspend fun getTravelVideoAsset(ownerId: String, requestKey: String): TravelVideoAssetEntity?
 
@@ -235,8 +344,14 @@ internal interface GigagochiDao {
     @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND storyId = :storyId")
     suspend fun getScheduledStory(ownerId: String, storyId: String): ScheduledStoryEntity?
 
+    @Query("DELETE FROM scheduled_stories WHERE ownerId = :ownerId AND storyId = :storyId")
+    suspend fun deleteScheduledStory(ownerId: String, storyId: String): Int
+
     @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAt DESC")
     suspend fun getScheduledStories(ownerId: String, petId: String): List<ScheduledStoryEntity>
+
+    @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAt DESC")
+    fun observeScheduledStories(ownerId: String, petId: String): Flow<List<ScheduledStoryEntity>>
 
     @Query("SELECT * FROM scheduled_stories WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL ORDER BY createdAt")
     suspend fun getUnnotifiedScheduledStories(ownerId: String, petId: String): List<ScheduledStoryEntity>
@@ -287,5 +402,26 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM applied_outfit_receipts WHERE ownerId = :ownerId")
     suspend fun deleteOwnerAppliedOutfitReceipts(ownerId: String): Int
+
+    @Query("DELETE FROM first_sessions WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerFirstSessions(ownerId: String): Int
+
+    @Query("DELETE FROM first_session_action_receipts WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerFirstSessionActionReceipts(ownerId: String): Int
+
+    @Query("DELETE FROM chat_messages WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerChatMessages(ownerId: String): Int
+
+    @Query("DELETE FROM user_memories WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerUserMemories(ownerId: String): Int
+
+    @Query("DELETE FROM memory_learnings WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerMemoryLearnings(ownerId: String): Int
+
+    @Query("DELETE FROM pet_memory_state WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerPetMemoryStates(ownerId: String): Int
+
+    @Query("DELETE FROM proactive_notifications WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerProactiveNotifications(ownerId: String): Int
 
 }

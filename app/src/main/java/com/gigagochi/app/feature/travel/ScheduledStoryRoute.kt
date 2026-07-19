@@ -22,7 +22,7 @@ fun ScheduledStoryRoute(
     initialStory: LocalScheduledStory,
     coordinator: ScheduledStoryCoordinator,
     mediaUrlPolicy: StaticMediaUrlPolicy,
-    navigationAction: ContextualNavigationAction = ContextualNavigationAction.Close,
+    navigationAction: ContextualNavigationAction = ContextualNavigationAction.Back,
     onNavigateDashboard: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()

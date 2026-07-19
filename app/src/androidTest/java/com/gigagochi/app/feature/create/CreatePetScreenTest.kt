@@ -71,14 +71,20 @@ class CreatePetScreenTest {
                     onAnswer = {},
                     onOpenCustom = {},
                     onCustomValueChange = {},
+                    onCloseCustom = { state.value = state.value.closeCustomInput() },
                     onSubmitCustom = {},
                     onRetry = {},
                 )
             }
         }
         composeRule.onAllNodesWithContentDescription("Далее").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Назад").assertIsDisplayed()
 
         composeRule.runOnIdle { state.value = state.value.updateCustomValue("Кот из облака") }
         composeRule.onNodeWithContentDescription("Далее").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("Назад").performClick()
+        composeRule.onNodeWithText("Кого хочешь создать?").assertIsDisplayed()
+        composeRule.onAllNodesWithContentDescription("Назад").assertCountEquals(0)
     }
 }

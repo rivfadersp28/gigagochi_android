@@ -142,6 +142,97 @@ data class ChatRequestDto(
     val requestKey: String,
     val message: String,
     val pet: FeaturePetDto,
+    val history: List<ChatHistoryItemDto> = emptyList(),
+    val memoryContext: MemoryContextDto? = null,
+    val nowIso: String? = null,
+    val timezone: String? = null,
+)
+
+@Serializable
+data class ChatHistoryItemDto(
+    val role: String,
+    val text: String,
+    val createdAt: String? = null,
+)
+
+@Serializable
+data class MemoryContextItemDto(
+    val id: String,
+    val kind: String,
+    val text: String,
+    val memoryClass: String = "fact",
+    val recordedAt: String? = null,
+    val occurredAt: String? = null,
+    val lastMentionedAt: String? = null,
+    val dueAt: String? = null,
+)
+
+@Serializable
+data class ChatMemoryEpisodeDto(
+    val id: String,
+    val messages: List<ChatHistoryItemDto>,
+)
+
+@Serializable
+data class ProactiveCandidateDto(
+    val memoryIds: List<String> = emptyList(),
+    val episodeIds: List<String> = emptyList(),
+    val reason: String,
+)
+
+@Serializable
+data class MemoryContextDto(
+    val summary: String? = null,
+    val userProfile: String? = null,
+    val relevantMemories: List<MemoryContextItemDto> = emptyList(),
+    val episodes: List<ChatMemoryEpisodeDto> = emptyList(),
+    val proactiveCandidate: ProactiveCandidateDto? = null,
+)
+
+@Serializable
+data class MemoryExtractionRequestDto(
+    val requestKey: String,
+    val message: String,
+    val reply: String,
+    val pet: FeaturePetDto,
+    val history: List<ChatHistoryItemDto> = emptyList(),
+    val memoryContext: MemoryContextDto? = null,
+    val nowIso: String? = null,
+    val timezone: String? = null,
+    val existingMemoryBrief: String? = null,
+)
+
+@Serializable
+data class MemoryExtractionResponseDto(val operations: List<JsonObject> = emptyList())
+
+@Serializable
+data class MemoryConsolidationRequestDto(
+    val requestKey: String,
+    val pendingLearnings: List<JsonObject> = emptyList(),
+    val existingMemories: List<JsonObject> = emptyList(),
+    val summary: String? = null,
+    val userProfile: String? = null,
+    val nowIso: String? = null,
+    val timezone: String? = null,
+)
+
+@Serializable
+data class MemoryConsolidationResponseDto(val operations: List<JsonObject> = emptyList())
+
+@Serializable
+data class ProactiveRequestDto(
+    val requestKey: String,
+    val pet: FeaturePetDto,
+    val memoryContext: MemoryContextDto,
+    val nowIso: String? = null,
+    val timezone: String? = null,
+)
+
+@Serializable
+data class ProactiveResponseDto(
+    val reply: String,
+    val moodHint: String? = null,
+    val faceHint: String? = null,
 )
 
 @Serializable
@@ -297,6 +388,13 @@ interface AndroidFeatureService {
     suspend fun submitCreate(request: CreateJobRequestDto): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun pollCreate(jobId: String): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun chat(request: ChatRequestDto): FeatureApiResult<ChatResponseDto>
+    suspend fun extractMemory(
+        request: MemoryExtractionRequestDto,
+    ): FeatureApiResult<MemoryExtractionResponseDto>
+    suspend fun consolidateMemory(
+        request: MemoryConsolidationRequestDto,
+    ): FeatureApiResult<MemoryConsolidationResponseDto>
+    suspend fun proactive(request: ProactiveRequestDto): FeatureApiResult<ProactiveResponseDto>
     suspend fun simplifyOutfit(request: OutfitSimplifyRequestDto): FeatureApiResult<OutfitSimplifyResponseDto>
     suspend fun submitOutfit(request: OutfitJobRequestDto): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun pollOutfit(jobId: String): FeatureApiResult<GenerationEnvelopeDto>
@@ -331,6 +429,21 @@ class AndroidFeatureApi(
 
     override suspend fun chat(request: ChatRequestDto): FeatureApiResult<ChatResponseDto> =
         post("/api/android/chat", request)
+
+    override suspend fun extractMemory(
+        request: MemoryExtractionRequestDto,
+    ): FeatureApiResult<MemoryExtractionResponseDto> = post("/api/android/memory/extract", request)
+
+    override suspend fun consolidateMemory(
+        request: MemoryConsolidationRequestDto,
+    ): FeatureApiResult<MemoryConsolidationResponseDto> = post(
+        "/api/android/memory/consolidate",
+        request,
+    )
+
+    override suspend fun proactive(
+        request: ProactiveRequestDto,
+    ): FeatureApiResult<ProactiveResponseDto> = post("/api/android/proactive", request)
 
     override suspend fun simplifyOutfit(
         request: OutfitSimplifyRequestDto,

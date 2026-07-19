@@ -2,11 +2,17 @@ package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.core.database.LocalFirstSession
+import com.gigagochi.app.feature.onboarding.FirstSessionMainAction
+import com.gigagochi.app.feature.onboarding.firstSessionDashboardMessage
+import com.gigagochi.app.feature.onboarding.firstSessionDashboardMessagePortions
+import com.gigagochi.app.feature.onboarding.firstSessionMainAction
 import kotlin.math.max
 
 const val DashboardPromptMaxLength = 1_000
 const val DashboardMinimumThinkingMillis = 1_000L
 const val DashboardReplyAutoAdvanceMillis = 3_000L
+const val OnboardingBlockAutoAdvanceMillis = 5_500L
 const val PetTapThanksVisibleMillis = 5_000L
 const val OutfitExperienceCost = 200
 const val ChatFailureMessage = "Не получилось отправить сообщение. Попробуйте ещё раз."
@@ -38,7 +44,7 @@ internal fun contextualNavigationForDashboardMode(
     DashboardMode.Feed,
     DashboardMode.Outfit,
     DashboardMode.Travel,
-    -> ContextualNavigationAction.Close
+    -> ContextualNavigationAction.Back
 }
 
 enum class DashboardFood(val routeValue: String) {
@@ -102,9 +108,11 @@ data class DashboardReply(
     val requestKey: String,
     val text: String,
     val portionIndex: Int = 0,
+    val explicitPortions: List<String>? = null,
+    val autoAdvanceDelayMillis: Long = DashboardReplyAutoAdvanceMillis,
 ) {
     val portions: List<String>
-        get() = splitDashboardReplySentences(text)
+        get() = explicitPortions ?: splitDashboardReplyPortions(text)
     val visibleText: String
         get() = portions.getOrNull(portionIndex) ?: text
     val hasNextPortion: Boolean
@@ -113,6 +121,10 @@ data class DashboardReply(
 
 data class DashboardUiState(
     val pet: PetDashboardState,
+    val firstSession: LocalFirstSession? = null,
+    val firstSessionIdleReply: DashboardReply? = firstSession?.let {
+        firstSessionIdleReply(pet, it)
+    },
     val mode: DashboardMode = DashboardMode.Idle,
     val chatDraft: String = "",
     val chatError: String? = null,
@@ -138,6 +150,10 @@ data class DashboardUiState(
 )
 
 sealed interface DashboardEvent {
+    data class FirstSessionSynced(
+        val session: LocalFirstSession,
+        val pet: PetDashboardState,
+    ) : DashboardEvent
     data object OpenChat : DashboardEvent
     data object OpenFeed : DashboardEvent
     data object OpenOutfit : DashboardEvent
@@ -158,7 +174,12 @@ sealed interface DashboardEvent {
     data class TapFood(val food: DashboardFood, val requestKey: String) : DashboardEvent
     data class FoodConsumeFinished(val food: DashboardFood) : DashboardEvent
     data class FoodReappearFinished(val food: DashboardFood) : DashboardEvent
-    data class FeedSucceeded(val requestKey: String, val reply: String) : DashboardEvent
+    data class FeedSucceeded(
+        val requestKey: String,
+        val reply: String,
+        val explicitPortions: List<String>? = null,
+        val autoAdvanceDelayMillis: Long = DashboardReplyAutoAdvanceMillis,
+    ) : DashboardEvent
     data class FeedFailed(val requestKey: String) : DashboardEvent
     data class UpdateOutfitDraft(val value: String) : DashboardEvent
     data class SubmitOutfit(val requestKey: String) : DashboardEvent
@@ -195,7 +216,20 @@ sealed interface DashboardEvent {
 }
 
 fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUiState = when (event) {
-    DashboardEvent.OpenChat -> state.copy(
+    is DashboardEvent.FirstSessionSynced -> if (event.session.petId == state.pet.petId) {
+        val stageChanged = state.firstSession?.stage != event.session.stage
+        state.copy(
+            firstSession = event.session,
+            firstSessionIdleReply = if (stageChanged) {
+                firstSessionIdleReply(event.pet, event.session)
+            } else {
+                state.firstSessionIdleReply
+            },
+            pet = event.pet,
+        )
+    } else state
+
+    DashboardEvent.OpenChat -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Chat)) state else state.copy(
         mode = DashboardMode.Chat,
         chatError = null,
         chatReply = null,
@@ -203,7 +237,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         transientReply = null,
     )
 
-    DashboardEvent.OpenFeed -> state.copy(
+    DashboardEvent.OpenFeed -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Feed)) state else state.copy(
         mode = DashboardMode.Feed,
         feedError = null,
         feedReply = null,
@@ -212,14 +246,14 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         transientReply = null,
     )
 
-    DashboardEvent.OpenOutfit -> state.copy(
+    DashboardEvent.OpenOutfit -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Outfit)) state else state.copy(
         mode = DashboardMode.Outfit,
         outfitError = null,
         activeOutfit = null,
         transientReply = null,
     )
 
-    DashboardEvent.OpenTravel -> state.copy(
+    DashboardEvent.OpenTravel -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Travel)) state else state.copy(
         mode = DashboardMode.Travel,
         travelError = null,
         activeTravel = null,
@@ -344,7 +378,12 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         state.copy(
             activeFeed = null,
             feedError = null,
-            feedReply = DashboardReply(event.requestKey, event.reply),
+            feedReply = DashboardReply(
+                requestKey = event.requestKey,
+                text = event.reply,
+                explicitPortions = event.explicitPortions,
+                autoAdvanceDelayMillis = event.autoAdvanceDelayMillis,
+            ),
         )
     } else {
         state
@@ -492,6 +531,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         chatReply = state.chatReply.advanceIfMatching(event.requestKey),
         feedReply = state.feedReply.advanceIfMatching(event.requestKey),
         transientReply = state.transientReply.advanceIfMatching(event.requestKey),
+        firstSessionIdleReply = state.firstSessionIdleReply.advanceIfMatching(event.requestKey),
     )
 
     is DashboardEvent.ClearReply -> state.copy(
@@ -525,13 +565,38 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
 
 }
 
+fun hydrateExternalFirstSession(
+    state: DashboardUiState,
+    externalSession: LocalFirstSession,
+): DashboardUiState = if (state.firstSession != externalSession) {
+    reduceDashboard(
+        state,
+        DashboardEvent.FirstSessionSynced(externalSession, state.pet),
+    )
+} else {
+    state
+}
+
 private fun activateFood(
     state: DashboardUiState,
     food: DashboardFood,
     requestKey: String,
 ): DashboardUiState {
     if (state.mode != DashboardMode.Feed || state.activeFeed != null) return state
-    val nextPet = when (food) {
+    val firstSessionStage = state.firstSession?.stage
+    if (firstSessionStage == com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood &&
+        food != DashboardFood.BerryBowl
+    ) return state
+    if (firstSessionStage == com.gigagochi.app.core.database.FirstSessionStage.AwaitingRemedy &&
+        food !in setOf(DashboardFood.BerryBowl, DashboardFood.LeafCrunch)
+    ) return state
+    val nextPet = if (firstSessionStage in setOf(
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood,
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingRemedy,
+        )
+    ) {
+        state.pet
+    } else when (food) {
         DashboardFood.BerryBowl -> state.pet.copy(hunger = (state.pet.hunger + 25).coerceAtMost(100))
         DashboardFood.LeafCrunch -> state.pet.copy(energy = (state.pet.energy + 25).coerceAtMost(100))
     }
@@ -555,34 +620,70 @@ private fun DashboardReply?.advanceIfMatching(requestKey: String): DashboardRepl
     return copy(portionIndex = portionIndex + 1)
 }
 
-fun splitDashboardReplySentences(text: String): List<String> {
+fun splitDashboardReplyPortions(text: String): List<String> {
     val clean = text.replace(Regex("\\s+"), " ").trim()
     if (clean.isEmpty()) return emptyList()
+
     val portions = mutableListOf<String>()
-    var start = 0
-    var index = 0
-    val terminal = setOf('.', '!', '?', '…')
-    val closing = setOf('"', '\'', '»', '”', ')')
-    while (index < clean.length) {
-        if (clean[index] !in terminal) {
-            index += 1
-            continue
-        }
-        while (index + 1 < clean.length && clean[index + 1] in terminal) index += 1
-        while (index + 1 < clean.length && clean[index + 1] in closing) index += 1
-        if (index + 1 == clean.length || clean[index + 1].isWhitespace()) {
-            var portion = clean.substring(start, index + 1).trim()
-            if (portion.endsWith('.') && !portion.endsWith("..")) portion = portion.dropLast(1)
-            if (portion.isNotEmpty()) portions += portion
-            start = index + 1
-            while (start < clean.length && clean[start].isWhitespace()) start += 1
-            index = start
+    var current = ""
+    clean.split(' ').forEach { word ->
+        val candidate = if (current.isEmpty()) word else "$current $word"
+        if (current.isNotEmpty() && estimatedDashboardReplyLines(candidate) > DashboardReplyTargetLines) {
+            portions += current
+            current = word
         } else {
-            index += 1
+            current = candidate
         }
     }
-    if (start < clean.length) portions += clean.substring(start).trim()
-    return portions.ifEmpty { listOf(clean) }
+    if (current.isNotEmpty()) portions += current
+    return portions
+}
+
+private const val DashboardReplyTargetLines = 4
+private const val DashboardReplyLineWidthEm = 15.8f
+private const val DashboardReplySpaceWidthEm = .28f
+
+private fun estimatedDashboardReplyLines(text: String): Int {
+    var lines = 1
+    var currentWidth = 0f
+    text.split(' ').forEach { word ->
+        val wordWidth = word.sumOf { estimatedDashboardGlyphWidthEm(it).toDouble() }.toFloat()
+        val separator = if (currentWidth == 0f) 0f else DashboardReplySpaceWidthEm
+        if (currentWidth > 0f && currentWidth + separator + wordWidth > DashboardReplyLineWidthEm) {
+            lines += 1
+            currentWidth = wordWidth
+        } else {
+            currentWidth += separator + wordWidth
+        }
+        while (currentWidth > DashboardReplyLineWidthEm) {
+            lines += 1
+            currentWidth -= DashboardReplyLineWidthEm
+        }
+    }
+    return lines
+}
+
+private fun estimatedDashboardGlyphWidthEm(character: Char): Float = when {
+    character in ".,:;!|iIl1'`" -> .28f
+    character in "MWЖШЩЮФЫЪ@%" -> .8f
+    character.isUpperCase() -> .66f
+    else -> .55f
+}
+
+fun firstSessionIdleReply(
+    pet: PetDashboardState,
+    session: LocalFirstSession,
+): DashboardReply? = firstSessionDashboardMessage(pet, session)?.let { message ->
+    DashboardReply(
+        requestKey = "first-session:${session.ownerId}:${session.petId}:${session.stage.name}",
+        text = message,
+        explicitPortions = firstSessionDashboardMessagePortions(pet, session),
+        autoAdvanceDelayMillis = if (session.stage in setOf(
+                com.gigagochi.app.core.database.FirstSessionStage.AwaitingTravel,
+                com.gigagochi.app.core.database.FirstSessionStage.ConfirmingTravel,
+            )
+        ) OnboardingBlockAutoAdvanceMillis else DashboardReplyAutoAdvanceMillis,
+    )
 }
 
 enum class DashboardDebugState(val routeValue: String) {

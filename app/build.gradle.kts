@@ -106,6 +106,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.10.1")
     implementation("androidx.media3:media3-effect:1.10.1")
     implementation("androidx.media3:media3-ui:1.10.1")
+    implementation("androidx.media3:media3-database:1.10.1")
+    implementation("androidx.media3:media3-datasource:1.10.1")
     implementation("dev.chrisbanes.haze:haze:1.7.2")
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")

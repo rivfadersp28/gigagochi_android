@@ -40,6 +40,7 @@ class AndroidLocalNotificationEmitter(
         val notificationId = stableNotificationId(notification)
         val intent = Intent(context, MainActivity::class.java).apply {
             notification.storyId?.let { putExtra("gigagochi.storyId", it) }
+            notification.travelRequestKey?.let { putExtra("gigagochi.travelRequestKey", it) }
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -69,7 +70,7 @@ class AndroidLocalNotificationEmitter(
         manager.createNotificationChannel(
             NotificationChannel(
                 CompletionChannelId,
-                "Готовые истории и медиа",
+                "Сообщения, истории и готовые медиа",
                 NotificationManager.IMPORTANCE_DEFAULT,
             ),
         )

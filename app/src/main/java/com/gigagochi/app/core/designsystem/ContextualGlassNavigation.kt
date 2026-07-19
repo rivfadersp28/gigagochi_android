@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,7 +26,6 @@ import dev.chrisbanes.haze.hazeEffect
 
 enum class ContextualNavigationAction(val contentDescription: String) {
     Back("Назад"),
-    Close("Закрыть"),
 }
 
 private val AutoMirroredBackIcon: ImageVector by lazy {
@@ -51,33 +52,9 @@ private val AutoMirroredBackIcon: ImageVector by lazy {
     }.build()
 }
 
-private val CloseIcon: ImageVector by lazy {
-    ImageVector.Builder(
-        name = "Close",
-        defaultWidth = 24.dp,
-        defaultHeight = 24.dp,
-        viewportWidth = 24f,
-        viewportHeight = 24f,
-    ).apply {
-        path(fill = SolidColor(Color.Black)) {
-            moveTo(18.3f, 5.71f)
-            lineTo(12f, 12f)
-            lineTo(5.7f, 5.71f)
-            lineTo(4.29f, 7.12f)
-            lineTo(10.59f, 13.41f)
-            lineTo(4.29f, 19.71f)
-            lineTo(5.7f, 21.12f)
-            lineTo(12f, 14.83f)
-            lineTo(18.3f, 21.12f)
-            lineTo(19.71f, 19.71f)
-            lineTo(13.41f, 13.41f)
-            lineTo(19.71f, 7.12f)
-            close()
-        }
-    }.build()
-}
-
 val ContextualNavigationMinimumTouchTarget = 48.dp
+val ContextualAppBarEdgePadding = 16.dp
+val ContextualAppBarContentGap = 18.dp
 
 @Composable
 fun ContextualGlassNavigation(
@@ -87,6 +64,8 @@ fun ContextualGlassNavigation(
     hazeState: HazeState? = null,
 ) {
     val glass = GlassActionSurfaceContract
+    val buttonPressFeedback = LocalButtonPressFeedback.current
+    val latestOnClick by rememberUpdatedState(onClick)
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -104,7 +83,10 @@ fun ContextualGlassNavigation(
             .clickable(
                 role = Role.Button,
                 onClickLabel = action.contentDescription,
-                onClick = onClick,
+                onClick = {
+                    buttonPressFeedback()
+                    latestOnClick()
+                },
             )
             .semantics {
                 role = Role.Button
@@ -112,10 +94,7 @@ fun ContextualGlassNavigation(
             },
     ) {
         Icon(
-            imageVector = when (action) {
-                ContextualNavigationAction.Back -> AutoMirroredBackIcon
-                ContextualNavigationAction.Close -> CloseIcon
-            },
+            imageVector = AutoMirroredBackIcon,
             contentDescription = null,
             tint = Color.White,
         )

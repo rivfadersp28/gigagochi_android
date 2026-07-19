@@ -9,6 +9,11 @@ open class TestAndroidFeatureService : AndroidFeatureService {
     override suspend fun submitCreate(request: CreateJobRequestDto) = unavailable<GenerationEnvelopeDto>()
     override suspend fun pollCreate(jobId: String) = unavailable<GenerationEnvelopeDto>()
     override suspend fun chat(request: ChatRequestDto) = unavailable<ChatResponseDto>()
+    override suspend fun extractMemory(request: MemoryExtractionRequestDto) =
+        unavailable<MemoryExtractionResponseDto>()
+    override suspend fun consolidateMemory(request: MemoryConsolidationRequestDto) =
+        unavailable<MemoryConsolidationResponseDto>()
+    override suspend fun proactive(request: ProactiveRequestDto) = unavailable<ProactiveResponseDto>()
     override suspend fun simplifyOutfit(request: OutfitSimplifyRequestDto) =
         unavailable<OutfitSimplifyResponseDto>()
     override suspend fun submitOutfit(request: OutfitJobRequestDto) = unavailable<GenerationEnvelopeDto>()

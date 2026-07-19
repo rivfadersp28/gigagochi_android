@@ -283,7 +283,7 @@ class RealDashboardFeatureAdaptersTest {
 
     private fun pet(media: PetGeneratedMedia = fullMedia()) = PetDashboardState(
         "pet-a", "asset-a", "dragon", "Toto", "baby", "Малыш", "idle",
-        500, 100, 100, 100, "hi", false, media,
+        500, 100, 100, 100, "hi", media,
     )
 
     private fun fullMedia(): PetGeneratedMedia {
@@ -365,7 +365,7 @@ private class FlakyOutcomeStore : InMemoryFeatureStore(), DashboardOutcomeStore 
 
     private fun testPet() = PetDashboardState(
         "pet-a", "asset-a", "dragon", "Toto", "baby", "Малыш", "idle",
-        500, 100, 100, 100, "hi", false,
+        500, 100, 100, 100, "hi",
     )
 }
 

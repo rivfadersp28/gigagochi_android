@@ -2,6 +2,9 @@ package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedyPortions
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,6 +15,13 @@ import org.junit.Test
 
 class DashboardContractTest {
     @Test
+    fun eventsActionUsesCompactPaddingWithoutBadgeAndKeepsRoomForBadge() {
+        assertEquals(184.dp, eventActionWidth(0))
+        assertEquals(216.dp, eventActionWidth(1))
+        assertEquals(216.dp, eventActionWidth(100))
+    }
+
+    @Test
     fun onlyNestedDashboardModesExposeContextualClose() {
         assertNull(contextualNavigationForDashboardMode(DashboardMode.Idle))
         listOf(
@@ -21,7 +31,7 @@ class DashboardContractTest {
             DashboardMode.Travel,
         ).forEach { mode ->
             assertEquals(
-                ContextualNavigationAction.Close,
+                ContextualNavigationAction.Back,
                 contextualNavigationForDashboardMode(mode),
             )
         }
@@ -46,7 +56,6 @@ class DashboardContractTest {
         happiness = happiness,
         energy = energy,
         message = "Как тебя зовут?",
-        firstSessionActive = false,
         petTapProgress = petTapProgress,
     )
 
@@ -266,32 +275,59 @@ class DashboardContractTest {
     }
 
     @Test
-    fun outfitReplyAdvancesSentencePartsAndKeepsTheFinalPart() {
+    fun outfitReplyFitsInOneFourLinePortion() {
         assertEquals(
-            listOf(
-                "Футболка Metallica?",
-                "Интересно",
-                "Я получу заказ примерно через 10 минут",
-            ),
-            splitDashboardReplySentences(DeterministicOutfitReply),
+            listOf(DeterministicOutfitReply),
+            splitDashboardReplyPortions(DeterministicOutfitReply),
         )
 
-        var state = DashboardUiState(
+        val state = DashboardUiState(
             pet = pet(),
             transientReply = DashboardReply("outfit-advance", DeterministicOutfitReply),
         )
-        assertEquals("Футболка Metallica?", state.transientReply?.visibleText)
-        assertTrue(state.transientReply?.hasNextPortion == true)
-
-        state = reduceDashboard(state, DashboardEvent.AdvanceReply("outfit-advance"))
-        assertEquals("Интересно", state.transientReply?.visibleText)
-        assertTrue(state.transientReply?.hasNextPortion == true)
-        state = reduceDashboard(state, DashboardEvent.AdvanceReply("outfit-advance"))
-        assertEquals("Я получу заказ примерно через 10 минут", state.transientReply?.visibleText)
+        assertEquals(DeterministicOutfitReply, state.transientReply?.visibleText)
         assertFalse(state.transientReply?.hasNextPortion ?: true)
+    }
 
-        val finalState = reduceDashboard(state, DashboardEvent.AdvanceReply("outfit-advance"))
-        assertEquals("Я получу заказ примерно через 10 минут", finalState.transientReply?.visibleText)
+    @Test
+    fun longDialogueIsSplitIntoPortionsThatTargetFourLines() {
+        val reference = "Я тут подумал, а где ты живешь? Можешь рассказать, мне очень интересно?"
+        assertEquals(
+            listOf(reference),
+            splitDashboardReplyPortions(reference),
+        )
+
+        val longSentence = List(24) { "любопытная" }.joinToString(" ") + "!"
+        val portions = splitDashboardReplyPortions(longSentence)
+        assertTrue(portions.size > 1)
+        assertEquals(longSentence, portions.joinToString(" "))
+
+        val onboardingPortions = splitDashboardReplyPortions(FirstSessionAfterRemedy)
+        assertTrue(onboardingPortions.size > 1)
+        assertEquals(FirstSessionAfterRemedy, onboardingPortions.joinToString(" "))
+    }
+
+    @Test
+    fun onboardingRemedyReplyKeepsTwoSemanticBlocksAndLongerPause() {
+        val request = PendingFeedRequest("remedy-feed", DashboardFood.LeafCrunch, 0)
+        val initial = DashboardUiState(
+            pet = pet(),
+            mode = DashboardMode.Feed,
+            activeFeed = request,
+        )
+
+        val result = reduceDashboard(
+            initial,
+            DashboardEvent.FeedSucceeded(
+                requestKey = request.requestKey,
+                reply = FirstSessionAfterRemedy,
+                explicitPortions = FirstSessionAfterRemedyPortions,
+                autoAdvanceDelayMillis = OnboardingBlockAutoAdvanceMillis,
+            ),
+        )
+
+        assertEquals(FirstSessionAfterRemedyPortions, result.feedReply?.portions)
+        assertEquals(OnboardingBlockAutoAdvanceMillis, result.feedReply?.autoAdvanceDelayMillis)
     }
 
     @Test
@@ -390,30 +426,17 @@ class DashboardContractTest {
     }
 
     @Test
-    fun travelReplyAdvancesAllSentencePartsAndKeepsTheFinalPart() {
+    fun travelReplyFitsInOneThreeLinePortion() {
         assertEquals(
-            listOf(
-                "На ночной рынок духов?",
-                "Надеюсь, со мной всё будет в порядке",
-                "Пришлю видео, когда вернусь",
-            ),
-            splitDashboardReplySentences(DeterministicTravelReply),
+            listOf(DeterministicTravelReply),
+            splitDashboardReplyPortions(DeterministicTravelReply),
         )
 
-        var state = DashboardUiState(
+        val state = DashboardUiState(
             pet = pet(),
             transientReply = DashboardReply("travel-advance", DeterministicTravelReply),
         )
-        assertEquals("На ночной рынок духов?", state.transientReply?.visibleText)
-        assertTrue(state.transientReply?.hasNextPortion == true)
-        state = reduceDashboard(state, DashboardEvent.AdvanceReply("travel-advance"))
-        assertEquals("Надеюсь, со мной всё будет в порядке", state.transientReply?.visibleText)
-        assertTrue(state.transientReply?.hasNextPortion == true)
-        state = reduceDashboard(state, DashboardEvent.AdvanceReply("travel-advance"))
-        assertEquals("Пришлю видео, когда вернусь", state.transientReply?.visibleText)
+        assertEquals(DeterministicTravelReply, state.transientReply?.visibleText)
         assertFalse(state.transientReply?.hasNextPortion ?: true)
-
-        val finalState = reduceDashboard(state, DashboardEvent.AdvanceReply("travel-advance"))
-        assertEquals("Пришлю видео, когда вернусь", finalState.transientReply?.visibleText)
     }
 }

@@ -1,0 +1,110 @@
+package com.gigagochi.app.feature.dashboard
+
+import com.gigagochi.app.core.database.LocalChatMessage
+import com.gigagochi.app.core.database.LocalPetMemoryState
+import com.gigagochi.app.core.database.LocalUserMemory
+import java.time.LocalDate
+import java.time.ZoneId
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CharacterMemoryTest {
+    private val zone = ZoneId.of("Europe/Moscow")
+    private val now = LocalDate.of(2026, 7, 19).atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+
+    @Test
+    fun shortSelfIntroductionBecomesCoreNameMemory() {
+        val changes = extractDeterministicMemory("Я Серёбра", now, zone)
+
+        assertEquals(1, changes.facts.size)
+        assertEquals("user-name", changes.facts.single().normalizedKey)
+        assertEquals("Пользователя зовут Серёбра.", changes.facts.single().text)
+    }
+
+    @Test
+    fun identityQuestionSelectsRememberedName() {
+        val name = memory(
+            id = "name-memory",
+            kind = "user_fact",
+            text = "Пользователя зовут Серёбра.",
+            key = "user-name",
+            memoryClass = "core",
+        )
+
+        val context = buildChatMemoryContext(
+            LocalPetMemoryState(memories = listOf(name)),
+            emptyList(),
+            "Как меня зовут?",
+            now,
+        )
+
+        assertEquals(listOf("name-memory"), context.relevantMemories.map { it.id })
+    }
+
+    @Test
+    fun tomorrowDeadlineBecomesDueProactiveQuestionOnNextDay() {
+        val changes = extractDeterministicMemory("У меня завтра экзамен по физике", now, zone)
+        val deadline = changes.facts.single()
+        val tomorrowNoon = LocalDate.of(2026, 7, 20).atTime(12, 0).atZone(zone)
+            .toInstant().toEpochMilli()
+        val context = requireNotNull(buildDailyProactiveContext(
+            LocalPetMemoryState(
+                memories = listOf(
+                    memory(
+                        id = "exam",
+                        kind = deadline.kind,
+                        text = deadline.text,
+                        key = deadline.normalizedKey,
+                        dueAt = deadline.dueAtEpochMillis,
+                    ),
+                ),
+            ),
+            history(),
+            tomorrowNoon,
+            zone,
+        ))
+
+        assertNotNull(deadline.dueAtEpochMillis)
+        assertNotNull(context)
+        assertEquals(listOf("exam"), context.proactiveCandidate?.memoryIds)
+        assertTrue(context.proactiveCandidate?.reason.orEmpty().contains("экзамен"))
+    }
+
+    @Test
+    fun proactiveRunsOnlyOncePerLocalDay() {
+        val memory = memory("exam", "deadline", "У пользователя экзамен.", "deadline-exam", dueAt = now)
+        val alreadySent = LocalPetMemoryState(
+            lastProactiveAtEpochMillis = now,
+            memories = listOf(memory),
+        )
+
+        assertNull(buildDailyProactiveContext(alreadySent, history(), now + 60_000, zone))
+    }
+
+    private fun history() = listOf(
+        LocalChatMessage("u1", "user", "У меня завтра экзамен", now - 60 * 60_000),
+        LocalChatMessage("p1", "pet", "Я буду держать за тебя лапки.", now - 59 * 60_000),
+    )
+
+    private fun memory(
+        id: String,
+        kind: String,
+        text: String,
+        key: String,
+        memoryClass: String = "fact",
+        dueAt: Long? = null,
+    ) = LocalUserMemory(
+        id = id,
+        kind = kind,
+        text = text,
+        normalizedKey = key,
+        confidence = .9,
+        importance = 1.0,
+        memoryClass = memoryClass,
+        recordedAtEpochMillis = now,
+        dueAtEpochMillis = dueAt,
+    )
+}

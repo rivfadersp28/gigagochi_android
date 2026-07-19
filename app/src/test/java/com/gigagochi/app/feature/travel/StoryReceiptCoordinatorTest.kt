@@ -51,6 +51,6 @@ class StoryReceiptCoordinatorTest {
 
     private fun pet(experience: Int) = PetDashboardState(
         "pet-a", "assets-a", "Ледяной дракон", "Тото", "baby", "Малыш", "idle",
-        experience, 100, 100, 100, "Привет", false,
+        experience, 100, 100, 100, "Привет",
     )
 }

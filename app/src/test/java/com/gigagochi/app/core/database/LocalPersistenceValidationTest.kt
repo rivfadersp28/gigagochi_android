@@ -98,7 +98,6 @@ class LocalPersistenceValidationTest {
             happiness = happiness,
             energy = energy,
             message = "Как тебя зовут?",
-            firstSessionActive = false,
         ),
         updatedAtEpochMillis = 1,
     )

@@ -25,11 +25,13 @@ import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.FeatureFailure
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.feature.dashboard.DashboardOutcomeApplicationCoordinator
+import com.gigagochi.app.feature.dashboard.DailyProactiveCoordinator
 import com.gigagochi.app.feature.dashboard.ForegroundPendingRecoveryCoordinator
 import com.gigagochi.app.feature.dashboard.ForegroundRecoverySignal
 import com.gigagochi.app.feature.dashboard.RealDashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.RealDashboardTravelAdapter
 import com.gigagochi.app.feature.travel.ScheduledStoryCoordinator
+import com.gigagochi.app.debugmenu.debugScheduledStoryService
 import java.util.concurrent.TimeUnit
 
 const val MvpSyncIntervalMinutes = 15L
@@ -132,7 +134,11 @@ class GigagochiSyncWorker(
             BuildConfig.DEBUG,
         )
         val storyFailure = when (
-            val story = ScheduledStoryCoordinator(session.accountId, repository, api).checkDue(pet)
+            val story = ScheduledStoryCoordinator(
+                session.accountId,
+                repository,
+                debugScheduledStoryService(api),
+            ).checkDue(pet)
         ) {
             is com.gigagochi.app.feature.travel.ScheduledStoryDueResult.Failure -> story.failure
             else -> null
@@ -165,6 +171,7 @@ class GigagochiSyncWorker(
                 repository,
             ),
         ).recoverForeground(pet.petId)
+        DailyProactiveCoordinator(session.accountId, repository, api).generateIfDue(pet)
         return storyFailure
     }
 }

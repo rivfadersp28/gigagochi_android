@@ -65,6 +65,5 @@ class DashboardPetPersistenceTest {
         happiness = 100,
         energy = 100,
         message = "Привет",
-        firstSessionActive = false,
     )
 }

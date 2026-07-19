@@ -2,6 +2,7 @@ package com.gigagochi.app.feature.create
 
 import com.gigagochi.app.core.database.AccountPetLifecycle
 import com.gigagochi.app.core.database.OwnerRecoveryStore
+import com.gigagochi.app.core.database.OwnedPetSnapshot
 import com.gigagochi.app.core.model.PetDashboardState
 
 sealed interface CreateFinalizationResult {
@@ -11,8 +12,10 @@ sealed interface CreateFinalizationResult {
 
 class CreateFinalizationCoordinator(
     private val ownerId: String,
+    @Suppress("unused")
     private val lifecycle: AccountPetLifecycle,
     private val store: OwnerRecoveryStore,
+    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun finalize(state: CreatePetState): CreateFinalizationResult {
         val generated = (state.generation as? GenerationStatus.Ready)?.pet
@@ -37,13 +40,14 @@ class CreateFinalizationCoordinator(
             happiness = 100,
             energy = 100,
             message = "Как тебя зовут?",
-            firstSessionActive = false,
             generatedMedia = generated.generatedMedia,
         )
-        if (!lifecycle.save(ownerId, pet)) return CreateFinalizationResult.Failure
         return try {
-            store.deletePendingCreate(ownerId, pending.requestKey)
-            CreateFinalizationResult.Success(pet)
+            val saved = store.finalizeCreatedPet(
+                OwnedPetSnapshot(ownerId, pet, nowEpochMillis()),
+                pending.requestKey,
+            )
+            if (saved) CreateFinalizationResult.Success(pet) else CreateFinalizationResult.Failure
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (_: Exception) {

@@ -104,7 +104,7 @@ class TravelEntryScreenTest {
                     reducedMotion = true,
                     forcePoster = true,
                     scrollTarget = StoryScrollTarget.Top,
-                    navigationAction = ContextualNavigationAction.Close,
+                    navigationAction = ContextualNavigationAction.Back,
                     onNavigateBack = { closes += 1 },
                     onChoice = {},
                     onFinish = {},
@@ -112,7 +112,7 @@ class TravelEntryScreenTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Закрыть")
+        composeRule.onNodeWithContentDescription("Назад")
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
             .performClick()

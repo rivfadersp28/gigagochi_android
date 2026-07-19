@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "0a01b76d7d3a66f341d33b034b132765",
+    "identityHash": "f3e0a84ff52be178f7a297d7ae04a076",
     "entities": [
       {
         "tableName": "pet_snapshots",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT NOT NULL, `stage` TEXT NOT NULL, `stageLabel` TEXT NOT NULL, `mood` TEXT NOT NULL, `experience` INTEGER NOT NULL, `hunger` INTEGER NOT NULL, `happiness` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `message` TEXT NOT NULL, `firstSessionActive` INTEGER NOT NULL, `petTapProgress` INTEGER NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT NOT NULL, `stage` TEXT NOT NULL, `stageLabel` TEXT NOT NULL, `mood` TEXT NOT NULL, `experience` INTEGER NOT NULL, `hunger` INTEGER NOT NULL, `happiness` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `message` TEXT NOT NULL, `petTapProgress` INTEGER NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
         "fields": [
           {
             "fieldPath": "ownerId",
@@ -84,12 +84,6 @@
             "fieldPath": "message",
             "columnName": "message",
             "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "firstSessionActive",
-            "columnName": "firstSessionActive",
-            "affinity": "INTEGER",
             "notNull": true
           },
           {
@@ -1109,11 +1103,126 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_story_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
           }
         ]
+      },
+      {
+        "tableName": "first_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `stage` TEXT NOT NULL, `selectedDestination` TEXT, `lastActionKey` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedDestination",
+            "columnName": "selectedDestination",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastActionKey",
+            "columnName": "lastActionKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_first_session_owner_stage",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "stage"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_first_session_owner_stage` ON `${TABLE_NAME}` (`ownerId`, `stage`)"
+          }
+        ]
+      },
+      {
+        "tableName": "first_session_action_receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `actionKey` TEXT NOT NULL, `actionKind` TEXT NOT NULL, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `actionKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionKey",
+            "columnName": "actionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionKind",
+            "columnName": "actionKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appliedAtEpochMillis",
+            "columnName": "appliedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "actionKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_first_session_action_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_first_session_action_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '0a01b76d7d3a66f341d33b034b132765')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f3e0a84ff52be178f7a297d7ae04a076')"
     ]
   }
 }

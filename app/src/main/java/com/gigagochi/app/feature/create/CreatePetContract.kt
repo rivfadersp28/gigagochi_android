@@ -105,6 +105,11 @@ fun CreatePetState.openCustomInput(): CreatePetState = copy(
     customValue = "",
 )
 
+fun CreatePetState.closeCustomInput(): CreatePetState = copy(
+    customInputStep = null,
+    customValue = "",
+)
+
 fun CreatePetState.updateCustomValue(value: String): CreatePetState = copy(
     customValue = value.take(MaxCustomPromptLength),
 )

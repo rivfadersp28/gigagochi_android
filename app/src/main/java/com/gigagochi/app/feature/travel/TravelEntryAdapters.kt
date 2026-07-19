@@ -1,5 +1,7 @@
 package com.gigagochi.app.feature.travel
 
+import com.gigagochi.app.core.database.FirstSessionMutationResult
+import com.gigagochi.app.core.database.FirstSessionStore
 import kotlinx.coroutines.delay
 
 interface TravelSuggestionsAdapter {
@@ -71,4 +73,49 @@ class FakeOnboardingTravelStoryAdapter(
 
 object ImmediateTravelResultConsumptionAdapter : TravelResultConsumptionAdapter {
     override suspend fun consume(result: InteractiveTravelStoryResult): Boolean = true
+}
+
+class DurableOnboardingBatChoiceAdapter(
+    private val ownerId: String,
+    private val petId: String,
+    private val store: FirstSessionStore,
+    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+) : TravelStoryChoiceAdapter {
+    override suspend fun choose(
+        request: PendingTravelStoryChoice,
+        story: InteractiveTravelStory,
+    ): TravelStoryChoiceOutcome {
+        check(isOnboardingBatStory(story))
+        check(request.choice == OnboardingBatCorrectChoice)
+        val mutation = store.commitFirstSessionBatChoice(
+            ownerId, petId, request.requestKey, nowEpochMillis(),
+        )
+        val pet = when (mutation) {
+            is FirstSessionMutationResult.Applied -> mutation.pet
+            is FirstSessionMutationResult.AlreadyApplied -> mutation.pet
+            else -> error("First-session bat receipt was not committed")
+        }
+        return TravelStoryChoiceOutcome(
+            result = onboardingBatStoryResult(story, request.requestKey),
+            committedExperience = pet.experience,
+            committedTravelIds = setOf(story.travelId),
+        )
+    }
+}
+
+class DurableOnboardingBatFinishAdapter(
+    private val ownerId: String,
+    private val petId: String,
+    private val store: FirstSessionStore,
+    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+) : TravelResultConsumptionAdapter {
+    override suspend fun consume(result: InteractiveTravelStoryResult): Boolean =
+        store.finishFirstSessionBat(
+            ownerId,
+            petId,
+            "finish-${result.travelId}".take(160),
+            nowEpochMillis(),
+        ) is FirstSessionMutationResult.Applied ||
+            store.getFirstSession(ownerId, petId)?.stage ==
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingCompletionMessage
 }

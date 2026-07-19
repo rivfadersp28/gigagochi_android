@@ -158,6 +158,6 @@ class MvpSyncPassRunnerTest {
 
     private fun pet() = PetDashboardState(
         "pet-a", "asset-a", "dragon", "Гига", "baby", "Малыш", "idle",
-        0, 50, 50, 50, "", false,
+        0, 50, 50, 50, "",
     )
 }

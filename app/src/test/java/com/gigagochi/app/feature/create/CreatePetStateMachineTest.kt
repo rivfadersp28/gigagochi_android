@@ -62,6 +62,21 @@ class CreatePetStateMachineTest {
     }
 
     @Test
+    fun closingCustomInputReturnsToTheSameQuestionAndClearsDraft() {
+        val questionState = CreatePetState()
+            .answer("Ледяного дракона", requestKeyFactory = { "request" })
+        val returned = questionState
+            .openCustomInput()
+            .updateCustomValue("Другое имя")
+            .closeCustomInput()
+
+        assertEquals(questionState.step, returned.step)
+        assertEquals(questionState.answers, returned.answers)
+        assertFalse(returned.isCustomInputOpen)
+        assertEquals("", returned.customValue)
+    }
+
+    @Test
     fun reducedMotionSkipsTransitionAndRecoveryStartsFormed() {
         val reduced = CreatePetState().answer(
             "Человек-яблоко",

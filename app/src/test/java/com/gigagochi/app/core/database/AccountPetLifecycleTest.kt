@@ -39,6 +39,20 @@ class AccountPetLifecycleTest {
     }
 
     @Test
+    fun debugPreferredPetOverridesLatestWithoutChangingStoredSnapshots() = runBlocking {
+        val store = FakeStore()
+        val saved = snapshot("acct_owner_a", pet("saved-pet", hunger = 70), 20)
+        val fixture = snapshot("acct_owner_a", pet("debug-fixture", hunger = 100), 10)
+        store.snapshots += listOf(saved, fixture)
+
+        val selected = AccountPetLifecycle(store).startup("acct_owner_a", "debug-fixture")
+            as AccountStartupDestination.Dashboard
+
+        assertEquals(fixture.pet, selected.pet)
+        assertEquals(listOf(saved, fixture), store.snapshots)
+    }
+
+    @Test
     fun dashboardSaveCallbackKeepsOwnerAndVisibleState() = runBlocking {
         val store = FakeStore()
         val changed = pet("pet-1", hunger = 83)
@@ -187,7 +201,6 @@ class AccountPetLifecycleTest {
         happiness = 100,
         energy = 100,
         message = "Привет",
-        firstSessionActive = false,
     )
 
     private class FakeStore : TestOwnerRecoveryStore() {

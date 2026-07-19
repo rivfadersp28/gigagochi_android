@@ -66,6 +66,6 @@ class DashboardMediaProjectionTest {
 
     private fun pet() = PetDashboardState(
         "pet", "asset", "description", "name", "baby", "Малыш", "idle",
-        0, 100, 100, 100, "message", false,
+        0, 100, 100, 100, "message",
     )
 }

@@ -12,8 +12,12 @@
 - Dashboard visible snapshot persistence выполняет bounded coordinator: первая ошибка повторяет тот же snapshot один раз через 750 ms, без нового user event; после двух ошибок coordinator останавливается, cancellation пробрасывается.
 - `PetDashboardState.petId` — стабильная identity питомца; `assetSetId` относится только к media set. `PendingOutfitGeneration` и `PendingTravelGeneration` хранят `petId`, а не `assetSetId`.
 - Chat/Travel ограничены 1000 символами и одной активной операцией; Feed применяет stat delta до reply adapter; Outfit списывает ровно 200 XP только после принятой idempotent queue; Travel не списывает XP.
-- Accepted Travel queue очищает draft, возвращает Dashboard в Idle и сохраняет typed pending (`petId/requestKey/prompt/localJobId`). Reply делится на три части; `hasNextPortion` рисует generic inline continuation indicator, а финальная часть остаётся.
+- Accepted Travel queue очищает draft, возвращает Dashboard в Idle и сохраняет typed pending (`petId/requestKey/prompt/localJobId`). Reply группируется в порции максимум по три строки; порции автоматически сменяются, финальная остаётся без continuation indicator.
 - Inline modes и Idle используют один стабильный Compose media root. `DashboardVideo`/ExoPlayer не пересоздаётся при смене mode, а overlays меняются поверх него.
+- Chat/Outfit/Travel запрашивают focus/IME сразу после открытия inline mode, без искусственного delay.
+  Input, media и реплика интерполируют позиции по фактическому анимируемому `WindowInsets.ime`;
+  input одновременно проявляется за 220 ms через ease-out. Boolean `imeVisible` не используется для
+  переключения между двумя координатами.
 - `feature/travel` содержит единый immutable reducer для Stage 4C entry/picker и Stage 4D active story. Fake suggestions возвращает три детерминированных варианта; default fake start по-прежнему всегда отдаёт recoverable failure и не изображает backend success. Typed `StartAccepted` переводит будущий real adapter либо локальный onboarding fixture из pending в `StoryQuestion`.
 - Active story проходит `StoryQuestion → ChoicePending → StoryResult → Finished`. Отдельный `TravelStoryChoiceAdapter` возвращает keyed result; reducer проверяет `requestKey`, `travelId`, exact answer и допустимый XP до применения. Для onboarding принимается только `Млекопитающие` и ровно `+200 XP`.
 - Picker/custom/pending используют один lifecycle-aware Media3/TextureView root. Active story использует отдельный стабильный Media3/TextureView root, который при переходе question → result не пересоздаётся, а переключает situation/success media item; reduced motion оставляет только poster.
@@ -23,11 +27,12 @@
 - Scene/video/noise объединены в единственный Haze 1.7.2 source; XP и нижние actions — foreground `hazeEffect`. Text/icon content не входит в source. PlayerView использует TextureView, чтобы Media3 video участвовало в Compose graphics-layer capture.
 - Glass contract хранится в `DashboardGlassContract`: effective actions blur `12.dp`/white 15%/radius 24, XP blur `8.dp`/brown alpha 16%/radius 31.927; Haze noise отключён. Actions используют два clipped Compose `innerShadow` слоя, расположенные над haze и под foreground content.
 - Conversation panel и Feed tokens используют отдельный `InlineStyle` с Haze blur `18.5.dp`; foreground text/icons не входят в blur source.
-- Dashboard использует лицензированный OpenRunde `FontFamily` 400/500/600/700 из статических TTF, конвертированных из repository WOFF2; speech shape — lossless raster drawable исходного SVG с filter.
+- Dashboard сохраняет OpenRunde для chrome и контролов. Реплики персонажа выводятся без bubble в нижней зоне 356×72 dp, максимум в три строки, с bundled SB Sans Display Bold 20/23.9; длинные предложения автоматически делятся на последовательные порции. Каждая порция повторяет web reveal: 300 ms layer entrance и посимвольные 700 ms fade с 24 ms stagger; thinking использует стандартные три `thinking_frame_*` с шагом 200 ms.
 - `core/auth` создаёт и хранит случайный canonical UUID v4 установки локально. `POST /api/auth/guest` возвращает стабильный opaque `accountId` и короткоживущую technical session без Google, имени, email или другого PII; backend хранит только SHA‑256 UUID subject. Guest endpoint используется только при отсутствии/инвалидации сохранённой session.
 - Technical session хранится через Android Keystore AES‑GCM envelope v2; SharedPreferences содержат только version/IV/ciphertext. Access/refresh нужны исключительно как защита платных `/api/android` моделей и не являются пользовательской авторизацией. HTTP boundary допускает HTTPS, debug HTTP только loopback, не следует redirect, ограничивает response 64 KiB и строго проверяет UUID/session JSON.
 - `core/network` содержит session-protected Android feature client и typed `/api/android` DTO. Feature transport запрещает redirect/cache, ограничивает body, строго проверяет UTF-8/JSON/enum/timestamps/job IDs/media origin и redacts secrets. Refresh single-flight защищён Mutex только вокруг encrypted session re-read/refresh/persist; feature network request выполняется вне lock, а доказанный 401 повторяет тот же serialized request максимум один раз.
-- `core/database` Room 2.8.4 — один clean schema v1 для ещё не выпущенного MVP. Он хранит локально owner-scoped pet snapshot с typed generated media/character bible, pending Create/Outfit/Travel, ready media и receipts. Runtime migration graph и destructive fallback отсутствуют. Во всех primary/index keys первым scope является стабильный anonymous `accountId`; Android Backup отключён, поэтому удаление приложения удаляет прогресс, а переноса между устройствами нет.
+- `core/database` Room 2.8.4 использует schema v2 и явную migration 1→2 без destructive fallback. Помимо owner-scoped pet/pending/media/receipts он хранит chat history, user memories, pending learnings, memory state и proactive notification queue. Во всех primary/index keys первым scope является стабильный anonymous `accountId`; Android Backup отключён, поэтому удаление приложения удаляет прогресс, а переноса между устройствами нет.
+- Android chat повторяет Telegram memory pipeline без Character Bible: до reply выполняются deterministic fact extraction/forget, relevance recall и передача последних 12 сообщений; после reply асинхронно запускаются LLM extraction и периодическая consolidation. WorkManager выбирает неупомянутые due-факты или недавний эпизод не чаще раза в локальные сутки, получает proactive reply через session-protected Android endpoint и атомарно кладёт его в durable local notification queue.
 - `PetLocalRepository` — единственная публичная write boundary: валидирует bounds, атомарно списывает ровно 200 XP вместе с Outfit pending и атомарно применяет clamped Story deltas вместе с receipt. Повторные request/receipt keys не списывают и не начисляют повторно; backend job attach допускает только `null → id` или тот же id.
 - Replay Outfit после atomic apply блокируется applied receipt до повторного debit/insert. Replay Travel после durable ready/consumption блокируется сохранённым owner+pet+request asset в `DashboardDurableOperations`, поэтому завершённый request не создаёт новый pending и не вызывает provider повторно.
 - Room schema экспортируется только в `app/schemas/com.gigagochi.app.core.database.GigagochiDatabase/1.json`; destructive migration не включена. Technical session/access/refresh и installation UUID в Room entities отсутствуют. Character bible валидируется как JSON object и ограничен authoritative 262144 UTF-8 bytes/depth/nodes.
@@ -48,3 +53,40 @@
   Outfit/Travel recovery poll/apply, then emits one-channel local notifications. Room v1 dedupe is
   three nullable `notifiedAt` fields on existing completed rows; stable Android notification IDs
   replace a prior post if the process dies before the durable mark. Create is never background work.
+  Scheduled-story delivery is therefore best-effort local notification, not server FCM. Event
+  chronology has no backend list/backfill endpoint: it remains durable across normal app restarts,
+  but clearing app data, reinstalling, or moving to another device loses older local history.
+- `feature/events` merges the owner+pet `scheduled_stories` and consumed `travel_video_assets` Room
+  flows into one newest-first in-app chronology. Dashboard badge remains the live unanswered-story
+  count; `Помочь` reuses `ScheduledStoryRoute`. Travel cards keep the generated 9:16 ratio and share
+  a securely cached MP4 through Android `FileProvider`/`ACTION_SEND`. Travel-ready notifications carry
+  the durable request key; cold and singleTop warm launches open Events and scroll to that card.
+  Event cards reuse the shared lifecycle-aware story media player, but only the card nearest the
+  viewport center owns ExoPlayer.
+- Все не-idle dashboard modes, экран событий, интерактивная история и custom-ввод Create используют один
+  `ContextualGlassNavigation.Back`; отдельного close/cross action больше нет. Debug Apple fixture
+  seed'ит в Room одну активную историю из банка задач, а активный выбор резолвится debug-only
+  service wrapper через обычный receipt/XP pipeline без backend-вызова; проверка новых server stories
+  при этом делегируется production service. Scheduled story публикуется backend'ом только с полным
+  комплектом situation image/video и четырёх пар outcome image/video. Story media начинается
+  после safe-area app bar, а tilted story actions используют общий create/onboarding foreground
+  `#05152C`. Общий design-system gap между нижней границей contextual app bar и первым контентом —
+  `ContextualAppBarContentGap = 18.dp`; новые экраны не задают этот отступ локальным числом.
+- `feature/onboarding` содержит pure first-session contract/copy. Единственный durable source of truth —
+  owner+pet row `first_sessions` плюс action receipts; `PetDashboardState`/`pet_snapshots` не дублируют
+  active-флаг. Создание pet+initial stage, scripted food mutations, bat XP receipt и outfit attach-stage
+  выполняются Room-транзакциями; обычный pet без row никогда не входит в onboarding.
+  После лечебной еды инструкция всегда состоит из двух явных UI-порций: первая заканчивается
+  просьбой помогать питомцу, вторая начинается с обнаружения летучей мыши. Между ними используется
+  onboarding-specific auto-advance 5.5 секунды; общий splitter не определяет эту смысловую границу.
+- Глобальное локальное debug-меню реализовано через variant-specific `debugmenu`: функциональный
+  `src/debug` host накладывается поверх корневого route и поэтому доступен с любого экрана, а
+  `src/release` содержит только no-op host/wrappers. Сгенерированный Человек-Яблоко хранится как
+  второй Room pet snapshot; debug preference выбирает его при startup, не удаляя сохранённого pet.
+  Stateful onboarding toggle атомарно либо перематывает durable first-session stage с очисткой
+  action receipts, либо удаляет session и receipts, возвращая обычный Dashboard. Выключенное
+  состояние сохраняется после process restart.
+- `GigagochiTheme` владеет единым `ButtonPressAudio` и отдаёт feedback через
+  `LocalButtonPressFeedback`; design-system navigation и dashboard controls используют исходный
+  web `button-press.wav`. Dashboard speech reveal отдельно владеет четырьмя web speech samples и
+  проигрывает неповторяющуюся последовательность с шагом 48±6 мс на время анимации символов.

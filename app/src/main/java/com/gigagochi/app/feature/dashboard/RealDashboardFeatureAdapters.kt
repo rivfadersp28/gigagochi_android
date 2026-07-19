@@ -5,6 +5,7 @@ import com.gigagochi.app.core.database.FeatureMediaOutcomeStore
 import com.gigagochi.app.core.database.LocalOutfitMediaOutcome
 import com.gigagochi.app.core.database.LocalPendingOutfit
 import com.gigagochi.app.core.database.LocalPendingTravelVideo
+import com.gigagochi.app.core.database.PetLocalRepository
 import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.OwnerRecoveryStore
 import com.gigagochi.app.core.database.PendingBackendState
@@ -17,6 +18,8 @@ import com.gigagochi.app.core.network.FeatureFailure
 import com.gigagochi.app.core.network.FeatureFailureKind
 import com.gigagochi.app.core.network.GenerationEnvelopeDto
 import com.gigagochi.app.core.network.GenerationJobStatusDto
+import com.gigagochi.app.core.network.MemoryExtractionRequestDto
+import com.gigagochi.app.core.network.MemoryConsolidationRequestDto
 import com.gigagochi.app.core.network.OutfitJobRequestDto
 import com.gigagochi.app.core.network.OutfitSimplifyRequestDto
 import com.gigagochi.app.core.network.TravelVideoRequestDto
@@ -24,20 +27,131 @@ import com.gigagochi.app.core.network.TravelVideoStatusDto
 import com.gigagochi.app.core.network.toFeaturePetDto
 import com.gigagochi.app.feature.create.FeatureAdapterException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.collectLatest
+import java.time.Instant
+import java.time.ZoneId
+import java.util.UUID
 
 class RealDashboardChatAdapter(
     private val api: AndroidFeatureService,
+    private val ownerId: String,
+    private val repository: PetLocalRepository,
+    private val postReplyScope: CoroutineScope,
 ) : DashboardChatAdapter {
-    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String =
-        when (val result = api.chat(ChatRequestDto(request.requestKey, request.message, pet.toFeaturePetDto()))) {
-            is FeatureApiResult.Success -> result.value.reply.takeIf { it.isNotBlank() }
-                ?: throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
+    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String {
+        val now = System.currentTimeMillis()
+        val priorHistory = repository.recentChatMessages(ownerId, pet.petId, 200)
+        val deterministic = extractDeterministicMemory(request.message, now)
+        deterministic.forgetKey?.let {
+            repository.forgetMemory(ownerId, pet.petId, normalizedKey = it)
+        }
+        deterministic.forgetText?.let {
+            repository.forgetMemory(ownerId, pet.petId, matchText = it)
+        }
+        repository.rememberDeterministicFacts(ownerId, pet.petId, deterministic.facts, now)
+        val memory = repository.memoryState(ownerId, pet.petId)
+        val memoryContext = buildChatMemoryContext(memory, priorHistory, request.message, now)
+        val userMessage = newChatMessage("user", request.message, now)
+        return when (
+            val result = api.chat(
+                ChatRequestDto(
+                    request.requestKey,
+                    request.message,
+                    pet.toFeaturePetDto(),
+                    priorHistory.takeLast(12).map {
+                        com.gigagochi.app.core.network.ChatHistoryItemDto(
+                            it.role,
+                            it.text,
+                            Instant.ofEpochMilli(it.createdAtEpochMillis).toString(),
+                        )
+                    },
+                    memoryContext,
+                    Instant.ofEpochMilli(now).toString(),
+                    ZoneId.systemDefault().id,
+                ),
+            )
+        ) {
+            is FeatureApiResult.Success -> {
+                val reply = result.value.reply.takeIf { it.isNotBlank() }
+                    ?: throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
+                val assistantMessage = newChatMessage("pet", reply, System.currentTimeMillis())
+                repository.appendChatMessages(
+                    ownerId,
+                    pet.petId,
+                    listOf(userMessage, assistantMessage),
+                )
+                repository.markMemoriesMentioned(
+                    ownerId,
+                    pet.petId,
+                    memoryContext.relevantMemories.mapTo(mutableSetOf()) { it.id },
+                    System.currentTimeMillis(),
+                )
+                postReplyScope.launch {
+                    val extraction = api.extractMemory(
+                        MemoryExtractionRequestDto(
+                            requestKey = UUID.randomUUID().toString(),
+                            message = request.message,
+                            reply = reply,
+                            pet = pet.toFeaturePetDto(),
+                            history = priorHistory.takeLast(12).map {
+                                com.gigagochi.app.core.network.ChatHistoryItemDto(
+                                    it.role,
+                                    it.text,
+                                    Instant.ofEpochMilli(it.createdAtEpochMillis).toString(),
+                                )
+                            },
+                            memoryContext = memoryContext,
+                            nowIso = Instant.now().toString(),
+                            timezone = ZoneId.systemDefault().id,
+                            existingMemoryBrief = existingMemoryBrief(memory),
+                        ),
+                    )
+                    if (extraction is FeatureApiResult.Success) {
+                        repository.applyMemoryOperations(
+                            ownerId,
+                            pet.petId,
+                            extraction.value.operations,
+                            System.currentTimeMillis(),
+                        )
+                        val updatedMemory = repository.memoryState(ownerId, pet.petId)
+                        val shouldConsolidate = updatedMemory.learnings.any { it.status == "pending" } &&
+                            (updatedMemory.lastConsolidationAtEpochMillis == null ||
+                                System.currentTimeMillis() - updatedMemory.lastConsolidationAtEpochMillis >=
+                                86_400_000L)
+                        if (shouldConsolidate) {
+                            val consolidation = api.consolidateMemory(
+                                MemoryConsolidationRequestDto(
+                                    requestKey = UUID.randomUUID().toString(),
+                                    pendingLearnings = pendingLearningPayloads(updatedMemory),
+                                    existingMemories = existingMemoryPayloads(updatedMemory),
+                                    summary = updatedMemory.summary,
+                                    userProfile = updatedMemory.userProfile,
+                                    nowIso = Instant.now().toString(),
+                                    timezone = ZoneId.systemDefault().id,
+                                ),
+                            )
+                            if (consolidation is FeatureApiResult.Success) {
+                                repository.applyMemoryOperations(
+                                    ownerId,
+                                    pet.petId,
+                                    consolidation.value.operations,
+                                    System.currentTimeMillis(),
+                                    isConsolidation = true,
+                                )
+                            }
+                        }
+                    }
+                }
+                reply
+            }
             is FeatureApiResult.Failure -> throw FeatureAdapterException(result.failure)
         }
+    }
 }
 
 class DeterministicLocalDashboardFeedAdapter : DashboardFeedAdapter {

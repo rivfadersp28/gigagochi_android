@@ -1,8 +1,5 @@
 package com.gigagochi.app.feature.travel
 
-import android.net.Uri
-import android.view.LayoutInflater
-import androidx.annotation.OptIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -40,14 +37,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -65,8 +60,6 @@ import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -85,20 +78,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
-import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
 import com.gigagochi.app.core.designsystem.GigagochiTheme
+import com.gigagochi.app.core.designsystem.ContextualAppBarContentGap
+import com.gigagochi.app.core.designsystem.ContextualAppBarEdgePadding
 import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
+import com.gigagochi.app.core.designsystem.ContextualNavigationMinimumTouchTarget
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import dev.chrisbanes.haze.HazeState
@@ -223,7 +208,10 @@ fun InteractiveTravelStoryScreen(
                             WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
                         ),
                     )
-                    .padding(start = 16.dp, top = 16.dp),
+                    .padding(
+                        start = ContextualAppBarEdgePadding,
+                        top = ContextualAppBarEdgePadding,
+                    ),
             )
         }
     }
@@ -290,7 +278,13 @@ private fun StoryScrollableContent(
                     Modifier.clearAndSetSemantics { }
                 },
             )
-            .padding(top = 66.dp),
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+            )
+            .padding(
+                top = ContextualAppBarEdgePadding +
+                    ContextualNavigationMinimumTouchTarget + ContextualAppBarContentGap,
+            ),
     ) {
         StoryMediaFrame(
             poster = if (result == null) {
@@ -645,7 +639,7 @@ private fun StoryTiltedGlassButton(
     ) {
         Text(
             text = label,
-            color = Color(0xFF243A58),
+            color = Color(0xFF05152C),
             fontFamily = OpenRundeFontFamily,
             fontSize = 23.sp,
             fontWeight = FontWeight.Bold,
@@ -657,7 +651,6 @@ private fun StoryTiltedGlassButton(
     }
 }
 
-@OptIn(UnstableApi::class)
 @Composable
 private fun StoryMediaFrame(
     poster: Int,
@@ -668,117 +661,19 @@ private fun StoryMediaFrame(
     reducedMotion: Boolean,
     forcePoster: Boolean,
 ) {
-    val shape = RoundedCornerShape(20.dp)
-    Box(
+    LoopingStoryMedia(
+        fallbackPoster = poster,
+        remotePosterUrl = remotePosterUrl,
+        remoteVideoUrl = remoteVideoUrl,
+        mediaUrlPolicy = mediaUrlPolicy,
+        reducedMotion = reducedMotion,
+        forcePoster = forcePoster,
+        playVideo = true,
+        localVideoAsset = videoAsset,
         modifier = Modifier
             .requiredSize(382.dp, 461.dp)
-            .clip(shape)
-            .background(Color(0xFF242424)),
-    ) {
-        if (LocalInspectionMode.current || reducedMotion) {
-            com.gigagochi.app.feature.dashboard.RemoteOrFixturePoster(
-                posterUrl = remotePosterUrl,
-                urlPolicy = mediaUrlPolicy,
-                retryToken = 0,
-                onFailure = {},
-                fallbackDrawable = poster,
-                modifier = Modifier.fillMaxSize(),
-            )
-            return@Box
-        }
-
-        val context = LocalContext.current.applicationContext
-        val lifecycle = LocalLifecycleOwner.current.lifecycle
-        val mediaKey = remoteVideoUrl ?: videoAsset
-        var showPoster by remember(mediaKey) { mutableStateOf(true) }
-        val currentForcePoster by rememberUpdatedState(forcePoster)
-        var lifecycleStarted by remember(lifecycle) {
-            mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
-        }
-        val usesRemoteDataSource = remoteVideoUrl != null && mediaUrlPolicy != null
-        val player = remember(context, usesRemoteDataSource, lifecycleStarted) {
-            if (!lifecycleStarted) return@remember null
-            TravelStoryMediaTestProbe.recordPlayerCreation()
-            val builder = if (usesRemoteDataSource) {
-                ExoPlayer.Builder(context).setMediaSourceFactory(
-                    androidx.media3.exoplayer.source.DefaultMediaSourceFactory(
-                        com.gigagochi.app.core.network.SecureStaticMediaDataSource.Factory(mediaUrlPolicy),
-                    ),
-                )
-            } else ExoPlayer.Builder(context)
-            builder.build().apply {
-                volume = 0f
-                repeatMode = Player.REPEAT_MODE_ONE
-            }
-        }
-
-        LaunchedEffect(player, mediaKey, lifecycleStarted) {
-            if (player == null) return@LaunchedEffect
-            showPoster = true
-            player.setMediaItem(MediaItem.fromUri(Uri.parse(remoteVideoUrl ?: "asset:///$videoAsset")))
-            player.prepare()
-            player.playWhenReady = lifecycleStarted
-        }
-
-        DisposableEffect(player, lifecycle) {
-            if (player == null) return@DisposableEffect onDispose {}
-            val listener = object : Player.Listener {
-                override fun onRenderedFirstFrame() {
-                    if (!currentForcePoster) showPoster = false
-                }
-
-                override fun onPlayerError(error: PlaybackException) {
-                    showPoster = true
-                }
-            }
-            val observer = LifecycleEventObserver { _, event ->
-                lifecycleStarted = lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                when (event) {
-                    Lifecycle.Event.ON_START -> player.play()
-                    Lifecycle.Event.ON_STOP -> player.pause()
-                    else -> Unit
-                }
-            }
-            player.addListener(listener)
-            lifecycle.addObserver(observer)
-            onDispose {
-                lifecycle.removeObserver(observer)
-                player.removeListener(listener)
-                player.release()
-            }
-        }
-
-        AndroidView(
-            factory = { viewContext ->
-                (LayoutInflater.from(viewContext)
-                    .inflate(R.layout.view_travel_player, null, false) as PlayerView).apply {
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
-                    setKeepContentOnPlayerReset(true)
-                    this.player = player
-                }
-            },
-            update = { it.player = player },
-            onRelease = { it.player = null },
-            modifier = Modifier.fillMaxSize(),
-        )
-        val posterAlpha by animateFloatAsState(
-            targetValue = if (showPoster || forcePoster) 1f else 0f,
-            animationSpec = tween(180),
-            label = "travel-story-poster-crossfade",
-        )
-        com.gigagochi.app.feature.dashboard.RemoteOrFixturePoster(
-            posterUrl = remotePosterUrl,
-            urlPolicy = mediaUrlPolicy,
-            retryToken = 0,
-            onFailure = { showPoster = true },
-            fallbackDrawable = poster,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = posterAlpha },
-        )
-    }
+            .clip(RoundedCornerShape(20.dp)),
+    )
 }
 
 @Composable

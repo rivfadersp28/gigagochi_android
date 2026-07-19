@@ -6,6 +6,39 @@ import com.gigagochi.app.core.model.ScheduledStory
 
 const val OutfitAcceptanceCost = 200
 
+enum class FirstSessionStage(val storageValue: String) {
+    AwaitingChat("awaiting-chat"),
+    AwaitingChatFollowup("awaiting-chat-followup"),
+    AwaitingFirstFood("awaiting-first-food"),
+    AwaitingRemedy("awaiting-remedy"),
+    AwaitingTravel("awaiting-travel"),
+    ConfirmingTravel("confirming-travel"),
+    AwaitingCompletionMessage("awaiting-completion-message"),
+    Completed("completed");
+
+    companion object {
+        fun fromStorage(value: String): FirstSessionStage = entries.single {
+            it.storageValue == value
+        }
+    }
+}
+
+data class LocalFirstSession(
+    val ownerId: String,
+    val petId: String,
+    val stage: FirstSessionStage,
+    val selectedDestination: String? = null,
+    val lastActionKey: String? = null,
+    val updatedAtEpochMillis: Long,
+)
+
+sealed interface FirstSessionMutationResult {
+    data class Applied(val session: LocalFirstSession, val pet: PetDashboardState) : FirstSessionMutationResult
+    data class AlreadyApplied(val session: LocalFirstSession, val pet: PetDashboardState) : FirstSessionMutationResult
+    data object WrongStage : FirstSessionMutationResult
+    data object Missing : FirstSessionMutationResult
+}
+
 data class LocalScheduledStory(
     val ownerId: String,
     val story: ScheduledStory,
@@ -73,6 +106,7 @@ interface FeatureMediaOutcomeStore {
 
 interface ScheduledStoryStore {
     suspend fun saveScheduledStory(story: LocalScheduledStory): Boolean
+    suspend fun deleteScheduledStory(ownerId: String, storyId: String): Boolean
     suspend fun getScheduledStory(ownerId: String, storyId: String): LocalScheduledStory?
     suspend fun getScheduledStories(ownerId: String, petId: String): List<LocalScheduledStory>
     suspend fun claimScheduledStoryChoice(
@@ -142,7 +176,7 @@ data class LocalTravelVideoAsset(
     val notifiedAtEpochMillis: Long? = null,
 )
 
-enum class LocalNotificationKind { ScheduledStory, OutfitReady, TravelReady }
+enum class LocalNotificationKind { ScheduledStory, OutfitReady, TravelReady, Proactive }
 
 data class LocalCompletionNotification(
     val kind: LocalNotificationKind,
@@ -150,6 +184,7 @@ data class LocalCompletionNotification(
     val title: String,
     val body: String,
     val storyId: String? = null,
+    val travelRequestKey: String? = null,
 )
 
 data class LocalOutfitMediaOutcome(

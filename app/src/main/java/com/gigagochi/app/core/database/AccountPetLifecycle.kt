@@ -13,6 +13,7 @@ sealed interface AccountStartupDestination {
         val pendingTravel: LocalPendingTravelVideo?,
         val storyReceipts: List<InteractiveStoryReceipt>,
         val travelPresentation: LocalTravelVideoAsset? = null,
+        val firstSession: LocalFirstSession? = null,
     ) : AccountStartupDestination
     data object Failure : AccountStartupDestination
 }
@@ -21,9 +22,14 @@ class AccountPetLifecycle(
     private val store: OwnerRecoveryStore,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) {
-    suspend fun startup(ownerId: String): AccountStartupDestination = try {
+    suspend fun startup(
+        ownerId: String,
+        preferredPetId: String? = null,
+    ): AccountStartupDestination = try {
         val recovery = store.loadOwnerRecovery(ownerId)
-        val latest = recovery.petSnapshots.maxByOrNull { it.updatedAtEpochMillis }
+        val latest = preferredPetId?.let { preferred ->
+            recovery.petSnapshots.singleOrNull { it.pet.petId == preferred }
+        } ?: recovery.petSnapshots.maxByOrNull { it.updatedAtEpochMillis }
         latest?.let { snapshot ->
             AccountStartupDestination.Dashboard(
                 pet = snapshot.pet,
@@ -43,6 +49,9 @@ class AccountPetLifecycle(
                     .filter { it.petId == snapshot.pet.petId && it.consumedAtEpochMillis != null }
                     .maxByOrNull { it.consumedAtEpochMillis ?: Long.MIN_VALUE },
                 storyReceipts = recovery.storyReceipts.filter {
+                    it.petId == snapshot.pet.petId
+                },
+                firstSession = recovery.firstSessions.singleOrNull {
                     it.petId == snapshot.pet.petId
                 },
             )

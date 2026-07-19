@@ -12,9 +12,35 @@ import androidx.work.NetworkType
 
 class AppRouteTest {
     @Test
+    fun routeDepthDefinesForwardAndBackSharedAxisDirection() {
+        assertEquals(true, isForwardAppRouteTransition(AppRoute.Dashboard, AppRoute.Events))
+        assertEquals(true, isForwardAppRouteTransition(AppRoute.Events, AppRoute.Story))
+        assertEquals(false, isForwardAppRouteTransition(AppRoute.Events, AppRoute.Dashboard))
+        assertEquals(false, isForwardAppRouteTransition(AppRoute.Story, AppRoute.Dashboard))
+        assertEquals(0, appRouteDepth(AppRoute.Dashboard))
+        assertEquals(1, appRouteDepth(AppRoute.Events))
+        assertEquals(2, appRouteDepth(AppRoute.Story))
+    }
+
+    @Test
+    fun dashboardChildrenShareOnePersistentRootStack() {
+        assertEquals(true, isDashboardStackRoute(AppRoute.Dashboard))
+        assertEquals(true, isDashboardStackRoute(AppRoute.Events))
+        assertEquals(true, isDashboardStackRoute(AppRoute.Travel))
+        assertEquals(true, isDashboardStackRoute(AppRoute.Story))
+        assertEquals(false, isDashboardStackRoute(AppRoute.Create))
+        assertEquals(false, isDashboardStackRoute(AppRoute.ConnectionError))
+        assertEquals(false, isDashboardStackRoute(null))
+    }
+
+    @Test
     fun contextualNavigationMatchesRouteSemanticsWithoutDecorativeForward() {
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.Create))
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.Dashboard))
+        assertEquals(
+            ContextualNavigationAction.Back,
+            contextualNavigationForAppRoute(AppRoute.Events),
+        )
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.ConnectionError))
         assertEquals(null, contextualNavigationForAppRoute(AppRoute.LocalDataError))
         assertEquals(
@@ -22,7 +48,7 @@ class AppRouteTest {
             contextualNavigationForAppRoute(AppRoute.Travel),
         )
         assertEquals(
-            ContextualNavigationAction.Close,
+            ContextualNavigationAction.Back,
             contextualNavigationForAppRoute(AppRoute.Story),
         )
     }
@@ -32,7 +58,7 @@ class AppRouteTest {
         val destination = AccountStartupDestination.Dashboard(
             pet = PetDashboardState(
                 "pet", "assets", "лис", "Тото", "baby", "Малыш", "idle",
-                0, 100, 100, 100, "Привет", false,
+                0, 100, 100, 100, "Привет",
             ),
             pendingOutfit = null,
             pendingTravel = null,
@@ -104,7 +130,7 @@ class AppRouteTest {
         val dashboard = AccountStartupDestination.Dashboard(
             PetDashboardState(
                 "pet", "asset", "лис", "Тото", "baby", "Малыш", "idle",
-                0, 100, 100, 100, "", false,
+                0, 100, 100, 100, "",
             ),
             null,
             null,

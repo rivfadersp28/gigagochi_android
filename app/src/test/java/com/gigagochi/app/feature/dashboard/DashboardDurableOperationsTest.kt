@@ -17,7 +17,7 @@ import org.junit.Test
 
 class DashboardDurableOperationsTest {
     @Test
-    fun failedOutfitQueueThenReopenDoesNotDebitOrQueueTwice() = runBlocking {
+    fun failedOutfitQueueThenReopenRetriesSamePendingWithoutSecondDebit() = runBlocking {
         val store = Store(pet(experience = 500))
         var queueCalls = 0
         val adapter = object : DashboardOutfitAdapter {
@@ -26,7 +26,18 @@ class DashboardDurableOperationsTest {
                 pet: PetDashboardState,
             ): PendingOutfitGeneration {
                 queueCalls += 1
-                error("network")
+                if (queueCalls == 1) error("network")
+                assertEquals("request-1", request.requestKey)
+                assertEquals("В футболку Metallica", request.prompt)
+                return PendingOutfitGeneration(
+                    petId = pet.petId,
+                    requestKey = request.requestKey,
+                    prompt = request.prompt,
+                    displayItem = "Футболка Metallica",
+                    localJobId = "outfit-${request.requestKey}",
+                    backendJobId = "backend-1",
+                    createdAtEpochMillis = 10,
+                )
             }
         }
         val firstCoordinator = DashboardDurableOperations(
@@ -39,10 +50,11 @@ class DashboardDurableOperationsTest {
         val restarted = DashboardDurableOperations(
             "owner-a", store, adapter, UnavailableDashboardTravelAdapter(), nowEpochMillis = { 20 },
         )
-        assertTrue(restarted.acceptOutfit(PendingOutfitRequest("request-2", "Другой"), store.pet) is DurableOutfitResult.PersistedButQueueFailed)
+        assertTrue(restarted.acceptOutfit(PendingOutfitRequest("request-2", "Другой"), store.pet) is DurableOutfitResult.Queued)
         assertEquals(300, store.pet.experience)
         assertEquals(1, store.outfits.size)
-        assertEquals(1, queueCalls)
+        assertEquals("backend-1", store.outfits.single().backendJobId)
+        assertEquals(2, queueCalls)
     }
 
     @Test
@@ -69,6 +81,36 @@ class DashboardDurableOperationsTest {
         assertTrue(coordinator.acceptTravel(PendingTravelRequest("travel-2", "Марс"), store.pet) is DurableTravelResult.PersistedButQueueFailed)
         assertEquals(1, store.travels.size)
         assertEquals(0, queueCalls)
+    }
+
+    @Test
+    fun outcomeUnknownOutfitIsNeverRedispatched() = runBlocking {
+        val store = Store(pet(experience = 300)).apply {
+            outfits += LocalPendingOutfit(
+                "owner-a", pet.petId, "outfit-ambiguous", "local-ambiguous", null,
+                "Плащ", pet.assetSetId, 5,
+                backendState = PendingBackendState.OutcomeUnknown,
+                backendErrorCode = "SUBMIT_UNKNOWN",
+            )
+        }
+        var queueCalls = 0
+        val adapter = object : DashboardOutfitAdapter {
+            override suspend fun queue(
+                request: PendingOutfitRequest,
+                pet: PetDashboardState,
+            ): PendingOutfitGeneration {
+                queueCalls += 1
+                error("ambiguous submit must not repeat")
+            }
+        }
+
+        val result = DashboardDurableOperations(
+            "owner-a", store, adapter, UnavailableDashboardTravelAdapter(),
+        ).acceptOutfit(PendingOutfitRequest("new-key", "Другой плащ"), store.pet)
+
+        assertTrue(result is DurableOutfitResult.PersistedButQueueFailed)
+        assertEquals(0, queueCalls)
+        assertEquals(300, store.pet.experience)
     }
 
     @Test
@@ -212,6 +254,23 @@ class DashboardDurableOperationsTest {
             pet = pet.copy(experience = pet.experience - 200)
             return OutfitAcceptanceResult.Applied
         }
+        override suspend fun attachOutfitBackendJob(
+            ownerId: String,
+            requestKey: String,
+            backendJobId: String,
+        ): com.gigagochi.app.core.database.BackendJobAttachmentResult {
+            val index = outfits.indexOfFirst { it.ownerId == ownerId && it.requestKey == requestKey }
+            if (index < 0) return com.gigagochi.app.core.database.BackendJobAttachmentResult.PendingMissing
+            val current = outfits[index]
+            if (current.backendJobId != null && current.backendJobId != backendJobId) {
+                return com.gigagochi.app.core.database.BackendJobAttachmentResult.Conflict
+            }
+            if (current.backendJobId == backendJobId) {
+                return com.gigagochi.app.core.database.BackendJobAttachmentResult.AlreadyAttached
+            }
+            outfits[index] = current.copy(backendJobId = backendJobId)
+            return com.gigagochi.app.core.database.BackendJobAttachmentResult.Attached
+        }
         override suspend fun savePendingTravel(pending: LocalPendingTravelVideo): IdempotentInsertResult {
             if (travels.any { it.requestKey == pending.requestKey }) return IdempotentInsertResult.AlreadyPresent
             travels += pending
@@ -221,6 +280,6 @@ class DashboardDurableOperationsTest {
 
     private fun pet(experience: Int = 500) = PetDashboardState(
         "pet-a", "assets-a", "Ледяной дракон", "Тото", "baby", "Малыш", "idle",
-        experience, 100, 100, 100, "Привет", false,
+        experience, 100, 100, 100, "Привет",
     )
 }

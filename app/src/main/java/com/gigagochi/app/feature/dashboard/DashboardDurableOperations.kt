@@ -50,11 +50,37 @@ class DashboardDurableOperations(
                 val persistedPet = existingRecovery.petSnapshots.firstOrNull {
                     it.pet.petId == pet.petId
                 }?.pet ?: return DurableOutfitResult.Failure
-                return if (existing.backendJobId != null) {
-                    DurableOutfitResult.Queued(existing.toUi(), persistedPet)
-                } else {
-                    DurableOutfitResult.PersistedButQueueFailed(existing.toUi(), persistedPet)
+                if (existing.backendJobId != null) {
+                    return DurableOutfitResult.Queued(existing.toUi(), persistedPet)
                 }
+                if (existing.backendState !in setOf(
+                        PendingBackendState.Pending,
+                        PendingBackendState.Retryable,
+                    )
+                ) {
+                    return DurableOutfitResult.PersistedButQueueFailed(existing.toUi(), persistedPet)
+                }
+                if (!outfitAdapter.isAvailable) return DurableOutfitResult.Unavailable
+                val retryRequest = PendingOutfitRequest(existing.requestKey, existing.prompt)
+                val queued = try {
+                    outfitAdapter.queue(retryRequest, persistedPet)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    return DurableOutfitResult.PersistedButQueueFailed(existing.toUi(), persistedPet)
+                }
+                queued.backendJobId?.let { backendId ->
+                    when (store.attachOutfitBackendJob(ownerId, existing.requestKey, backendId)) {
+                        BackendJobAttachmentResult.Conflict,
+                        BackendJobAttachmentResult.PendingMissing,
+                        -> return DurableOutfitResult.Failure
+                        else -> Unit
+                    }
+                }
+                return DurableOutfitResult.Queued(
+                    existing.copy(backendJobId = queued.backendJobId).toUi(queued.displayItem),
+                    persistedPet,
+                )
             }
             if (!outfitAdapter.isAvailable) return DurableOutfitResult.Unavailable
             val local = LocalPendingOutfit(

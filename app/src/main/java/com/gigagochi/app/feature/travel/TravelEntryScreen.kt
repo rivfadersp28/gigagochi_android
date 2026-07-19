@@ -155,6 +155,8 @@ fun TravelEntryRoute(
     debugState: TravelDebugState? = null,
     initialPet: TravelEntryPet = DemoTravelPet,
     initialAppliedTravelIds: Set<String> = emptySet(),
+    initialStory: InteractiveTravelStory? = null,
+    initialStoryResult: InteractiveTravelStoryResult? = null,
     receiptCoordinator: StoryReceiptCoordinator? = null,
     initialSuggestionsRequestKey: String? = null,
     resultConsumptionAdapter: TravelResultConsumptionAdapter = ImmediateTravelResultConsumptionAdapter,
@@ -178,6 +180,16 @@ fun TravelEntryRoute(
     var state by remember(debugState, initialPet, initialAppliedTravelIds) {
         val initial = when {
             debugState != null -> travelDebugFixture(debugState, initialPet)
+            initialStory != null -> TravelEntryState(
+                pet = initialPet,
+                phase = if (initialStoryResult == null) {
+                    TravelEntryPhase.StoryQuestion
+                } else TravelEntryPhase.StoryResult,
+                story = initialStory,
+                storyResult = initialStoryResult,
+                appliedStoryTravelIds = if (initialStoryResult == null) emptySet()
+                    else setOf(initialStory.travelId),
+            )
             else -> initialTravelEntryState(
                 initialPet,
                 initialSuggestionsRequestKey

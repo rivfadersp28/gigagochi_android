@@ -3,7 +3,12 @@ package com.gigagochi.app.core.designsystem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -14,6 +19,10 @@ val OpenRundeFontFamily = FontFamily(
     Font(R.font.open_runde_medium, FontWeight.Medium),
     Font(R.font.open_runde_semibold, FontWeight.SemiBold),
     Font(R.font.open_runde_bold, FontWeight.Bold),
+)
+
+val SbSansDisplayFontFamily = FontFamily(
+    Font(R.font.sb_sans_display_bold, FontWeight.Bold),
 )
 
 private val GigagochiColors = lightColorScheme(
@@ -27,5 +36,21 @@ private val GigagochiColors = lightColorScheme(
 
 @Composable
 fun GigagochiTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = GigagochiColors, content = content)
+    val context = LocalContext.current
+    val inspectionMode = LocalInspectionMode.current
+    val audio = remember(context, inspectionMode) {
+        if (inspectionMode) null else ButtonPressAudio(context.applicationContext)
+    }
+    val feedback = remember(audio) {
+        {
+            audio?.play()
+            Unit
+        }
+    }
+    DisposableEffect(audio) {
+        onDispose { audio?.release() }
+    }
+    CompositionLocalProvider(LocalButtonPressFeedback provides feedback) {
+        MaterialTheme(colorScheme = GigagochiColors, content = content)
+    }
 }

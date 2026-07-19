@@ -10,6 +10,7 @@ import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import androidx.annotation.OptIn
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -26,6 +27,8 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -34,8 +37,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -106,6 +112,9 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.gigagochi.app.R
+import com.gigagochi.app.core.designsystem.ContextualAppBarEdgePadding
+import com.gigagochi.app.core.designsystem.ContextualGlassNavigation
+import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.designsystem.GigagochiTheme
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import com.gigagochi.app.core.model.PetDashboardState
@@ -280,6 +289,10 @@ fun CreatePetRoute(
             customShouldRequestIme = true
         },
         onCustomValueChange = { state = state.updateCustomValue(it) },
+        onCloseCustom = {
+            state = state.closeCustomInput()
+            customShouldRequestIme = false
+        },
         onSubmitCustom = {
             trustedAction()
             audioFeedback.playButtonSound()
@@ -313,11 +326,13 @@ fun CreatePetScreen(
     onAnswer: (String) -> Unit,
     onOpenCustom: () -> Unit,
     onCustomValueChange: (String) -> Unit,
+    onCloseCustom: () -> Unit,
     onSubmitCustom: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val hazeState = rememberHazeState()
+    BackHandler(enabled = state.isCustomInputOpen, onBack = onCloseCustom)
     Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.TopCenter) {
         CreationReferenceFrame {
             Box(
@@ -361,12 +376,31 @@ fun CreatePetScreen(
 
                 else -> QuestionContent(
                     question = requireNotNull(state.question),
+                    questionStep = state.step,
                     hazeState = hazeState,
                     reducedMotion = reducedMotion,
                     onAnswer = onAnswer,
                     onOpenCustom = onOpenCustom,
                 )
             }
+        }
+        if (state.isCustomInputOpen) {
+            ContextualGlassNavigation(
+                action = ContextualNavigationAction.Back,
+                onClick = onCloseCustom,
+                hazeState = hazeState,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                        ),
+                    )
+                    .padding(
+                        start = ContextualAppBarEdgePadding,
+                        top = ContextualAppBarEdgePadding,
+                    ),
+            )
         }
     }
 }
@@ -392,6 +426,7 @@ private fun CreationReferenceFrame(content: @Composable BoxScope.() -> Unit) {
 @Composable
 private fun QuestionContent(
     question: CreationQuestion,
+    questionStep: Int,
     hazeState: HazeState,
     reducedMotion: Boolean,
     onAnswer: (String) -> Unit,
@@ -436,6 +471,7 @@ private fun QuestionContent(
                 label = option,
                 index = index,
                 delayMillis = index * 80,
+                entranceKey = "$questionStep:$option",
                 hazeState = hazeState,
                 reducedMotion = reducedMotion,
                 onClick = if (index == question.options.size) onOpenCustom else ({ onAnswer(option) }),
@@ -689,12 +725,13 @@ private fun TiltedGlassButton(
     reducedMotion: Boolean,
     onClick: () -> Unit,
     animateEntrance: Boolean = true,
+    entranceKey: String = label,
 ) {
     var pressed by remember { mutableStateOf(false) }
-    val entrance = remember(label) {
+    val entrance = remember(entranceKey) {
         Animatable(if (animateEntrance && !reducedMotion) .6f else 1f)
     }
-    LaunchedEffect(label, reducedMotion, animateEntrance) {
+    LaunchedEffect(entranceKey, reducedMotion, animateEntrance) {
         if (animateEntrance && !reducedMotion) {
             delay(delayMillis.toLong())
             entrance.animateTo(
@@ -1064,6 +1101,7 @@ private fun CreateInitialPreview() {
             onAnswer = {},
             onOpenCustom = {},
             onCustomValueChange = {},
+            onCloseCustom = {},
             onSubmitCustom = {},
             onRetry = {},
         )
@@ -1082,6 +1120,7 @@ private fun CreateFinalPreview() {
             onAnswer = {},
             onOpenCustom = {},
             onCustomValueChange = {},
+            onCloseCustom = {},
             onSubmitCustom = {},
             onRetry = {},
         )

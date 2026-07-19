@@ -154,6 +154,9 @@ class ScheduledStoryCoordinatorTest {
     private class MemoryStoryStore : ScheduledStoryStore {
         val rows = mutableListOf<LocalScheduledStory>()
 
+        override suspend fun deleteScheduledStory(ownerId: String, storyId: String): Boolean =
+            rows.removeAll { it.ownerId == ownerId && it.story.storyId == storyId }
+
         override suspend fun saveScheduledStory(story: LocalScheduledStory): Boolean {
             val index = rows.indexOfFirst { it.ownerId == story.ownerId && it.story.storyId == story.story.storyId }
             if (index < 0) rows += story else rows[index] = story.copy(
@@ -231,7 +234,6 @@ class ScheduledStoryCoordinatorTest {
         happiness = 50,
         energy = 50,
         message = "",
-        firstSessionActive = false,
     )
 
     private companion object {
