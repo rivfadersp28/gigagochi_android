@@ -23,7 +23,7 @@ import kotlin.random.Random
 
 internal const val PetTapParticleIntervalMillis = 80L
 internal const val PetTapParticleCount = 9
-internal const val PetTapBulgeDurationMillis = 360
+internal const val PetTapBulgeDurationMillis = 250
 internal const val PetTapBulgeAttackMillis = 120
 internal const val PetTapBulgeHoldMillis = 170
 internal const val PetTapReducedBulgeDurationMillis = 100
