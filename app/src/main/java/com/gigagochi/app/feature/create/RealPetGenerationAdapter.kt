@@ -135,8 +135,21 @@ class RealPetGenerationAdapter(
                             )
                         }
                         GenerationJobStatusDto.Queued,
-                        GenerationJobStatusDto.Running,
                         -> if (attempt + 1 < maxPollAttempts) delay(pollDelayMillis)
+                        GenerationJobStatusDto.Running -> {
+                            val result = envelope.job.result
+                            val media = result?.let(api::media)
+                            if (result != null && media != null && media.videoUrl != null) {
+                                return GeneratedPetFixture(
+                                    description = request.description,
+                                    petId = request.petId,
+                                    assetSetId = result.assetSetId,
+                                    generatedMedia = media,
+                                    backgroundGenerationPending = true,
+                                )
+                            }
+                            if (attempt + 1 < maxPollAttempts) delay(pollDelayMillis)
+                        }
                     }
                 }
             }

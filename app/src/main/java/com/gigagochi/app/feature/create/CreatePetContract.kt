@@ -64,6 +64,7 @@ data class GeneratedPetFixture(
     val petId: String = "local-fake-pet",
     val assetSetId: String = "local-fake-pending",
     val generatedMedia: PetGeneratedMedia = PetGeneratedMedia(),
+    val backgroundGenerationPending: Boolean = false,
 )
 
 sealed interface GenerationStatus {

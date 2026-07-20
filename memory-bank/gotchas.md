@@ -72,6 +72,7 @@
 - Удаление pending после успешного apply не означает, что mutation key можно забыть: Outfit replay должен проверять applied receipt до debit, а Travel replay — durable asset до нового submit. Иначе тот же requestKey после restart повторяет платную/долгую операцию уже после очистки pending.
 - Terminal failed Create job нельзя «ретраить» повторным poll того же backendJobId: серверный status неизменяем и мгновенно вернёт старую ошибку. Явный retry сохраняет pet/ответы, но получает новый requestKey и транзакционно заменяет только локальную pending-row со state `Failed`; transient/unknown ошибки продолжают использовать исходную identity, чтобы не задвоить платную генерацию.
 - Production Create занял около 12 минут. Polling window Android должен быть заметно длиннее: короткий client timeout показывает ложную ошибку, пока backend продолжает и успешно завершает job.
+- Backend сохраняет foreground `result` ещё при status `running`: это полный mood image set плюс normal video. Android должен принимать такой result до `succeeded`, но не удалять Create pending; иначе после раннего Dashboard нечем durable-дополучить sad/happy media. Pending удаляется только после фонового `succeeded` и optimistic media update с тем же `assetSetId`.
 - Системный permission dialog может вернуть navigation/status bars после однократного immersive-hide в
   `onCreate`. В fullscreen Activity повторно применяй immersive mode при возврате window focus, а
   нижние controls размещай по фактически видимой границе reference frame с учётом safe bottom inset

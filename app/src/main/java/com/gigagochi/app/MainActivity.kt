@@ -73,6 +73,7 @@ import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
 import com.gigagochi.app.feature.create.CreateDebugState
+import com.gigagochi.app.feature.create.CreateBackgroundMediaCoordinator
 import com.gigagochi.app.feature.create.CreatePetRoute
 import com.gigagochi.app.feature.create.CreateFinalizationCoordinator
 import com.gigagochi.app.feature.create.CreatePendingCoordinator
@@ -585,6 +586,15 @@ class MainActivity : ComponentActivity() {
                                 },
                             )
                         }
+                        val createBackgroundMedia = remember(session.accountId, repository, api) {
+                            CreateBackgroundMediaCoordinator(
+                                session.accountId,
+                                repository,
+                                repository,
+                                api,
+                                onMediaReady = { pet -> activePet.value = pet },
+                            )
+                        }
                         val lifecycleOwner = LocalLifecycleOwner.current
                         val storyApi = remember(api) { debugScheduledStoryService(api) }
                         val scheduledStoryCoordinator = remember(session.accountId, repository, storyApi) {
@@ -602,6 +612,11 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(pendingRecovery, activePet.value?.petId, lifecycleOwner) {
                             lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
                                 pendingRecovery.watch(requireNotNull(activePet.value).petId)
+                            }
+                        }
+                        LaunchedEffect(createBackgroundMedia, activePet.value?.petId, lifecycleOwner) {
+                            lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
+                                createBackgroundMedia.recover(requireNotNull(activePet.value).petId)
                             }
                         }
                         DashboardRoute(

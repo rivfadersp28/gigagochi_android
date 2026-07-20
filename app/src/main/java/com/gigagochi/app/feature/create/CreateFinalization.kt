@@ -46,6 +46,7 @@ class CreateFinalizationCoordinator(
             val saved = store.finalizeCreatedPet(
                 OwnedPetSnapshot(ownerId, pet, nowEpochMillis()),
                 pending.requestKey,
+                keepPendingCreate = generated.backgroundGenerationPending,
             )
             if (saved) CreateFinalizationResult.Success(pet) else CreateFinalizationResult.Failure
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
