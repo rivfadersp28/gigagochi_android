@@ -102,10 +102,23 @@ fun firstSessionDashboardMessagePortions(
 
 private fun String.withoutTerminalPeriod(): String = removeSuffix(".")
 
-fun firstSessionReactionReply(reply: String, fallback: String): String {
+fun firstSessionReactionReply(
+    reply: String,
+    fallback: String,
+    petName: String? = null,
+): String {
+    val normalizedPetName = petName?.trim().orEmpty()
+    val petNameMention = normalizedPetName.takeIf(String::isNotEmpty)?.let { name ->
+        Regex("(?iu)(?<![\\p{L}\\p{N}_])${Regex.escape(name)}(?![\\p{L}\\p{N}_])")
+    }
     val declarative = Regex("(?<=[.!?…])\\s+").split(reply)
         .map(String::trim)
-        .filter { it.isNotEmpty() && '?' !in it && '？' !in it }
+        .filter {
+            it.isNotEmpty() &&
+                '?' !in it &&
+                '？' !in it &&
+                petNameMention?.containsMatchIn(it) != true
+        }
         .joinToString(" ")
         .trim()
     return declarative.ifEmpty { fallback }

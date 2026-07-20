@@ -85,6 +85,27 @@
 - Не ключуй `pointerInput` нестабильной callback-лямбдой у анимируемой Compose-кнопки: собственная
   scale/reveal recomposition перезапускает gesture detector и отменяет текущий press. Храни callback
   через `rememberUpdatedState`, а стабильный detector ключуй `Unit`.
+- У action-кнопки внутри `horizontalScroll` не завершай click вручную через
+  `detectTapGestures` + `tryAwaitRelease`: небольшой touch/mouse drift позволяет scroll-parent
+  отменить release уже после press-анимации, и визуально живая кнопка не вызывает action. Используй
+  стандартный `clickable` с `MutableInteractionSource`; pressed-state для анимации бери из него.
+- Android first-session сохраняет следующий durable stage до окончания показа его реплики.
+  Не показывай следующее main action только по `firstSessionMainAction`: блокируй его активной
+  onboarding-репликой, а после финальной части очищай также подготовленную idle-копию, иначе
+  автозакрытый Chat/Feed повторит ту же реплику на Dashboard. Пока onboarding ещё активен,
+  не подставляй после очистки старое `pet.message`: у нового питомца там лежит «Как тебя зовут?»,
+  и оно визуально дублирует финал вступления.
+- Появление следующего Android onboarding-action должно запускаться callback-ом фактического
+  окончания `CharacterDialogueText` reveal, а не ещё одним `autoAdvanceDelayMillis` после
+  финальной части. Сам action повторяет create-onboarding entrance без delay: scale `.6→1`
+  и opacity `0→1` за `300ms`; reduced motion показывает его сразу. Завершённую реплику при этом
+  переноси в отдельное settled presentation-state: она больше не блокирует action/input, но остаётся
+  видимой до следующего действия пользователя. При remount settled-реплики между Chat/Feed и Idle
+  отключай её entrance-анимацию, иначе уже показанный текст повторно запускает reveal вместе с кнопкой.
+- Сценарная onboarding-реплика не входит в backend chat history: модель может повторно представиться
+  на короткий ответ пользователя. В UI отбрасывай reaction-предложения с именем персонажа, а реакцию
+  и следующий сценарный вопрос передавай как explicit semantic portions; общий length-splitter склеивает
+  их и может оставить фразу про голод обрезанным хвостом следующего блока.
 - `partycles` измеряет heart `lifetime` в simulation frames, уменьшая life на 1.2 при 60 fps; это не миллисекунды. Mobile web оптимизирует 16/170/42 до 9 частиц, 136 frames и 33px, поэтому native burst длится около 1.889s. Media3 `GlEffect` обновляет динамический shader на decoded video frames, а `setVideoEffects` без явного `Presentation` crop меняет aspect/letterbox; native tap использует smoothstep envelope 250 мс при постоянном cover-crop, без snapshot и смены геометрии.
 - WorkManager periodic interval 15 minutes is only a legal minimum, not a delivery deadline: OS
   batching, Doze and network constraints may delay it. This MVP is local best-effort notification,
@@ -101,6 +122,9 @@
 - First-session bat receipt и stage намеренно разделены: correct choice атомарно даёт ровно +200 XP,
   но оставляет `AwaitingTravel`; только durable Finish переводит в `AwaitingCompletionMessage`.
   Иначе process death между result и Finish либо повторно начисляет XP, либо пропускает финальный экран.
+- `DashboardRoute` нельзя key-ить полным `initialPet`: возврат из bat-story обновляет XP и тем самым
+  пересоздаёт presentation-state, сбрасывая `firstSessionIdleReply.portionIndex` на первый блок.
+  Key использует stable `petId`, а внешний pet синхронизируется отдельно без потери reply progression.
 - Debug prompt/event logging нельзя встраивать прямо в production adapters: строки и вызовы тогда
   попадают в release. Оборачивай adapters variant-specific функциями из `src/debug`; `src/release`
   обязан возвращать исходный delegate.
@@ -111,6 +135,10 @@
   обложку; при неполном комплекте situation/outcome media backend не переводит story в ready.
 - Dashboard action `События` резервирует дополнительную ширину только при видимом badge: без badge
   `184.dp`, с badge `216.dp`. Постоянные `216.dp` дают визуально лишние горизонтальные поля.
+- Длинный onboarding action не должен получать ручную фиксированную ширину: вариант `GlassAction`
+  без width измеряется по контенту, ограничивается `346.dp` и использует `20.dp` по бокам. Для
+  «Помочь летучей мыши» glyph скрыт; текстовые actions не должны оставлять после отсутствующего glyph
+  пустой spacer `8.dp`.
 - Compose `painterResource` не умеет загружать XML `<shape>` как painter. Placeholder для story/event
   media должен быть vector/raster drawable, иначе экран падает до завершения сетевой загрузки.
 - Нельзя шарить remote travel URL как `text/plain` или отдавать `file://`: мессенджерам нужен сам MP4

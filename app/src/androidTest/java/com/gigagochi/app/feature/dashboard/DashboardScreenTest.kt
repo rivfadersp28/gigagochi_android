@@ -53,6 +53,7 @@ class DashboardScreenTest {
             GigagochiTheme {
                 DashboardRoute(
                     requestImeOverride = false,
+                    reducedMotionOverride = true,
                     initialFirstSession = LocalFirstSession(
                         "owner-a",
                         "debug-test-pet",
@@ -76,11 +77,35 @@ class DashboardScreenTest {
     }
 
     @Test
+    fun onboardingChatActionOpensFromTouchInput() {
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    requestImeOverride = false,
+                    initialFirstSession = LocalFirstSession(
+                        "owner-a",
+                        "debug-test-pet",
+                        FirstSessionStage.AwaitingChat,
+                        updatedAtEpochMillis = 1,
+                    ),
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Поболтать")
+            .assertIsDisplayed()
+            .performTouchInput { click() }
+
+        composeRule.onNodeWithContentDescription("Сообщение персонажу").assertIsDisplayed()
+    }
+
+    @Test
     fun wideOnboardingTravelActionIsCenteredWithoutScrollOffset() {
         composeRule.setContent {
             GigagochiTheme {
                 DashboardRoute(
                     requestImeOverride = false,
+                    reducedMotionOverride = true,
                     initialFirstSession = LocalFirstSession(
                         "owner-a",
                         "debug-test-pet",
@@ -91,11 +116,23 @@ class DashboardScreenTest {
             }
         }
 
+        composeRule.mainClock.advanceTimeBy(OnboardingBlockAutoAdvanceMillis + 100)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
         val rootCenter = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.center.x
-        val actionCenter = composeRule.onNodeWithContentDescription("Помочь летучей мыши")
+        val actionBounds = composeRule.onNodeWithContentDescription("Помочь летучей мыши")
             .assertIsDisplayed()
-            .fetchSemanticsNode().boundsInRoot.center.x
-        assertEquals(rootCenter, actionCenter, 1f)
+            .fetchSemanticsNode().boundsInRoot
+        val labelBounds = composeRule.onNodeWithText(
+            "Помочь летучей мыши",
+            useUnmergedTree = true,
+        )
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(rootCenter, actionBounds.center.x, 1f)
+        assertTrue(actionBounds.width <= 346f)
+        assertEquals(20f, labelBounds.left - actionBounds.left, 1f)
+        assertEquals(20f, actionBounds.right - labelBounds.right, 1f)
     }
 
     @Test
@@ -161,12 +198,12 @@ class DashboardScreenTest {
         composeRule.onNodeWithContentDescription("Поболтать").performClick()
         composeRule.onNodeWithContentDescription("Сообщение персонажу").performTextInput("Сергей")
         composeRule.onNodeWithContentDescription("Отправить").performClick()
-        composeRule.waitUntil(5_000) {
+        composeRule.waitUntil(12_000) {
             composeRule.onAllNodesWithText("А чем ты любишь заниматься?", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithContentDescription("Сообщение персонажу").assertIsDisplayed()
-        composeRule.onNodeWithText("Очень приятно! А чем ты любишь заниматься?")
+        composeRule.onNodeWithText("А чем ты любишь заниматься?")
             .assertIsDisplayed()
     }
 
@@ -217,7 +254,7 @@ class DashboardScreenTest {
     }
 
     @Test
-    fun restoredOnboardingCopyAutoAdvancesAndKeepsFinalPortion() {
+    fun restoredOnboardingCopyRevealsActionOnlyAfterFinalPortion() {
         composeRule.mainClock.autoAdvance = false
         val pet = testPet(hunger = 65)
         val session = LocalFirstSession(
@@ -229,26 +266,69 @@ class DashboardScreenTest {
                 DashboardRoute(
                     initialPet = pet,
                     initialFirstSession = session,
-                    reducedMotionOverride = true,
+                    reducedMotionOverride = false,
                     requestImeOverride = false,
                 )
             }
         }
 
         composeRule.waitForIdle()
-        portions.forEachIndexed { index, portion ->
-            composeRule.onNodeWithText(portion).assertIsDisplayed()
-            if (index < portions.lastIndex) {
-                composeRule.mainClock.advanceTimeBy(
-                    checkNotNull(firstSessionIdleReply(pet, session)).autoAdvanceDelayMillis + 100,
-                )
-                composeRule.mainClock.advanceTimeByFrame()
-                composeRule.waitForIdle()
-            }
-        }
+        composeRule.onNodeWithContentDescription("Помочь летучей мыши").assertDoesNotExist()
+        composeRule.onNodeWithText(portions.first()).assertIsDisplayed()
         composeRule.mainClock.advanceTimeBy(
             checkNotNull(firstSessionIdleReply(pet, session)).autoAdvanceDelayMillis + 100,
         )
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(portions.last()).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Помочь летучей мыши").assertDoesNotExist()
+
+        composeRule.mainClock.advanceTimeBy(2_700)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Помочь летучей мыши").assertExists()
+
+        composeRule.mainClock.advanceTimeBy(350)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Помочь летучей мыши").assertIsDisplayed()
+        composeRule.onNodeWithText(portions.last()).assertIsDisplayed()
+    }
+
+    @Test
+    fun externalPetRefreshDoesNotRestartCompletionMessage() {
+        composeRule.mainClock.autoAdvance = false
+        val pet = testPet(hunger = 65)
+        val session = LocalFirstSession(
+            "owner-a",
+            pet.petId,
+            FirstSessionStage.AwaitingCompletionMessage,
+            updatedAtEpochMillis = 1,
+        )
+        val portions = firstSessionDashboardMessagePortions(pet, session)
+        var externalPet by mutableStateOf(pet)
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = externalPet,
+                    initialFirstSession = session,
+                    requestImeOverride = false,
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(portions.first()).assertIsDisplayed()
+        composeRule.mainClock.advanceTimeBy(DashboardReplyAutoAdvanceMillis + 100)
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(portions[1]).assertIsDisplayed()
+
+        composeRule.runOnIdle { externalPet = pet.copy(experience = 200) }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(portions[1]).assertIsDisplayed()
+
+        composeRule.mainClock.advanceTimeBy(DashboardReplyAutoAdvanceMillis + 100)
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.waitForIdle()
         composeRule.onNodeWithText(portions.last()).assertIsDisplayed()
