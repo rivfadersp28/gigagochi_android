@@ -7,16 +7,55 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.runtime.mutableStateOf
 import com.gigagochi.app.core.designsystem.GigagochiTheme
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
 class CreatePetScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun everyQuestionTitleFitsWithoutVisualOverflow() {
+        val state = mutableStateOf(CreatePetState())
+        composeRule.setContent {
+            GigagochiTheme {
+                CreatePetScreen(
+                    state = state.value,
+                    reducedMotion = true,
+                    requestCustomIme = false,
+                    onBackgroundPhaseComplete = {},
+                    onAnswer = {},
+                    onOpenCustom = {},
+                    onCustomValueChange = {},
+                    onCloseCustom = {},
+                    onSubmitCustom = {},
+                    onRetry = {},
+                )
+            }
+        }
+
+        CreationQuestions.forEachIndexed { index, question ->
+            composeRule.runOnIdle { state.value = CreatePetState(step = index) }
+            val layouts = mutableListOf<TextLayoutResult>()
+            composeRule.onNodeWithText(question.title)
+                .assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
+                    action(layouts)
+                }
+            assertFalse(
+                "Question title has visual overflow: ${question.title}",
+                layouts.single().hasVisualOverflow,
+            )
+        }
+    }
 
     @Test
     fun firstPressStartsFakeGenerationAndReadyNavigatesOnlyAfterAllAnswers() {

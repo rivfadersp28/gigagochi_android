@@ -51,7 +51,6 @@ object CreationMediaContract {
     const val TransitionEndUs = TransitionEndFrame * 1_000_000L / FramesPerSecond
     const val FormedStartUs = TransitionEndUs
     const val FormedEndUs = FormedEndFrame * 1_000_000L / FramesPerSecond
-    const val MusicVolume = .32f
 }
 
 data class PendingPetGeneration(
