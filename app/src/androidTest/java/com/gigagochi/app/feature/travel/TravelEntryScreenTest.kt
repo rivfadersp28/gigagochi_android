@@ -15,6 +15,7 @@ import com.gigagochi.app.core.designsystem.GigagochiTheme
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -117,6 +118,46 @@ class TravelEntryScreenTest {
             .assertHeightIsAtLeast(48.dp)
             .performClick()
         composeRule.runOnIdle { assertEquals(1, closes) }
+    }
+
+    @Test
+    fun longStoryAnswerWrapsAndGrowsWhileShortAnswerHugsItsText() {
+        val longAnswer = "А. Скатывающиеся капли с солью и серебряной пылью"
+        val shortAnswer = "Б. Ветер"
+        val story = InteractiveTravelStory(
+            travelId = "layout-story",
+            title = "Лист",
+            storyText = "На листе появился знак.",
+            challenge = "Что поможет?",
+            choices = listOf(longAnswer, shortAnswer),
+            enabledChoice = "",
+        )
+        composeRule.setContent {
+            GigagochiTheme {
+                InteractiveTravelStoryScreen(
+                    state = TravelEntryState(
+                        pet = TravelEntryPet("pet", "Тото"),
+                        phase = TravelEntryPhase.StoryQuestion,
+                        story = story,
+                    ),
+                    reducedMotion = true,
+                    forcePoster = true,
+                    scrollTarget = StoryScrollTarget.Answers,
+                    onChoice = {},
+                    onFinish = {},
+                )
+            }
+        }
+
+        val longNode = composeRule.onNodeWithContentDescription(longAnswer)
+            .performScrollTo()
+            .fetchSemanticsNode()
+        val shortNode = composeRule.onNodeWithContentDescription(shortAnswer)
+            .performScrollTo()
+            .fetchSemanticsNode()
+
+        assertTrue(longNode.boundsInRoot.height > shortNode.boundsInRoot.height)
+        assertTrue(longNode.boundsInRoot.width > shortNode.boundsInRoot.width)
     }
 
     @Test

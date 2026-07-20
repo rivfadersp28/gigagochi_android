@@ -54,6 +54,38 @@ internal data class ChatMessageEntity(
 )
 
 @Entity(
+    tableName = "compliment_ledger",
+    primaryKeys = ["ownerId", "petId", "normalizedKey"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "createdAtEpochMillis"],
+            name = "index_compliment_owner_pet_created",
+        ),
+    ],
+)
+internal data class ComplimentLedgerEntity(
+    val ownerId: String,
+    val petId: String,
+    val normalizedKey: String,
+    val complimentKey: String,
+    val createdAtEpochMillis: Long,
+)
+
+@Entity(
+    tableName = "applied_chat_responses",
+    primaryKeys = ["ownerId", "requestKey"],
+    indices = [Index(value = ["ownerId", "petId"])],
+)
+internal data class AppliedChatResponseEntity(
+    val ownerId: String,
+    val petId: String,
+    val requestKey: String,
+    val happinessDelta: Int,
+    val complimentKey: String?,
+    val appliedAtEpochMillis: Long,
+)
+
+@Entity(
     tableName = "user_memories",
     primaryKeys = ["ownerId", "petId", "memoryId"],
     indices = [

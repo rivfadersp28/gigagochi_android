@@ -146,6 +146,82 @@ class PetLocalRepository(
         }
     }
 
+    suspend fun complimentHistory(
+        ownerId: String,
+        petId: String,
+    ): List<String> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return dao.getRecentComplimentKeys(ownerId, petId, 500).asReversed()
+    }
+
+    suspend fun applyChatResponse(
+        ownerId: String,
+        petId: String,
+        requestKey: String,
+        messages: List<LocalChatMessage>,
+        happinessDelta: Int,
+        complimentKey: String?,
+        appliedAtEpochMillis: Long,
+    ): PetDashboardState {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        LocalPersistenceValidation.requestKey(requestKey)
+        require(happinessDelta in setOf(0, 30, 100)) { "unsupported chat happiness delta" }
+        val cleanComplimentKey = complimentKey
+            ?.trim()
+            ?.replace(Regex("\\s+"), " ")
+            ?.take(120)
+            ?.takeIf(String::isNotEmpty)
+        require(happinessDelta == 0 || cleanComplimentKey != null) {
+            "compliment key is required for a happiness reward"
+        }
+        return database.withTransaction {
+            val pet = requireNotNull(dao.getPet(ownerId, petId)) { "pet is missing" }
+            if (dao.getAppliedChatResponse(ownerId, requestKey) == null) {
+                check(dao.insertAppliedChatResponse(
+                    AppliedChatResponseEntity(
+                        ownerId = ownerId,
+                        petId = petId,
+                        requestKey = requestKey,
+                        happinessDelta = happinessDelta,
+                        complimentKey = cleanComplimentKey,
+                        appliedAtEpochMillis = appliedAtEpochMillis,
+                    ),
+                ) != -1L)
+                if (messages.isNotEmpty()) {
+                    dao.insertChatMessages(messages.map { it.toEntity(ownerId, petId) })
+                    dao.trimChatMessages(ownerId, petId, 200)
+                }
+                if (cleanComplimentKey != null) {
+                    dao.insertCompliment(
+                        ComplimentLedgerEntity(
+                            ownerId = ownerId,
+                            petId = petId,
+                            normalizedKey = cleanComplimentKey.lowercase(),
+                            complimentKey = cleanComplimentKey,
+                            createdAtEpochMillis = appliedAtEpochMillis,
+                        ),
+                    )
+                    dao.trimCompliments(ownerId, petId, 500)
+                }
+                if (happinessDelta != 0) {
+                    check(dao.updatePetProgress(
+                        ownerId = ownerId,
+                        petId = petId,
+                        experience = pet.experience,
+                        hunger = pet.hunger,
+                        happiness = (pet.happiness + happinessDelta).coerceAtMost(100),
+                        energy = pet.energy,
+                        updatedAtEpochMillis = appliedAtEpochMillis,
+                    ) == 1)
+                }
+            }
+            requireNotNull(dao.getPet(ownerId, petId))
+                .toModel(dao.getMoodImages(ownerId, petId)).pet
+        }
+    }
+
     suspend fun recentChatMessages(
         ownerId: String,
         petId: String,
@@ -1450,6 +1526,8 @@ class PetLocalRepository(
             dao.deleteOwnerFirstSessionActionReceipts(ownerId)
             dao.deleteOwnerFirstSessions(ownerId)
             dao.deleteOwnerChatMessages(ownerId)
+            dao.deleteOwnerCompliments(ownerId)
+            dao.deleteOwnerAppliedChatResponses(ownerId)
             dao.deleteOwnerUserMemories(ownerId)
             dao.deleteOwnerMemoryLearnings(ownerId)
             dao.deleteOwnerPetMemoryStates(ownerId)

@@ -347,7 +347,7 @@ fun DashboardRoute(
                         }
                         dispatch(DashboardEvent.FirstSessionSynced(durableSession, durablePet))
                         val reaction = firstSessionReactionReply(
-                            result.value,
+                            result.value.reply,
                             if (session.stage == FirstSessionStage.AwaitingChat) {
                                 FirstSessionAfterNameFallback
                             } else FirstSessionAfterChatFallback,
@@ -355,7 +355,10 @@ fun DashboardRoute(
                         val prompt = if (session.stage == FirstSessionStage.AwaitingChat) {
                             FirstSessionAfterName
                         } else FirstSessionAfterChat
-                        dispatch(DashboardEvent.ChatSucceeded(request.requestKey, "$reaction $prompt"))
+                        dispatch(DashboardEvent.ChatSucceeded(
+                            request.requestKey,
+                            DashboardChatResult("$reaction $prompt", durablePet),
+                        ))
                     } else dispatch(DashboardEvent.ChatFailed(request.requestKey))
                 } else {
                     dispatch(DashboardEvent.ChatSucceeded(request.requestKey, result.value))

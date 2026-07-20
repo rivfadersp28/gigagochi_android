@@ -143,6 +143,7 @@ data class ChatRequestDto(
     val message: String,
     val pet: FeaturePetDto,
     val history: List<ChatHistoryItemDto> = emptyList(),
+    val complimentHistory: List<String> = emptyList(),
     val memoryContext: MemoryContextDto? = null,
     val nowIso: String? = null,
     val timezone: String? = null,

@@ -22,20 +22,32 @@ fun projectDashboardMedia(
         if (video != null) return DashboardMediaProjection.RemoteVideo(video, poster)
         if (poster != null) return DashboardMediaProjection.RemotePoster(poster)
     }
-    val exactMood = pet.generatedMedia.moodImages.singleOrNull {
-        it.stage == pet.stage && it.mood == pet.mood
-    }?.url
+    val requestedMood = when {
+        pet.hunger < 30 || pet.happiness < 30 || pet.energy < 30 -> "sad"
+        pet.hunger >= 70 && pet.happiness >= 70 && pet.energy >= 70 -> "happy"
+        else -> "idle"
+    }
     val idleMood = pet.generatedMedia.moodImages.singleOrNull {
         it.stage == pet.stage && it.mood == "idle"
     }?.url
-    val poster = resolveUrl(exactMood) ?: resolveUrl(idleMood) ?: resolveUrl(pet.generatedMedia.blinkImageUrl)
+    val idlePoster = resolveUrl(idleMood) ?: resolveUrl(pet.generatedMedia.blinkImageUrl)
         ?: resolveUrl(pet.generatedMedia.spriteSheetUrl)
-    val moodVideo = when (pet.mood) {
+    val requestedPoster = pet.generatedMedia.moodImages.singleOrNull {
+        it.stage == pet.stage && it.mood == requestedMood
+    }?.url?.let(resolveUrl)
+    val normalVideo = resolveUrl(pet.generatedMedia.videoUrl)
+    val requestedVideo = when (requestedMood) {
         "sad" -> pet.generatedMedia.sadVideoUrl
         "happy" -> pet.generatedMedia.happyVideoUrl
         else -> pet.generatedMedia.videoUrl
-    }
-    val video = resolveUrl(moodVideo) ?: resolveUrl(pet.generatedMedia.videoUrl)
+    }?.let(resolveUrl)
+    val derivedReady = requestedMood == "idle" || (
+        requestedPoster != null &&
+            requestedPoster != idlePoster &&
+            (requestedVideo != null || normalVideo == null)
+        )
+    val poster = if (derivedReady) requestedPoster ?: idlePoster else idlePoster
+    val video = if (derivedReady) requestedVideo ?: normalVideo else normalVideo
     return when {
         video != null -> DashboardMediaProjection.RemoteVideo(video, poster)
         poster != null -> DashboardMediaProjection.RemotePoster(poster)

@@ -4,8 +4,13 @@ import com.gigagochi.app.core.model.PetDashboardState
 import kotlinx.coroutines.delay
 
 interface DashboardChatAdapter {
-    suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String
+    suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult
 }
+
+data class DashboardChatResult(
+    val reply: String,
+    val pet: PetDashboardState,
+)
 
 interface DashboardFeedAdapter {
     suspend fun reply(request: PendingFeedRequest, pet: PetDashboardState): String
@@ -22,7 +27,7 @@ interface DashboardTravelAdapter {
 }
 
 class UnavailableDashboardChatAdapter : DashboardChatAdapter {
-    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String =
+    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult =
         error("Real chat API is not connected")
 }
 
@@ -50,9 +55,9 @@ class UnavailableDashboardTravelAdapter : DashboardTravelAdapter {
 class FakeDashboardChatAdapter(
     private val adapterDelayMillis: Long = 180L,
 ) : DashboardChatAdapter {
-    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String {
+    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult {
         delay(adapterDelayMillis)
-        return DeterministicChatReply
+        return DashboardChatResult(DeterministicChatReply, pet)
     }
 }
 

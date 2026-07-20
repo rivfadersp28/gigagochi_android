@@ -24,12 +24,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FirstSessionEntity::class,
         FirstSessionActionReceiptEntity::class,
         ChatMessageEntity::class,
+        ComplimentLedgerEntity::class,
+        AppliedChatResponseEntity::class,
         UserMemoryEntity::class,
         MemoryLearningEntity::class,
         PetMemoryStateEntity::class,
         ProactiveNotificationEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -54,10 +56,19 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration2To3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `compliment_ledger` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `normalizedKey` TEXT NOT NULL, `complimentKey` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `normalizedKey`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_compliment_owner_pet_created` ON `compliment_ledger` (`ownerId`, `petId`, `createdAtEpochMillis`)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `applied_chat_responses` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `happinessDelta` INTEGER NOT NULL, `complimentKey` TEXT, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `requestKey`))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_applied_chat_responses_ownerId_petId` ON `applied_chat_responses` (`ownerId`, `petId`)")
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
             DatabaseName,
-        ).addMigrations(Migration1To2).build()
+        ).addMigrations(Migration1To2, Migration2To3).build()
     }
 }

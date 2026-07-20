@@ -161,7 +161,7 @@ sealed interface DashboardEvent {
     data object CloseMode : DashboardEvent
     data class UpdateChatDraft(val value: String) : DashboardEvent
     data class SubmitChat(val requestKey: String) : DashboardEvent
-    data class ChatSucceeded(val requestKey: String, val reply: String) : DashboardEvent
+    data class ChatSucceeded(val requestKey: String, val result: DashboardChatResult) : DashboardEvent
     data class ChatFailed(val requestKey: String) : DashboardEvent
     data class StartFoodDrag(val food: DashboardFood) : DashboardEvent
     data class MoveFoodDrag(val food: DashboardFood, val offsetX: Float, val offsetY: Float) : DashboardEvent
@@ -305,7 +305,8 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         state.copy(
             activeChat = null,
             chatError = null,
-            chatReply = DashboardReply(event.requestKey, event.reply),
+            pet = event.result.pet,
+            chatReply = DashboardReply(event.requestKey, event.result.reply),
         )
     } else {
         state

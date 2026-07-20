@@ -111,7 +111,10 @@ class DashboardContractTest {
         state = reduceDashboard(state, DashboardEvent.CloseMode)
         val late = reduceDashboard(
             state,
-            DashboardEvent.ChatSucceeded("chat-3", DeterministicChatReply),
+            DashboardEvent.ChatSucceeded(
+                "chat-3",
+                DashboardChatResult(DeterministicChatReply, state.pet),
+            ),
         )
         assertEquals(DashboardMode.Idle, late.mode)
         assertNull(late.chatReply)

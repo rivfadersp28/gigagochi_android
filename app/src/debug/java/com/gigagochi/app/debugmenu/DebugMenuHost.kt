@@ -44,6 +44,7 @@ import com.gigagochi.app.feature.create.GeneratedPetFixture
 import com.gigagochi.app.feature.create.PendingPetGeneration
 import com.gigagochi.app.feature.create.PetGenerationAdapter
 import com.gigagochi.app.feature.dashboard.DashboardChatAdapter
+import com.gigagochi.app.feature.dashboard.DashboardChatResult
 import com.gigagochi.app.feature.dashboard.DashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.DashboardTravelAdapter
 import com.gigagochi.app.feature.dashboard.PendingChatRequest
@@ -87,10 +88,10 @@ fun debugGenerationAdapter(delegate: PetGenerationAdapter): PetGenerationAdapter
 
 fun debugChatAdapter(delegate: DashboardChatAdapter): DashboardChatAdapter =
     object : DashboardChatAdapter {
-        override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String {
+        override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult {
             recordDebugEvent("prompt", "Chat request", "${request.requestKey}\n${request.message}")
             return runCatching { delegate.reply(request, pet) }
-                .onSuccess { recordDebugEvent("response", "Chat reply", it) }
+                .onSuccess { recordDebugEvent("response", "Chat reply", it.reply) }
                 .onFailure { recordDebugEvent("error", "Chat failed", it.toString()) }
                 .getOrThrow()
         }

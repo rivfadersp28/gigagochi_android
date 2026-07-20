@@ -75,6 +75,54 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun chatComplimentRewardAndLedgerAreDurableAndIdempotent() = runBlocking {
+        repository.replacePetSnapshot(snapshot(happiness = 10))
+        val messages = listOf(
+            LocalChatMessage("user-1", "user", "Ты очень смелый", 20),
+            LocalChatMessage("pet-1", "pet", "Спасибо!", 21),
+        )
+
+        val ordinary = repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            "chat-ordinary",
+            messages,
+            happinessDelta = 30,
+            complimentKey = "смелый и добрый",
+            appliedAtEpochMillis = 22,
+        )
+        assertEquals(40, ordinary.happiness)
+        assertEquals(listOf("смелый и добрый"), repository.complimentHistory(OwnerId, PetId))
+
+        val replay = repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            "chat-ordinary",
+            messages,
+            happinessDelta = 100,
+            complimentKey = "другой ключ",
+            appliedAtEpochMillis = 23,
+        )
+        assertEquals(40, replay.happiness)
+        assertEquals(listOf("смелый и добрый"), repository.complimentHistory(OwnerId, PetId))
+
+        val exceptional = repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            "chat-exceptional",
+            emptyList(),
+            happinessDelta = 100,
+            complimentKey = "самый внимательный хранитель",
+            appliedAtEpochMillis = 24,
+        )
+        assertEquals(100, exceptional.happiness)
+        assertEquals(
+            listOf("смелый и добрый", "самый внимательный хранитель"),
+            repository.complimentHistory(OwnerId, PetId),
+        )
+    }
+
+    @Test
     fun existingPetWithoutFirstSessionRowKeepsOrdinaryFlow() = runBlocking {
         repository.replacePetSnapshot(snapshot(experience = 500))
 

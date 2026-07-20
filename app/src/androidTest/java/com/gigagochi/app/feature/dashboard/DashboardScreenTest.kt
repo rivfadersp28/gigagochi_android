@@ -149,7 +149,7 @@ class DashboardScreenTest {
                     firstSessionStore = store,
                     chatAdapter = object : DashboardChatAdapter {
                         override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState) =
-                            "Очень приятно! Как твои дела?"
+                            DashboardChatResult("Очень приятно! Как твои дела?", pet)
                     },
                     requestKeyFactory = { "chat-1" },
                     requestImeOverride = false,

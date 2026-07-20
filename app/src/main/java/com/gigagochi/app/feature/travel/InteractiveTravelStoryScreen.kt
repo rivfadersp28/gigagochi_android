@@ -596,13 +596,17 @@ private fun StoryTiltedGlassButton(
     val entranceAlpha = ((entrance.value - .6f) / .4f).coerceIn(0f, 1f)
     val alpha = entranceAlpha * if (enabled) 1f else .65f
     val rotation = if (index % 2 == 0) -2f else 2f
-    val widthModifier = if (minWidth == null) Modifier else Modifier.widthIn(min = minWidth)
+    val widthModifier = if (minWidth == null) {
+        Modifier.widthIn(max = 362.dp)
+    } else {
+        Modifier.widthIn(min = minWidth, max = 362.dp)
+    }
 
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .then(widthModifier)
-            .height(62.dp)
+            .heightIn(min = 62.dp)
             .graphicsLayer {
                 rotationZ = rotation
                 scaleX = entrance.value * pressScale
@@ -645,8 +649,8 @@ private fun StoryTiltedGlassButton(
             fontWeight = FontWeight.Bold,
             lineHeight = 30.sp,
             letterSpacing = (-.45).sp,
-            textAlign = TextAlign.Center,
-            maxLines = 1,
+            textAlign = TextAlign.Start,
+            softWrap = true,
         )
     }
 }

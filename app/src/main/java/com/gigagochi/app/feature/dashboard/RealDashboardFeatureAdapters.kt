@@ -43,9 +43,10 @@ class RealDashboardChatAdapter(
     private val repository: PetLocalRepository,
     private val postReplyScope: CoroutineScope,
 ) : DashboardChatAdapter {
-    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): String {
+    override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult {
         val now = System.currentTimeMillis()
         val priorHistory = repository.recentChatMessages(ownerId, pet.petId, 200)
+        val complimentHistory = repository.complimentHistory(ownerId, pet.petId)
         val deterministic = extractDeterministicMemory(request.message, now)
         deterministic.forgetKey?.let {
             repository.forgetMemory(ownerId, pet.petId, normalizedKey = it)
@@ -60,19 +61,20 @@ class RealDashboardChatAdapter(
         return when (
             val result = api.chat(
                 ChatRequestDto(
-                    request.requestKey,
-                    request.message,
-                    pet.toFeaturePetDto(),
-                    priorHistory.takeLast(12).map {
+                    requestKey = request.requestKey,
+                    message = request.message,
+                    pet = pet.toFeaturePetDto(),
+                    history = priorHistory.takeLast(12).map {
                         com.gigagochi.app.core.network.ChatHistoryItemDto(
                             it.role,
                             it.text,
                             Instant.ofEpochMilli(it.createdAtEpochMillis).toString(),
                         )
                     },
-                    memoryContext,
-                    Instant.ofEpochMilli(now).toString(),
-                    ZoneId.systemDefault().id,
+                    complimentHistory = complimentHistory,
+                    memoryContext = memoryContext,
+                    nowIso = Instant.ofEpochMilli(now).toString(),
+                    timezone = ZoneId.systemDefault().id,
                 ),
             )
         ) {
@@ -80,10 +82,15 @@ class RealDashboardChatAdapter(
                 val reply = result.value.reply.takeIf { it.isNotBlank() }
                     ?: throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
                 val assistantMessage = newChatMessage("pet", reply, System.currentTimeMillis())
-                repository.appendChatMessages(
-                    ownerId,
-                    pet.petId,
-                    listOf(userMessage, assistantMessage),
+                val appliedPet = repository.applyChatResponse(
+                    ownerId = ownerId,
+                    petId = pet.petId,
+                    requestKey = request.requestKey,
+                    messages = listOf(userMessage, assistantMessage),
+                    happinessDelta = result.value.happinessDelta,
+                    complimentKey = result.value.complimentKey
+                        ?: request.message.takeIf { result.value.happinessDelta in setOf(30, 100) },
+                    appliedAtEpochMillis = System.currentTimeMillis(),
                 )
                 repository.markMemoriesMentioned(
                     ownerId,
@@ -147,7 +154,7 @@ class RealDashboardChatAdapter(
                         }
                     }
                 }
-                reply
+                DashboardChatResult(reply, appliedPet)
             }
             is FeatureApiResult.Failure -> throw FeatureAdapterException(result.failure)
         }

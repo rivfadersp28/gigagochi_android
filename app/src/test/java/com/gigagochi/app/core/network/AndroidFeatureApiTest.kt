@@ -159,6 +159,29 @@ class AndroidFeatureApiTest {
         assertTrue(body.contains("\"choice\":\"b\""))
     }
 
+    @Test
+    fun chatSerializesComplimentLedgerAndDecodesRewardContract() = runBlocking {
+        var body = ""
+        val result = api(
+            200,
+            """{"reply":"Спасибо!","happinessDelta":100,"complimentKey":"смелый хранитель"}""",
+            onRequest = { body = it.body?.toString(Charsets.UTF_8).orEmpty() },
+        ).chat(
+            ChatRequestDto(
+                requestKey = Key,
+                message = "Ты невероятно смелый",
+                pet = featurePet(),
+                complimentHistory = listOf("добрый друг", "верный спутник"),
+            ),
+        )
+
+        assertTrue(result is FeatureApiResult.Success)
+        val response = (result as FeatureApiResult.Success).value
+        assertEquals(100, response.happinessDelta)
+        assertEquals("смелый хранитель", response.complimentKey)
+        assertTrue(body.contains("\"complimentHistory\":[\"добрый друг\",\"верный спутник\"]"))
+    }
+
     private fun api(
         status: Int,
         body: String,

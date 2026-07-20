@@ -33,9 +33,12 @@ class DebugAppleStoryFixtureTest {
         assertNull(history.unanswered.single().story.selectedChoice)
         assertTrue(history.answered.isEmpty())
         assertEquals(4, history.unanswered.single().story.choices.size)
-        assertEquals("Холодный привал", history.unanswered.single().story.title)
-        assertEquals("Какую подкладку выбрать?", history.unanswered.single().story.question)
-        assertTrue(history.unanswered.single().story.videoUrl?.contains("/static/demo/interactive-travel/") == true)
+        assertEquals("Каменная наковальня", history.unanswered.single().story.title)
+        assertEquals(
+            "Что выдра может использовать, чтобы разбить раковину?",
+            history.unanswered.single().story.question,
+        )
+        assertTrue(history.unanswered.single().story.videoUrl?.contains("/static/generated/") == true)
     }
 
     @Test
@@ -78,7 +81,7 @@ class DebugAppleStoryFixtureTest {
         )
         assertEquals(active.choices.first(), resolved?.selectedChoice)
         assertTrue(resolved?.result != null)
-        assertTrue(resolved?.resultVideoUrl?.contains("/static/demo/interactive-travel/part-02.mp4") == true)
+        assertTrue(resolved?.resultVideoUrl?.contains("outcome-0.mp4") == true)
         assertTrue(requireNotNull(resolved?.result?.experienceGained) in 0..150)
         assertEquals(0, delegate.choiceCalls)
     }

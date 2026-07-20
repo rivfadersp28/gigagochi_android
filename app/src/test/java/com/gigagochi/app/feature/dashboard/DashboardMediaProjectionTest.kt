@@ -13,7 +13,6 @@ class DashboardMediaProjectionTest {
     @Test
     fun exactAgeMoodSelectsMoodVideoAndPosterBeforeIdle() {
         val pet = pet().copy(
-            mood = "happy",
             generatedMedia = PetGeneratedMedia(
                 videoUrl = "https://safe/normal.mp4",
                 happyVideoUrl = "https://safe/happy.mp4",
@@ -30,6 +29,67 @@ class DashboardMediaProjectionTest {
                 "https://safe/happy.jpg",
             ),
             projectDashboardMedia(pet, null, resolve, false),
+        )
+    }
+
+    @Test
+    fun statThresholdsSelectSadHappyAndNormalWithSadPriority() {
+        val media = PetGeneratedMedia(
+            videoUrl = "https://safe/normal.mp4",
+            sadVideoUrl = "https://safe/sad.mp4",
+            happyVideoUrl = "https://safe/happy.mp4",
+            moodImages = listOf(
+                PetMoodImage("baby", "idle", "https://safe/idle.jpg"),
+                PetMoodImage("baby", "sad", "https://safe/sad.jpg"),
+                PetMoodImage("baby", "happy", "https://safe/happy.jpg"),
+            ),
+        )
+        assertEquals(
+            DashboardMediaProjection.RemoteVideo("https://safe/sad.mp4", "https://safe/sad.jpg"),
+            projectDashboardMedia(pet().copy(hunger = 29, generatedMedia = media), null, resolve, false),
+        )
+        assertEquals(
+            DashboardMediaProjection.RemoteVideo("https://safe/normal.mp4", "https://safe/idle.jpg"),
+            projectDashboardMedia(
+                pet().copy(hunger = 30, happiness = 69, energy = 100, generatedMedia = media),
+                null,
+                resolve,
+                false,
+            ),
+        )
+        assertEquals(
+            DashboardMediaProjection.RemoteVideo("https://safe/happy.mp4", "https://safe/happy.jpg"),
+            projectDashboardMedia(
+                pet().copy(hunger = 70, happiness = 70, energy = 70, generatedMedia = media),
+                null,
+                resolve,
+                false,
+            ),
+        )
+        assertEquals(
+            DashboardMediaProjection.RemoteVideo("https://safe/sad.mp4", "https://safe/sad.jpg"),
+            projectDashboardMedia(
+                pet().copy(hunger = 100, happiness = 100, energy = 29, generatedMedia = media),
+                null,
+                resolve,
+                false,
+            ),
+        )
+    }
+
+    @Test
+    fun incompleteDerivedMediaFallsBackToNormal() {
+        val media = PetGeneratedMedia(
+            videoUrl = "https://safe/normal.mp4",
+            happyVideoUrl = null,
+            moodImages = listOf(
+                PetMoodImage("baby", "idle", "https://safe/idle.jpg"),
+                PetMoodImage("baby", "happy", "https://safe/happy.jpg"),
+            ),
+        )
+        assertEquals(
+            DashboardMediaProjection.RemoteVideo("https://safe/normal.mp4", "https://safe/idle.jpg"),
+            projectDashboardMedia(pet().copy(generatedMedia = media), null, resolve, false),
         )
     }
 

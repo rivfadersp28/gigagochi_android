@@ -37,6 +37,21 @@ internal interface GigagochiDao {
     @Query("DELETE FROM chat_messages WHERE ownerId = :ownerId AND petId = :petId")
     suspend fun deleteChatMessages(ownerId: String, petId: String): Int
 
+    @Query("SELECT complimentKey FROM compliment_ledger WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAtEpochMillis DESC LIMIT :limit")
+    suspend fun getRecentComplimentKeys(ownerId: String, petId: String, limit: Int): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCompliment(entity: ComplimentLedgerEntity): Long
+
+    @Query("DELETE FROM compliment_ledger WHERE ownerId = :ownerId AND petId = :petId AND normalizedKey NOT IN (SELECT normalizedKey FROM compliment_ledger WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAtEpochMillis DESC LIMIT :keep)")
+    suspend fun trimCompliments(ownerId: String, petId: String, keep: Int): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertAppliedChatResponse(entity: AppliedChatResponseEntity): Long
+
+    @Query("SELECT * FROM applied_chat_responses WHERE ownerId = :ownerId AND requestKey = :requestKey")
+    suspend fun getAppliedChatResponse(ownerId: String, requestKey: String): AppliedChatResponseEntity?
+
     @Upsert
     suspend fun upsertUserMemory(entity: UserMemoryEntity)
 
@@ -411,6 +426,12 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM chat_messages WHERE ownerId = :ownerId")
     suspend fun deleteOwnerChatMessages(ownerId: String): Int
+
+    @Query("DELETE FROM compliment_ledger WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerCompliments(ownerId: String): Int
+
+    @Query("DELETE FROM applied_chat_responses WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerAppliedChatResponses(ownerId: String): Int
 
     @Query("DELETE FROM user_memories WHERE ownerId = :ownerId")
     suspend fun deleteOwnerUserMemories(ownerId: String): Int
