@@ -1478,6 +1478,7 @@ class PetLocalRepository(
         LocalPersistenceValidation.ownerId(ownerId)
         require(notifiedAtEpochMillis >= 0)
         return when (notification.kind) {
+            LocalNotificationKind.PetReady -> false
             LocalNotificationKind.ScheduledStory -> {
                 LocalPersistenceValidation.storyId(notification.stableKey)
                 dao.markScheduledStoryNotified(

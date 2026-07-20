@@ -49,6 +49,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +60,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -189,6 +191,10 @@ private val ClosedConversationTop = 755.dp
 private val OpenConversationTop = 463.dp
 private val ClosedDialogueTop = 663.dp
 private val OpenDialogueTop = 371.dp
+private val PreferredDashboardActionTop = 762.dp
+private val DashboardActionHeight = 58.203.dp
+private val DashboardActionBottomMargin = 16.dp
+private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
 private const val ImeMotionStartInsetDp = 40f
 private const val ImeMotionTravelDp = 292f
 
@@ -617,6 +623,7 @@ fun DashboardScreen(
     val actionScrollState = rememberDashboardActionScrollState()
     Box(modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)), contentAlignment = Alignment.TopCenter) {
         BoxWithReferenceFrame {
+            val actionTop = LocalDashboardActionTop.current
             Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
                 DashboardVideo(
                     projection = projectDashboardMedia(
@@ -677,7 +684,7 @@ fun DashboardScreen(
             Row(
                 horizontalArrangement = Arrangement.spacedBy(19.dp),
                 modifier = Modifier
-                    .offset(y = 762.dp)
+                    .offset(y = actionTop)
                     .horizontalScroll(actionScrollState)
                     .padding(start = 28.dp, end = 29.dp),
             ) {
@@ -1037,15 +1044,16 @@ private fun BoxScope.DashboardActions(
     onOutfit: () -> Unit,
 ) {
     val actionScrollState = rememberDashboardActionScrollState()
+    val actionTop = LocalDashboardActionTop.current
     val actionModifier = if (firstSessionAction == null) {
         Modifier
-            .offset(y = 762.dp)
+            .offset(y = actionTop)
             .horizontalScroll(actionScrollState)
             .padding(start = 28.dp, end = 29.dp)
     } else {
         Modifier
             .requiredWidth(402.dp)
-            .offset(y = 762.dp)
+            .offset(y = actionTop)
     }
     Row(
         horizontalArrangement = if (firstSessionAction == null) {
@@ -1530,19 +1538,33 @@ private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
 @Composable
 private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        val density = LocalDensity.current
         val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
-        Box(
-            modifier = Modifier
-                .requiredSize(402.dp, 874.dp)
-                .graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                    transformOrigin = TransformOrigin(.5f, 0f)
-                }
-                .clip(RoundedCornerShape(0.dp)),
-            content = content,
-        )
+        val safeBottom = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() }
+        val actionTop = dashboardActionTop(maxHeight, safeBottom, scale)
+        CompositionLocalProvider(LocalDashboardActionTop provides actionTop) {
+            Box(
+                modifier = Modifier
+                    .requiredSize(402.dp, 874.dp)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        transformOrigin = TransformOrigin(.5f, 0f)
+                    }
+                    .clip(RoundedCornerShape(0.dp)),
+                content = content,
+            )
+        }
     }
+}
+
+internal fun dashboardActionTop(viewportHeight: Dp, safeBottom: Dp, scale: Float): Dp {
+    require(scale > 0f)
+    val visibleReferenceBottom = (viewportHeight - safeBottom) / scale
+    val preferredBottom = PreferredDashboardActionTop + DashboardActionHeight
+    val overlap = (preferredBottom + DashboardActionBottomMargin - visibleReferenceBottom)
+        .coerceAtLeast(0.dp)
+    return PreferredDashboardActionTop - overlap
 }
 
 @OptIn(UnstableApi::class)

@@ -153,6 +153,7 @@ fun CreatePetRoute(
     reducedMotionOverride: Boolean? = null,
     finalizationCoordinator: CreateFinalizationCoordinator? = null,
     pendingCoordinator: CreatePendingCoordinator? = null,
+    onPetReadyInBackground: (PendingPetGeneration) -> Unit = {},
     onPetPersisted: (PetDashboardState) -> Unit = {},
     onNavigateDashboard: () -> Unit,
 ) {
@@ -174,12 +175,21 @@ fun CreatePetRoute(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val view = LocalView.current
     val audioFeedback = remember(context) { CreationAudioFeedback(context.applicationContext) }
+    var screenStarted by remember {
+        mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
+    }
 
     DisposableEffect(audioFeedback, lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> audioFeedback.resumeMusicIfTrusted()
-                Lifecycle.Event.ON_STOP -> audioFeedback.pauseMusic()
+                Lifecycle.Event.ON_START -> {
+                    screenStarted = true
+                    audioFeedback.resumeMusicIfTrusted()
+                }
+                Lifecycle.Event.ON_STOP -> {
+                    screenStarted = false
+                    audioFeedback.pauseMusic()
+                }
                 else -> Unit
             }
         }
@@ -237,7 +247,10 @@ fun CreatePetRoute(
             is PetGenerationExecutionResult.Failure -> state = state.markGenerationFailed(
                 newRequestRequired = result.newRequestRequired,
             )
-            is PetGenerationExecutionResult.Success -> state = state.markGenerationReady(result.pet)
+            is PetGenerationExecutionResult.Success -> {
+                if (!screenStarted) onPetReadyInBackground(readyState.pending!!)
+                state = state.markGenerationReady(result.pet)
+            }
         }
     }
 

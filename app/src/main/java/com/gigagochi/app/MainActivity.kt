@@ -59,6 +59,8 @@ import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.background.MvpSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
+import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
+import com.gigagochi.app.core.background.petReadyNotification
 import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.database.LocalScheduledStory
@@ -242,6 +244,14 @@ internal fun appRouteForAccountStartup(destination: AccountStartupDestination): 
 class MainActivity : ComponentActivity() {
     private val incomingIntentRevision = MutableStateFlow(0)
 
+    private fun enterImmersiveMode() {
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -251,10 +261,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
+        enterImmersiveMode()
         setContent {
             GigagochiTheme {
                 val latestIntentRevision by incomingIntentRevision.collectAsState()
@@ -786,61 +793,75 @@ class MainActivity : ComponentActivity() {
                                 .fillMaxSize()
                                 .background(Color(0xFF071219)),
                         )
-                        AppRoute.Create -> CreatePetRoute(
-                            debugState = debugState,
-                            initialStateOverride = if (isExplicitDebugRoute) null else {
-                                val pending = (activeStartup.value as? AccountStartupDestination.Create)
-                                    ?.pending
-                                val repository = petRepository
-                                val session = inMemorySession.value
-                                if (pending != null && repository != null && session != null) {
-                                    CreatePendingCoordinator(session.accountId, repository).restore(pending)
-                                } else null
-                            },
-                            generationAdapter = debugGenerationAdapter(
-                                if (isExplicitDebugRoute) {
-                                    com.gigagochi.app.feature.create.FakePetGenerationAdapter()
+                        AppRoute.Create -> {
+                            RequestNotificationPermissionOnce(enabled = !isExplicitDebugRoute)
+                            CreatePetRoute(
+                                debugState = debugState,
+                                initialStateOverride = if (isExplicitDebugRoute) null else {
+                                    val pending =
+                                        (activeStartup.value as? AccountStartupDestination.Create)
+                                            ?.pending
+                                    val repository = petRepository
+                                    val session = inMemorySession.value
+                                    if (pending != null && repository != null && session != null) {
+                                        CreatePendingCoordinator(session.accountId, repository)
+                                            .restore(pending)
+                                    } else null
+                                },
+                                generationAdapter = debugGenerationAdapter(
+                                    if (isExplicitDebugRoute) {
+                                        com.gigagochi.app.feature.create.FakePetGenerationAdapter()
+                                    } else {
+                                        val session = requireNotNull(inMemorySession.value)
+                                        val repository = requireNotNull(petRepository)
+                                        remember(session.accountId, repository, featureApi) {
+                                            RealPetGenerationAdapter(
+                                                session.accountId,
+                                                repository,
+                                                repository,
+                                                requireNotNull(featureApi),
+                                            )
+                                        }
+                                    },
+                                ),
+                                finalizationCoordinator = if (isExplicitDebugRoute) {
+                                    null
                                 } else {
-                                    val session = requireNotNull(inMemorySession.value)
-                                    val repository = requireNotNull(petRepository)
-                                    remember(session.accountId, repository, featureApi) {
-                                        RealPetGenerationAdapter(
+                                    val session = inMemorySession.value
+                                    val lifecycle = petLifecycle
+                                    if (session != null && lifecycle != null) {
+                                        CreateFinalizationCoordinator(
                                             session.accountId,
-                                            repository,
-                                            repository,
-                                            requireNotNull(featureApi),
+                                            lifecycle,
+                                            requireNotNull(petRepository),
+                                        )
+                                    } else null
+                                },
+                                pendingCoordinator = if (isExplicitDebugRoute) null else {
+                                    val session = inMemorySession.value
+                                    val repository = petRepository
+                                    if (session != null && repository != null) {
+                                        CreatePendingCoordinator(session.accountId, repository)
+                                    } else null
+                                },
+                                onPetReadyInBackground = if (isExplicitDebugRoute) {
+                                    {}
+                                } else {
+                                    { pending ->
+                                        AndroidLocalNotificationEmitter(applicationContext).emit(
+                                            petReadyNotification(pending.requestKey),
                                         )
                                     }
                                 },
-                            ),
-                            finalizationCoordinator = if (isExplicitDebugRoute) {
-                                null
-                            } else {
-                                val session = inMemorySession.value
-                                val lifecycle = petLifecycle
-                                if (session != null && lifecycle != null) {
-                                    CreateFinalizationCoordinator(
-                                        session.accountId,
-                                        lifecycle,
-                                        requireNotNull(petRepository),
-                                    )
-                                } else null
-                            },
-                            pendingCoordinator = if (isExplicitDebugRoute) null else {
-                                val session = inMemorySession.value
-                                val repository = petRepository
-                                if (session != null && repository != null) {
-                                    CreatePendingCoordinator(session.accountId, repository)
-                                } else null
-                            },
-                            onPetPersisted = { activePet.value = it },
-                            onNavigateDashboard = {
-                                val session = inMemorySession.value
-                                if (session != null && !isExplicitDebugRoute) {
-                                    scope.launch { routeLocalSession(session) }
-                                } else route = AppRoute.Dashboard
-                            },
-                        )
+                                onPetPersisted = { activePet.value = it },
+                                onNavigateDashboard = {
+                                    val session = inMemorySession.value
+                                    if (session != null && !isExplicitDebugRoute) {
+                                        scope.launch { routeLocalSession(session) }
+                                    } else route = AppRoute.Dashboard
+                                },
+                            )
+                        }
                         AppRoute.ConnectionError -> StartupConnectionErrorRoute(
                             onRetry = { route = null },
                         )
@@ -1035,6 +1056,11 @@ class MainActivity : ComponentActivity() {
                     )
             }
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) enterImmersiveMode()
     }
 }
 

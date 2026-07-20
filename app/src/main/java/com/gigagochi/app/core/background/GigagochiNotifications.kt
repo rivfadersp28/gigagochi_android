@@ -14,8 +14,19 @@ import androidx.core.content.ContextCompat
 import com.gigagochi.app.MainActivity
 import com.gigagochi.app.R
 import com.gigagochi.app.core.database.LocalCompletionNotification
+import com.gigagochi.app.core.database.LocalNotificationKind
 
 private const val CompletionChannelId = "gigagochi-completions"
+
+internal const val PetReadyTitle = "Ваш друг родился"
+internal const val PetReadyBody = "Скорее познакомьтесь с ним"
+
+fun petReadyNotification(requestKey: String) = LocalCompletionNotification(
+    kind = LocalNotificationKind.PetReady,
+    stableKey = requestKey,
+    title = PetReadyTitle,
+    body = PetReadyBody,
+)
 
 fun notificationsAllowed(context: Context): Boolean =
     (Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(

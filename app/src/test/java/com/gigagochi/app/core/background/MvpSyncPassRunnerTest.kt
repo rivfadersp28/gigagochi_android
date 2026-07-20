@@ -61,6 +61,16 @@ class MvpSyncPassRunnerTest {
     }
 
     @Test
+    fun petReadyNotificationMatchesTelegramCopyAndHasStableReplacementId() {
+        val notification = petReadyNotification("create-key")
+
+        assertEquals(LocalNotificationKind.PetReady, notification.kind)
+        assertEquals("Ваш друг родился", notification.title)
+        assertEquals("Скорее познакомьтесь с ним", notification.body)
+        assertEquals(stableNotificationId(notification), stableNotificationId(notification.copy()))
+    }
+
+    @Test
     fun deniedPermissionLeavesRowsUnmarkedAndAppUsable() = runBlocking {
         var marked = 0
         val emitted = mutableListOf<LocalCompletionNotification>()

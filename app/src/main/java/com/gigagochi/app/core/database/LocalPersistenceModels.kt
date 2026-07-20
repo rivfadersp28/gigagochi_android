@@ -176,7 +176,7 @@ data class LocalTravelVideoAsset(
     val notifiedAtEpochMillis: Long? = null,
 )
 
-enum class LocalNotificationKind { ScheduledStory, OutfitReady, TravelReady, Proactive }
+enum class LocalNotificationKind { PetReady, ScheduledStory, OutfitReady, TravelReady, Proactive }
 
 data class LocalCompletionNotification(
     val kind: LocalNotificationKind,

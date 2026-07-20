@@ -1,7 +1,9 @@
 package com.gigagochi.app.feature.dashboard
 
+import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DashboardImageBoundsTest {
@@ -12,5 +14,19 @@ class DashboardImageBoundsTest {
         assertNull(boundedImageSampleSize(Int.MAX_VALUE, Int.MAX_VALUE))
         assertEquals(1, boundedImageSampleSize(402, 874))
         assertEquals(2, boundedImageSampleSize(3_000, 5_000))
+    }
+
+    @Test
+    fun dashboardActionsStayAbovePhysicalDeviceSafeBottomAfterCoverScale() {
+        assertEquals(762.dp, dashboardActionTop(874.dp, 0.dp, 1f))
+
+        val scale = 411f / 402f
+        val viewportHeight = 823.dp
+        val safeBottom = 24.dp
+        val actionTop = dashboardActionTop(viewportHeight, safeBottom, scale)
+        val visibleReferenceBottom = (viewportHeight - safeBottom) / scale
+
+        assertTrue(actionTop < 762.dp)
+        assertTrue(actionTop + 58.203.dp + 16.dp <= visibleReferenceBottom)
     }
 }
