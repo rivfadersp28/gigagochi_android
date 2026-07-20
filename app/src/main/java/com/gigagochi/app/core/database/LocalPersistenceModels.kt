@@ -68,7 +68,7 @@ enum class PendingCreateStage {
 }
 
 enum class PendingBackendState {
-    Pending, Dispatching, Attached, Retryable, OutcomeUnknown, Failed, Ready,
+    Pending, Dispatching, Attached, ForegroundReady, Retryable, OutcomeUnknown, Failed, Ready,
 }
 
 interface PendingBackendStateStore {

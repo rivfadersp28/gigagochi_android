@@ -152,7 +152,7 @@ fun CreatePetRoute(
     reducedMotionOverride: Boolean? = null,
     finalizationCoordinator: CreateFinalizationCoordinator? = null,
     pendingCoordinator: CreatePendingCoordinator? = null,
-    onPetReadyInBackground: (PendingPetGeneration) -> Unit = {},
+    onPetReadyInBackground: (PendingPetGeneration) -> Boolean = { true },
     onPetPersisted: (PetDashboardState) -> Unit = {},
     onNavigateDashboard: () -> Unit,
 ) {
@@ -169,6 +169,7 @@ fun CreatePetRoute(
     var pendingPersistenceAttempt by remember(debugState) { mutableIntStateOf(0) }
     var pendingPersistenceError by remember(debugState) { mutableStateOf<String?>(null) }
     var persistedRevision by remember(debugState) { mutableStateOf<CreatePendingRevision?>(null) }
+    var foregroundHandled by remember(debugState) { mutableStateOf(true) }
     val persistenceGate = remember(debugState) { CreatePendingPersistenceGate() }
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -245,7 +246,7 @@ fun CreatePetRoute(
                 newRequestRequired = result.newRequestRequired,
             )
             is PetGenerationExecutionResult.Success -> {
-                if (!screenStarted) onPetReadyInBackground(readyState.pending!!)
+                foregroundHandled = screenStarted || onPetReadyInBackground(readyState.pending!!)
                 state = state.markGenerationReady(result.pet)
             }
         }
@@ -256,7 +257,7 @@ fun CreatePetRoute(
         showLoader = true
         if (!reducedMotion) delay(readyTransitionDelayMillis)
         if (finalizationCoordinator != null) {
-            when (val result = finalizationCoordinator.finalize(state)) {
+            when (val result = finalizationCoordinator.finalize(state, foregroundHandled)) {
                 CreateFinalizationResult.Failure -> {
                     showLoader = false
                     finalizationError = "Не удалось сохранить питомца. Попробуйте ещё раз."

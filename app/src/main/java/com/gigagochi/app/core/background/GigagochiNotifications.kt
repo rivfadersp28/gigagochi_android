@@ -38,15 +38,15 @@ fun notificationsAllowed(context: Context): Boolean =
 class AndroidLocalNotificationEmitter(
     private val context: Context,
 ) : LocalNotificationEmitter {
-    override fun emit(notification: LocalCompletionNotification) {
+    override fun emit(notification: LocalCompletionNotification): Boolean {
         if (
             Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS,
             ) != PackageManager.PERMISSION_GRANTED
-        ) return
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        ) return false
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
         ensureChannel()
         val notificationId = stableNotificationId(notification)
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -70,8 +70,10 @@ class AndroidLocalNotificationEmitter(
                     .setAutoCancel(true)
                     .build(),
             )
+            return true
         } catch (_: SecurityException) {
             // Permission can be revoked after the explicit check.
+            return false
         }
     }
 

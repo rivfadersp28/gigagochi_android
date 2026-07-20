@@ -77,10 +77,11 @@
   `onCreate`. В fullscreen Activity повторно применяй immersive mode при возврате window focus, а
   нижние controls размещай по фактически видимой границе reference frame с учётом safe bottom inset
   и cover-scale; иначе на физическом устройстве они визуально обрезаются и попадают в системную touch zone.
-- Pet-ready notification is emitted locally when the Create polling coroutine receives success while
-  the Activity is stopped. It uses the Telegram copy and a request-key-stable notification ID, but it
-  is not FCM or WorkManager delivery: force-stopping/killing the app during generation can suppress it.
-  Android 13+ notification permission must therefore be requested on Create, not first on Dashboard.
+- Pet-ready notification uses the Telegram copy and a request-key-stable notification ID. After a
+  backend job is attached, a unique one-shot WorkManager request keeps polling across ordinary process
+  death and marks `ForegroundReady` only after `notify()` succeeds; denied permission therefore keeps
+  the durable pending for retry. Android force-stop still suppresses all app work until the user opens
+  the app again. Android 13+ notification permission must be requested on Create, not first on Dashboard.
 - Splitter реплик целится в 4 строки через консервативную оценку ширины glyph в em, чтобы pure reducer не зависел от Compose/Android font measurement. Compose и контейнер допускают аварийные 6 строк. При изменении SB Sans, размера 20sp или ширины 356dp одновременно калибруй `DashboardReplyLineWidthEm`, иначе шестистрочный предел снова может скрыть хвост реплики.
 - Dashboard reveal синхронизирован с прежним web `PetCharacterMessage`: 300/700/24 ms и те же cubic-bezier. Loader нельзя заменять generic dots — его source of truth остаются три `thinking_frame_*` drawable, переключаемые каждые 200 ms.
 - Не ключуй `pointerInput` нестабильной callback-лямбдой у анимируемой Compose-кнопки: собственная

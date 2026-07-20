@@ -325,6 +325,40 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun createFinalizationIsIdempotentAndMergesLateBackgroundMedia() = runBlocking {
+        repository.savePendingCreate(create())
+        val foregroundMedia = PetGeneratedMedia(
+            generatedAt = "2026-07-20T10:00:00Z",
+            videoUrl = "https://gigagochi.serega.works/static/normal.mp4",
+            moodImages = mediaImages("normal"),
+        )
+        assertTrue(repository.finalizeCreatedPet(
+            snapshot(generatedMedia = foregroundMedia),
+            "create-request",
+            keepPendingCreate = true,
+        ))
+
+        val completeMedia = foregroundMedia.copy(
+            sadVideoUrl = "https://gigagochi.serega.works/static/sad.mp4",
+            happyVideoUrl = "https://gigagochi.serega.works/static/happy.mp4",
+        )
+        assertTrue(repository.finalizeCreatedPet(
+            snapshot(generatedMedia = completeMedia),
+            "create-request",
+        ))
+        assertTrue(repository.finalizeCreatedPet(
+            snapshot(generatedMedia = completeMedia),
+            "create-request",
+        ))
+
+        val saved = repository.getPetSnapshot(OwnerId, PetId)!!.pet.generatedMedia
+        assertEquals(foregroundMedia.videoUrl, saved.videoUrl)
+        assertEquals(completeMedia.sadVideoUrl, saved.sadVideoUrl)
+        assertEquals(completeMedia.happyVideoUrl, saved.happyVideoUrl)
+        assertTrue(repository.loadOwnerRecovery(OwnerId).pendingCreates.isEmpty())
+    }
+
+    @Test
     fun scheduledEpisodeIsOwnerScopedAndChoiceIsSingleRowIdempotent() = runBlocking {
         val base = ScheduledStory(
             "android-story-1234567890abcdef1234567890abcdef",
@@ -688,6 +722,7 @@ class PetLocalRepositoryTest {
         energy: Int = 100,
         message: String = "Как тебя зовут?",
         petTapProgress: Int = 0,
+        generatedMedia: PetGeneratedMedia = PetGeneratedMedia(),
     ) = OwnedPetSnapshot(
         ownerId = ownerId,
         pet = PetDashboardState(
@@ -704,6 +739,7 @@ class PetLocalRepositoryTest {
             energy = energy,
             message = message,
             petTapProgress = petTapProgress,
+            generatedMedia = generatedMedia,
         ),
         updatedAtEpochMillis = 10,
     )

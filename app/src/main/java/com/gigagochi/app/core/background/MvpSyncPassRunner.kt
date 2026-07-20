@@ -10,7 +10,7 @@ import kotlinx.coroutines.CancellationException
 enum class MvpSyncPassResult { Success, Retry }
 
 fun interface LocalNotificationEmitter {
-    fun emit(notification: LocalCompletionNotification)
+    fun emit(notification: LocalCompletionNotification): Boolean
 }
 
 class MvpSyncPassRunner(
@@ -33,8 +33,9 @@ class MvpSyncPassRunner(
             }
             if (notificationsAllowed()) {
                 loadNotifications(session.accountId, pet.petId).forEach { notification ->
-                    emitter.emit(notification)
-                    markNotified(session.accountId, notification)
+                    if (emitter.emit(notification)) {
+                        markNotified(session.accountId, notification)
+                    }
                 }
             }
             if (failure?.kind in RetryableSyncFailures) {

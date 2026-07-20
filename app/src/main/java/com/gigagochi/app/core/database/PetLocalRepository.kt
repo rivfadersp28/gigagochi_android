@@ -594,7 +594,45 @@ class PetLocalRepository(
         LocalPersistenceValidation.petSnapshot(snapshot)
         LocalPersistenceValidation.requestKey(pendingRequestKey)
         return database.withTransaction {
-            if (dao.getPet(snapshot.ownerId, snapshot.pet.petId) != null) return@withTransaction false
+            val existingEntity = dao.getPet(snapshot.ownerId, snapshot.pet.petId)
+            if (existingEntity != null) {
+                if (existingEntity.assetSetId != snapshot.pet.assetSetId) {
+                    return@withTransaction false
+                }
+                val existing = existingEntity.toModel(
+                    dao.getMoodImages(snapshot.ownerId, snapshot.pet.petId),
+                ).pet
+                if (existing.description != snapshot.pet.description ||
+                    existing.name != snapshot.pet.name
+                ) {
+                    return@withTransaction false
+                }
+                val merged = existing.copy(
+                    generatedMedia = mergeGeneratedMedia(
+                        existing.generatedMedia,
+                        snapshot.pet.generatedMedia,
+                    ),
+                )
+                dao.upsertPet(
+                    OwnedPetSnapshot(
+                        snapshot.ownerId,
+                        merged,
+                        maxOf(existingEntity.updatedAtEpochMillis, snapshot.updatedAtEpochMillis),
+                    ).toEntity(),
+                )
+                if (snapshot.pet.generatedMedia.moodImages.isNotEmpty()) {
+                    dao.deleteMoodImages(snapshot.ownerId, snapshot.pet.petId)
+                    dao.upsertMoodImages(snapshot.pet.generatedMedia.moodImages.map {
+                        PetMoodImageEntity(snapshot.ownerId, snapshot.pet.petId, it.stage, it.mood, it.url)
+                    })
+                }
+                if (!keepPendingCreate) {
+                    dao.getPendingCreate(snapshot.ownerId, pendingRequestKey)?.let {
+                        check(dao.deletePendingCreate(snapshot.ownerId, pendingRequestKey) == 1)
+                    }
+                }
+                return@withTransaction true
+            }
             dao.upsertPet(snapshot.toEntity())
             val images = snapshot.pet.generatedMedia.moodImages.map {
                 PetMoodImageEntity(snapshot.ownerId, snapshot.pet.petId, it.stage, it.mood, it.url)
@@ -1573,6 +1611,20 @@ class PetLocalRepository(
         }
     }
 }
+
+private fun mergeGeneratedMedia(
+    current: PetGeneratedMedia,
+    incoming: PetGeneratedMedia,
+) = PetGeneratedMedia(
+    generatedAt = incoming.generatedAt ?: current.generatedAt,
+    videoUrl = incoming.videoUrl ?: current.videoUrl,
+    sadVideoUrl = incoming.sadVideoUrl ?: current.sadVideoUrl,
+    happyVideoUrl = incoming.happyVideoUrl ?: current.happyVideoUrl,
+    blinkImageUrl = incoming.blinkImageUrl ?: current.blinkImageUrl,
+    spriteSheetUrl = incoming.spriteSheetUrl ?: current.spriteSheetUrl,
+    characterBibleJson = incoming.characterBibleJson ?: current.characterBibleJson,
+    moodImages = incoming.moodImages.ifEmpty { current.moodImages },
+)
 
 object LocalPersistenceValidation {
     private const val OwnerIdMax = 255

@@ -25,6 +25,7 @@ class RealPetGenerationAdapter(
     private val api: AndroidFeatureService,
     private val pollDelayMillis: Long = 2_000L,
     private val maxPollAttempts: Int = 600,
+    private val onJobAttached: () -> Unit = {},
 ) : PetGenerationAdapter {
     override suspend fun generate(request: PendingPetGeneration): GeneratedPetFixture {
         val persisted = store.loadOwnerRecovery(ownerId).pendingCreates.singleOrNull {
@@ -96,6 +97,7 @@ class RealPetGenerationAdapter(
                 }
             }
         }
+        onJobAttached()
         repeat(maxPollAttempts) { attempt ->
             when (val polled = api.pollCreate(backendJobId)) {
                 is FeatureApiResult.Failure -> throw FeatureAdapterException(polled.failure)

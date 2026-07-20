@@ -78,6 +78,7 @@ class CreatePendingCoordinator(
                 com.gigagochi.app.core.database.PendingBackendState.Pending,
                 com.gigagochi.app.core.database.PendingBackendState.Retryable,
                 com.gigagochi.app.core.database.PendingBackendState.Attached,
+                com.gigagochi.app.core.database.PendingBackendState.ForegroundReady,
                 com.gigagochi.app.core.database.PendingBackendState.Ready,
             )
         return CreatePetState(

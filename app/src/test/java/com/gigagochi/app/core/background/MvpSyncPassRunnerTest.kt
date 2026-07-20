@@ -97,7 +97,10 @@ class MvpSyncPassRunnerTest {
             featureSync = { _, _ -> null },
             notificationsAllowed = { true },
             loadNotifications = { _, _ -> listOf(row) },
-            emitter = LocalNotificationEmitter { emittedIds += stableNotificationId(it) },
+            emitter = LocalNotificationEmitter {
+                emittedIds += stableNotificationId(it)
+                true
+            },
             markNotified = { _, _ ->
                 if (firstMark) {
                     firstMark = false
@@ -144,7 +147,10 @@ class MvpSyncPassRunnerTest {
         featureSync = { _, _ -> onSync() },
         notificationsAllowed = { permission },
         loadNotifications = { _, _ -> notifications() },
-        emitter = LocalNotificationEmitter(emitted::add),
+        emitter = LocalNotificationEmitter {
+            emitted += it
+            true
+        },
         markNotified = { _, notification -> onMark(notification) },
     )
 

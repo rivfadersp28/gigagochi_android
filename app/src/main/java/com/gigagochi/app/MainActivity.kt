@@ -58,6 +58,7 @@ import com.gigagochi.app.core.auth.LocalSessionBootstrapOutcome
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.background.MvpSyncScheduler
+import com.gigagochi.app.core.background.CreateSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
 import com.gigagochi.app.core.background.petReadyNotification
@@ -455,6 +456,9 @@ class MainActivity : ComponentActivity() {
                         }
                         is AccountStartupDestination.Create -> {
                             activeStartup.value = destination
+                            if (destination.pending?.backendJobId != null) {
+                                CreateSyncScheduler.enqueue(applicationContext)
+                            }
                             route = appRouteForAccountStartup(destination)
                         }
                         AccountStartupDestination.Failure -> route =
@@ -835,6 +839,9 @@ class MainActivity : ComponentActivity() {
                                                 repository,
                                                 repository,
                                                 requireNotNull(featureApi),
+                                                onJobAttached = {
+                                                    CreateSyncScheduler.enqueue(applicationContext)
+                                                },
                                             )
                                         }
                                     },
@@ -849,6 +856,7 @@ class MainActivity : ComponentActivity() {
                                             session.accountId,
                                             lifecycle,
                                             requireNotNull(petRepository),
+                                            requireNotNull(petRepository),
                                         )
                                     } else null
                                 },
@@ -860,7 +868,7 @@ class MainActivity : ComponentActivity() {
                                     } else null
                                 },
                                 onPetReadyInBackground = if (isExplicitDebugRoute) {
-                                    {}
+                                    { true }
                                 } else {
                                     { pending ->
                                         AndroidLocalNotificationEmitter(applicationContext).emit(
