@@ -147,3 +147,8 @@
   через read-only `content://`. Копирование использует ограниченный same-origin media datasource,
   отдельный cache-path `shared-travel-videos/` и `FLAG_GRANT_READ_URI_PERMISSION`; весь `cacheDir`
   через `FileProvider` не публикуется.
+
+# Android media and generation recovery
+
+- In-app click effects and character speech must use `AudioAttributes.USAGE_MEDIA`. `USAGE_ASSISTANCE_SONIFICATION` follows the device's system-sound stream and can be silent while media volume is audible.
+- `GENERATION_ALREADY_ACTIVE` is a transient backend response: persist the pending operation as retryable and redispatch it after the current character-media job completes. Treating it as a terminal conflict can strand a charged outfit request.

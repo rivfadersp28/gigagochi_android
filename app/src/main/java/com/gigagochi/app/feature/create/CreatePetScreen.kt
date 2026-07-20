@@ -1020,14 +1020,39 @@ private class CreationAudioFeedback(context: android.content.Context) {
         .setMaxStreams(2)
         .setAudioAttributes(
             AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build(),
         )
         .build()
-    private val buttonSound = sounds.load(context, R.raw.creation_button_plop, 1)
+    @Volatile
+    private var loadedButtonSound = 0
+    @Volatile
+    private var pendingButtonPlay = false
+    private val buttonSound: Int
+
+    init {
+        sounds.setOnLoadCompleteListener { _, sampleId, status ->
+            if (status == 0 && sampleId == buttonSound) {
+                loadedButtonSound = sampleId
+                if (pendingButtonPlay) {
+                    pendingButtonPlay = false
+                    playLoadedButtonSound()
+                }
+            }
+        }
+        buttonSound = sounds.load(context, R.raw.creation_button_plop, 1)
+    }
 
     fun playButtonSound() {
+        if (loadedButtonSound == buttonSound) {
+            playLoadedButtonSound()
+        } else {
+            pendingButtonPlay = true
+        }
+    }
+
+    private fun playLoadedButtonSound() {
         sounds.play(buttonSound, 1f, 1f, 1, 0, 1f)
     }
 

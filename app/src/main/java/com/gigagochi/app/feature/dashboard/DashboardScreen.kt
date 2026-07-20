@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -114,7 +115,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.text.style.TextAlign
@@ -744,14 +744,20 @@ private fun DashboardInlineScreen(
     var petTapReaction by remember { mutableStateOf<PetTapReaction?>(null) }
     var petTapHeartBursts by remember { mutableStateOf<List<PetTapHeartBurst>>(emptyList()) }
     var lastPetTapParticleAt by remember { mutableStateOf(Long.MIN_VALUE) }
+    var composerLineCount by remember(state.mode) { mutableIntStateOf(1) }
     val imeBottomDp = with(density) { WindowInsets.ime.getBottom(this).toDp().value }
     val imeMotionProgress = (
         (imeBottomDp - ImeMotionStartInsetDp) / ImeMotionTravelDp
         ).coerceIn(0f, 1f)
     val conversationTop = ClosedConversationTop -
         (ClosedConversationTop - OpenConversationTop) * imeMotionProgress
+    val composerDialogueLift = if (composerLineCount > 2) {
+        ((composerLineCount - 2) * 24).dp
+    } else {
+        0.dp
+    }
     val dialogueTop = ClosedDialogueTop -
-        (ClosedDialogueTop - OpenDialogueTop) * imeMotionProgress
+        (ClosedDialogueTop - OpenDialogueTop) * imeMotionProgress - composerDialogueLift
     val mediaOffsetY = if (
         imeMotionProgress > 0f && (
             state.mode == DashboardMode.Chat ||
@@ -1002,6 +1008,7 @@ private fun DashboardInlineScreen(
                             },
                         )
                     },
+                    onLineCountChange = { composerLineCount = it },
                 )
             }
 
@@ -1188,6 +1195,7 @@ private fun ConversationInputPanel(
     reducedMotion: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
+    onLineCountChange: (Int) -> Unit,
 ) {
     val buttonPressFeedback = LocalButtonPressFeedback.current
     val isOutfit = mode == DashboardMode.Outfit
@@ -1227,154 +1235,176 @@ private fun ConversationInputPanel(
         }
     }
 
+    val collapsedPanelHeight = 62.dp
+    val expandedPanelHeight = 134.dp
     Box(
         modifier = Modifier
-            .requiredSize(362.dp, 62.dp)
-            .offset(x = 20.dp, y = top)
+            .requiredSize(362.dp, expandedPanelHeight)
+            .offset(x = 20.dp, y = top - (expandedPanelHeight - collapsedPanelHeight))
             .graphicsLayer { alpha = entranceAlpha.value },
     ) {
         Box(
-            Modifier
-                .matchParentSize()
-                .clip(DashboardGlassContract.ConversationShape)
-                .hazeEffect(hazeState, DashboardGlassContract.InlineStyle)
-                .innerShadow(
-                    DashboardGlassContract.ConversationShape,
-                    DashboardGlassContract.ConversationHighlightInset,
-                )
-                .innerShadow(
-                    DashboardGlassContract.ConversationShape,
-                    DashboardGlassContract.ConversationSoftInset,
-                ),
-        )
-        BasicTextField(
-            value = value,
-            onValueChange = { onValueChange(it.take(DashboardPromptMaxLength)) },
-            enabled = !busy,
-            singleLine = true,
-            textStyle = TextStyle(
-                color = Color.White,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = OpenRundeFontFamily,
-            ),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { submit() }),
             modifier = Modifier
-                .requiredWidth(if (isOutfit) 224.dp else 264.dp)
-                .height(46.dp)
-                .offset(x = 24.dp, y = 8.dp)
-                .focusRequester(focusRequester)
-                .semantics {
-                    contentDescription = inputDescription
-                },
-            decorationBox = { innerTextField ->
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (value.isEmpty()) {
-                        Text(
-                            text = placeholder,
-                            color = Color.White.copy(alpha = .3f),
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = OpenRundeFontFamily,
-                            maxLines = 1,
-                        )
-                    }
-                    innerTextField()
-                }
-            },
-        )
-        if (error != null) {
-            Text(
-                text = error,
-                color = Color(0xFFFF6675),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = OpenRundeFontFamily,
-                lineHeight = 16.sp,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .requiredWidth(314.dp)
-                    .offset(x = 24.dp, y = (-24).dp)
-                    .semantics { contentDescription = error },
+                .align(Alignment.BottomCenter)
+                .requiredWidth(362.dp)
+                .heightIn(min = collapsedPanelHeight, max = expandedPanelHeight),
+        ) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(DashboardGlassContract.ConversationShape)
+                    .hazeEffect(hazeState, DashboardGlassContract.InlineStyle)
+                    .innerShadow(
+                        DashboardGlassContract.ConversationShape,
+                        DashboardGlassContract.ConversationHighlightInset,
+                    )
+                    .innerShadow(
+                        DashboardGlassContract.ConversationShape,
+                        DashboardGlassContract.ConversationSoftInset,
+                    ),
             )
-        }
-        if (isOutfit) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .requiredSize(82.dp, 46.dp)
-                    .offset(x = 264.dp, y = 8.dp)
-                    .clip(RoundedCornerShape(36.429.dp))
-                    .background(Color.White)
-                    .pointerInput(value, busy) {
-                        detectTapGestures(onTap = {
-                            if (!busy && value.trim().isNotEmpty()) {
-                                buttonPressFeedback()
-                                submit()
-                            }
-                        })
-                    }
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = "Создать наряд за 200 монет"
-                        onClick("Создать наряд за 200 монет") {
-                            if (!busy && value.trim().isNotEmpty()) {
-                                buttonPressFeedback()
-                                submit()
-                                true
-                            } else {
-                                false
-                            }
-                        }
-                    },
-            ) {
-                Text(
-                    text = "$OutfitExperienceCost",
-                    color = Color.Black,
+            BasicTextField(
+                value = value,
+                onValueChange = { onValueChange(it.take(DashboardPromptMaxLength)) },
+                enabled = !busy,
+                singleLine = false,
+                minLines = 1,
+                maxLines = 4,
+                textStyle = TextStyle(
+                    color = Color.White,
                     fontSize = 20.sp,
+                    lineHeight = 24.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = OpenRundeFontFamily,
-                )
-                Spacer(Modifier.width(5.dp))
-                Coin(17.4.dp, monochrome = true)
-            }
-        } else {
-            Box(
-                contentAlignment = Alignment.Center,
+                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                onTextLayout = { result ->
+                    onLineCountChange(result.lineCount.coerceIn(1, 4))
+                },
                 modifier = Modifier
-                    .requiredSize(46.dp)
-                    .offset(x = 306.dp, y = 8.dp)
-                    .clip(RoundedCornerShape(50))
-                    .pointerInput(value, busy) {
-                        detectTapGestures(onTap = {
-                            if (!busy && value.trim().isNotEmpty()) {
-                                buttonPressFeedback()
-                                submit()
-                            }
-                        })
-                    }
+                    .requiredWidth(362.dp)
+                    .padding(
+                        start = 24.dp,
+                        end = if (isOutfit) 126.dp else 82.dp,
+                        top = 8.dp,
+                        bottom = 8.dp,
+                    )
+                    .heightIn(min = 46.dp, max = 118.dp)
+                    .focusRequester(focusRequester)
                     .semantics {
-                        role = Role.Button
-                        contentDescription = "Отправить"
-                        onClick("Отправить") {
-                            if (!busy && value.trim().isNotEmpty()) {
-                                buttonPressFeedback()
-                                submit()
-                                true
-                            } else {
-                                false
-                            }
-                        }
+                        contentDescription = inputDescription
                     },
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.conversation_send),
-                    contentDescription = null,
-                    modifier = Modifier.requiredSize(35.074.dp),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = placeholder,
+                                color = Color.White.copy(alpha = .3f),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = OpenRundeFontFamily,
+                                maxLines = 1,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            if (error != null) {
+                Text(
+                    text = error,
+                    color = Color(0xFFFF6675),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = OpenRundeFontFamily,
+                    lineHeight = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .requiredWidth(314.dp)
+                        .align(Alignment.TopStart)
+                        .offset(x = 24.dp, y = (-24).dp)
+                        .semantics { contentDescription = error },
                 )
+            }
+            if (isOutfit) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 16.dp, bottom = 8.dp)
+                        .requiredSize(94.dp, 46.dp)
+                        .clip(RoundedCornerShape(36.429.dp))
+                        .background(Color.White)
+                        .pointerInput(value, busy) {
+                            detectTapGestures(onTap = {
+                                if (!busy && value.trim().isNotEmpty()) {
+                                    buttonPressFeedback()
+                                    submit()
+                                }
+                            })
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "Создать наряд за 200 монет"
+                            onClick("Создать наряд за 200 монет") {
+                                if (!busy && value.trim().isNotEmpty()) {
+                                    buttonPressFeedback()
+                                    submit()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        },
+                ) {
+                    Text(
+                        text = "$OutfitExperienceCost",
+                        color = Color.Black,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = OpenRundeFontFamily,
+                    )
+                    Spacer(Modifier.width(7.dp))
+                    Coin(19.5.dp, monochrome = true)
+                }
+            } else {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 10.dp, bottom = 8.dp)
+                        .requiredSize(46.dp)
+                        .clip(RoundedCornerShape(50))
+                        .pointerInput(value, busy) {
+                            detectTapGestures(onTap = {
+                                if (!busy && value.trim().isNotEmpty()) {
+                                    buttonPressFeedback()
+                                    submit()
+                                }
+                            })
+                        }
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = "Отправить"
+                            onClick("Отправить") {
+                                if (!busy && value.trim().isNotEmpty()) {
+                                    buttonPressFeedback()
+                                    submit()
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                        },
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.conversation_send),
+                        contentDescription = null,
+                        modifier = Modifier.requiredSize(35.074.dp),
+                    )
+                }
             }
         }
     }
@@ -1950,7 +1980,7 @@ private fun ExperiencePill(experience: Int, hazeState: HazeState, modifier: Modi
             fontFamily = OpenRundeFontFamily,
         )
         Spacer(Modifier.width(7.dp))
-        Coin(17.4.dp)
+        Coin(21.7.dp)
     }
 }
 

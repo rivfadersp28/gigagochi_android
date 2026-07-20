@@ -588,10 +588,11 @@ class AndroidFeatureApi(
         kind = when (code) {
             "AUTH_INVALID" -> FeatureFailureKind.SessionInvalid
             "RATE_LIMITED" -> FeatureFailureKind.RateLimited
-            "REQUEST_IN_PROGRESS", "SESSION_BUSY" -> FeatureFailureKind.InProgress
+            "REQUEST_IN_PROGRESS", "SESSION_BUSY", "GENERATION_ALREADY_ACTIVE" ->
+                FeatureFailureKind.InProgress
             "OUTCOME_UNKNOWN", "SESSION_OUTCOME_UNKNOWN" -> FeatureFailureKind.OutcomeUnknown
             "JOB_NOT_FOUND", "SESSION_NOT_FOUND", "PART_NOT_FOUND" -> FeatureFailureKind.NotFound
-            "IDEMPOTENCY_CONFLICT", "GENERATION_ALREADY_ACTIVE", "PET_MISMATCH",
+            "IDEMPOTENCY_CONFLICT", "PET_MISMATCH",
             "SESSION_CONFLICT", -> FeatureFailureKind.Conflict
             "GENERATION_QUEUE_FULL" -> FeatureFailureKind.Server
             else -> when (status) {

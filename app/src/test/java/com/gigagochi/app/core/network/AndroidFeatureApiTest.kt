@@ -120,6 +120,19 @@ class AndroidFeatureApiTest {
     }
 
     @Test
+    fun activeGenerationIsRetryableWhileIdentityConflictsRemainTerminal() = runBlocking {
+        val active = api(409, """{"detail":{"code":"GENERATION_ALREADY_ACTIVE"}}""")
+            .submitCreate(CreateJobRequestDto(Key, "pet-a", "dragon"))
+        assertFailure(active, FeatureFailureKind.InProgress)
+
+        listOf("IDEMPOTENCY_CONFLICT", "PET_MISMATCH").forEach { code ->
+            val conflict = api(409, """{"detail":{"code":"$code"}}""")
+                .submitCreate(CreateJobRequestDto(Key, "pet-a", "dragon"))
+            assertFailure(conflict, FeatureFailureKind.Conflict)
+        }
+    }
+
+    @Test
     fun malformedUtf8SuccessIsProtocolFailure() = runBlocking {
         val result = apiBytes(200, byteArrayOf(0x7b, 0xc3.toByte(), 0x28, 0x7d))
             .submitCreate(CreateJobRequestDto(Key, "pet-a", "dragon"))
