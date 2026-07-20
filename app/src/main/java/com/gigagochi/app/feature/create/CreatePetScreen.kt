@@ -1,7 +1,6 @@
 package com.gigagochi.app.feature.create
 
 import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.media.SoundPool
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -184,11 +183,9 @@ fun CreatePetRoute(
             when (event) {
                 Lifecycle.Event.ON_START -> {
                     screenStarted = true
-                    audioFeedback.resumeMusicIfTrusted()
                 }
                 Lifecycle.Event.ON_STOP -> {
                     screenStarted = false
-                    audioFeedback.pauseMusic()
                 }
                 else -> Unit
             }
@@ -276,10 +273,6 @@ fun CreatePetRoute(
         return
     }
 
-    fun trustedAction() {
-        audioFeedback.onTrustedInteraction()
-    }
-
     CreatePetScreen(
         state = (pendingPersistenceError ?: finalizationError)?.let { message ->
             state.copy(generation = GenerationStatus.Error(message))
@@ -288,14 +281,12 @@ fun CreatePetRoute(
         requestCustomIme = customShouldRequestIme,
         onBackgroundPhaseComplete = { state = state.markTransitionComplete() },
         onAnswer = { answer ->
-            trustedAction()
             audioFeedback.playButtonSound()
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             state = state.answer(answer, reducedMotion)
             customShouldRequestIme = false
         },
         onOpenCustom = {
-            trustedAction()
             audioFeedback.playButtonSound()
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             state = state.openCustomInput()
@@ -307,14 +298,12 @@ fun CreatePetRoute(
             customShouldRequestIme = false
         },
         onSubmitCustom = {
-            trustedAction()
             audioFeedback.playButtonSound()
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             state = state.submitCustom(reducedMotion)
             customShouldRequestIme = false
         },
         onRetry = {
-            trustedAction()
             audioFeedback.playButtonSound()
             view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             if (pendingPersistenceError != null) {
@@ -456,22 +445,11 @@ private fun QuestionContent(
                 ),
             ),
     )
-    Box(
-        contentAlignment = Alignment.BottomCenter,
-        modifier = Modifier
-            .requiredSize(261.dp, 52.dp)
-            .offset(x = 76.dp, y = 426.dp),
-    ) {
-        Text(
-            text = question.title,
-            color = Color.White,
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = OpenRundeFontFamily,
-            lineHeight = 26.sp,
-            textAlign = TextAlign.Center,
-        )
-    }
+    CreationQuestionTitle(
+        title = question.title,
+        color = Color.White,
+        modifier = Modifier.offset(x = 24.dp, y = 358.dp),
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(19.dp),
@@ -510,22 +488,11 @@ private fun CustomInputContent(
             keyboardController?.show()
         }
     }
-    Box(
-        contentAlignment = Alignment.BottomCenter,
-        modifier = Modifier
-            .requiredSize(261.dp, 52.dp)
-            .offset(x = 73.dp, y = 185.dp),
-    ) {
-        Text(
-            text = state.question?.title.orEmpty(),
-            color = Color.White.copy(alpha = .4f),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = OpenRundeFontFamily,
-            lineHeight = 26.sp,
-            textAlign = TextAlign.Center,
-        )
-    }
+    CreationQuestionTitle(
+        title = state.question?.title.orEmpty(),
+        color = Color.White.copy(alpha = .4f),
+        modifier = Modifier.offset(x = 24.dp, y = 117.dp),
+    )
 
     BasicTextField(
         value = state.customValue,
@@ -607,6 +574,28 @@ private fun CustomInputContent(
                 onClick = onSubmit,
             )
         }
+    }
+}
+
+@Composable
+private fun CreationQuestionTitle(
+    title: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        contentAlignment = Alignment.BottomCenter,
+        modifier = modifier.requiredSize(354.dp, 120.dp),
+    ) {
+        Text(
+            text = title,
+            color = color,
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = OpenRundeFontFamily,
+            lineHeight = 26.sp,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -1026,10 +1015,6 @@ private fun rememberCreationMosaicFrames(): List<ImageBitmap> {
 }
 
 private class CreationAudioFeedback(context: android.content.Context) {
-    private val music = MediaPlayer.create(context, R.raw.hopeful_piano_loop)?.apply {
-        isLooping = true
-        setVolume(CreationMediaContract.MusicVolume, CreationMediaContract.MusicVolume)
-    }
     private val sounds = SoundPool.Builder()
         .setMaxStreams(2)
         .setAudioAttributes(
@@ -1040,27 +1025,12 @@ private class CreationAudioFeedback(context: android.content.Context) {
         )
         .build()
     private val buttonSound = sounds.load(context, R.raw.creation_button_plop, 1)
-    private var trusted = false
-
-    fun onTrustedInteraction() {
-        trusted = true
-        if (music?.isPlaying == false) music.start()
-    }
 
     fun playButtonSound() {
         sounds.play(buttonSound, 1f, 1f, 1, 0, 1f)
     }
 
-    fun pauseMusic() {
-        if (music?.isPlaying == true) music.pause()
-    }
-
-    fun resumeMusicIfTrusted() {
-        if (trusted && music?.isPlaying == false) music.start()
-    }
-
     fun release() {
-        music?.release()
         sounds.release()
     }
 }

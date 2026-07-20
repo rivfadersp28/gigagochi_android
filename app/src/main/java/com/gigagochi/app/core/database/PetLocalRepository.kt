@@ -105,9 +105,13 @@ interface OwnerRecoveryStore : PetSnapshotStore, FirstSessionStore {
         receipt: InteractiveStoryReceipt,
     ): StoryApplicationResult
 
-    suspend fun finalizeCreatedPet(snapshot: OwnedPetSnapshot, pendingRequestKey: String): Boolean {
+    suspend fun finalizeCreatedPet(
+        snapshot: OwnedPetSnapshot,
+        pendingRequestKey: String,
+        keepPendingCreate: Boolean = false,
+    ): Boolean {
         if (!replacePetSnapshotIfAssetCurrent(snapshot)) return false
-        return deletePendingCreate(snapshot.ownerId, pendingRequestKey)
+        return keepPendingCreate || deletePendingCreate(snapshot.ownerId, pendingRequestKey)
     }
 }
 
@@ -585,6 +589,7 @@ class PetLocalRepository(
     override suspend fun finalizeCreatedPet(
         snapshot: OwnedPetSnapshot,
         pendingRequestKey: String,
+        keepPendingCreate: Boolean,
     ): Boolean {
         LocalPersistenceValidation.petSnapshot(snapshot)
         LocalPersistenceValidation.requestKey(pendingRequestKey)
@@ -607,7 +612,9 @@ class PetLocalRepository(
                     ),
                 ) != -1L,
             )
-            check(dao.deletePendingCreate(snapshot.ownerId, pendingRequestKey) == 1)
+            if (!keepPendingCreate) {
+                check(dao.deletePendingCreate(snapshot.ownerId, pendingRequestKey) == 1)
+            }
             true
         }
     }

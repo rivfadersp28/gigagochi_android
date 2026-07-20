@@ -10,6 +10,7 @@ interface DashboardChatAdapter {
 data class DashboardChatResult(
     val reply: String,
     val pet: PetDashboardState,
+    val explicitPortions: List<String>? = null,
 )
 
 interface DashboardFeedAdapter {

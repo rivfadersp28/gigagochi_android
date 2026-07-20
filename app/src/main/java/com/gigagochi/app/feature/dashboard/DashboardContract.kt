@@ -147,6 +147,7 @@ data class DashboardUiState(
     val pendingTravel: PendingTravelGeneration? = null,
     val queuedTravelRequestKeys: Set<String> = emptySet(),
     val transientReply: DashboardReply? = null,
+    val settledFirstSessionReply: DashboardReply? = null,
 )
 
 sealed interface DashboardEvent {
@@ -208,6 +209,7 @@ sealed interface DashboardEvent {
         val pending: PendingTravelGeneration,
     ) : DashboardEvent
     data class AdvanceReply(val requestKey: String) : DashboardEvent
+    data class CompleteReply(val requestKey: String) : DashboardEvent
     data class ClearReply(val requestKey: String) : DashboardEvent
     data class PetTapped(
         val thanksMessage: String? = null,
@@ -225,6 +227,11 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
             } else {
                 state.firstSessionIdleReply
             },
+            settledFirstSessionReply = if (stageChanged) {
+                null
+            } else {
+                state.settledFirstSessionReply
+            },
             pet = event.pet,
         )
     } else state
@@ -235,6 +242,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         chatReply = null,
         activeChat = null,
         transientReply = null,
+        settledFirstSessionReply = null,
     )
 
     DashboardEvent.OpenFeed -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Feed)) state else state.copy(
@@ -244,13 +252,15 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         activeFeed = null,
         feedToken = FoodTokenMotion(),
         transientReply = null,
+        settledFirstSessionReply = null,
     )
 
-    DashboardEvent.OpenOutfit -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Outfit)) state else state.copy(
+    DashboardEvent.OpenOutfit -> state.copy(
         mode = DashboardMode.Outfit,
         outfitError = null,
         activeOutfit = null,
         transientReply = null,
+        settledFirstSessionReply = null,
     )
 
     DashboardEvent.OpenTravel -> if (firstSessionMainAction(state.firstSession) !in setOf(null, FirstSessionMainAction.Travel)) state else state.copy(
@@ -258,6 +268,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         travelError = null,
         activeTravel = null,
         transientReply = null,
+        settledFirstSessionReply = null,
     )
 
     DashboardEvent.CloseMode -> state.copy(
@@ -287,7 +298,12 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
 
     is DashboardEvent.SubmitChat -> {
         val message = state.chatDraft.trim().take(DashboardPromptMaxLength)
-        if (state.mode != DashboardMode.Chat || message.isEmpty() || state.activeChat != null) {
+        if (
+            state.mode != DashboardMode.Chat ||
+            message.isEmpty() ||
+            state.activeChat != null ||
+            (state.firstSession != null && state.chatReply != null)
+        ) {
             state
         } else {
             state.copy(
@@ -306,7 +322,11 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
             activeChat = null,
             chatError = null,
             pet = event.result.pet,
-            chatReply = DashboardReply(event.requestKey, event.result.reply),
+            chatReply = DashboardReply(
+                requestKey = event.requestKey,
+                text = event.result.reply,
+                explicitPortions = event.result.explicitPortions,
+            ),
         )
     } else {
         state
@@ -535,6 +555,8 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         firstSessionIdleReply = state.firstSessionIdleReply.advanceIfMatching(event.requestKey),
     )
 
+    is DashboardEvent.CompleteReply -> completeFirstSessionReply(state, event.requestKey)
+
     is DashboardEvent.ClearReply -> state.copy(
         chatReply = state.chatReply?.takeUnless { it.requestKey == event.requestKey },
         feedReply = state.feedReply?.takeUnless { it.requestKey == event.requestKey },
@@ -566,6 +588,75 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
 
 }
 
+private fun completeFirstSessionReply(
+    state: DashboardUiState,
+    requestKey: String,
+): DashboardUiState {
+    val stage = state.firstSession?.stage ?: return state
+    if (state.chatReply?.requestKey == requestKey) {
+        return when (stage) {
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingChatFollowup -> state.copy(
+                chatReply = null,
+                firstSessionIdleReply = null,
+                settledFirstSessionReply = state.chatReply,
+            )
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood -> state.copy(
+                mode = DashboardMode.Idle,
+                chatReply = null,
+                firstSessionIdleReply = null,
+                settledFirstSessionReply = state.chatReply,
+                chatError = null,
+                activeChat = null,
+            )
+            else -> state
+        }
+    }
+    if (state.feedReply?.requestKey == requestKey) {
+        return when (stage) {
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingRemedy -> state.copy(
+                feedReply = null,
+                firstSessionIdleReply = null,
+                settledFirstSessionReply = state.feedReply,
+            )
+            com.gigagochi.app.core.database.FirstSessionStage.AwaitingTravel -> state.copy(
+                mode = DashboardMode.Idle,
+                feedReply = null,
+                firstSessionIdleReply = null,
+                settledFirstSessionReply = state.feedReply,
+                feedError = null,
+                activeFeed = null,
+                feedToken = FoodTokenMotion(),
+            )
+            else -> state
+        }
+    }
+    if (state.firstSessionIdleReply?.requestKey == requestKey) {
+        return state.copy(
+            settledFirstSessionReply = state.firstSessionIdleReply,
+            firstSessionIdleReply = null,
+        )
+    }
+    return state
+}
+
+fun isFirstSessionReplyPending(state: DashboardUiState): Boolean =
+    state.firstSession != null && when (state.mode) {
+        DashboardMode.Chat -> state.chatReply != null
+        DashboardMode.Feed -> state.feedReply != null
+        DashboardMode.Idle -> state.firstSessionIdleReply != null
+        DashboardMode.Outfit,
+        DashboardMode.Travel,
+        -> false
+    }
+
+fun dashboardIdleMessage(state: DashboardUiState): String? =
+    state.transientReply?.visibleText
+        ?: state.firstSessionIdleReply?.visibleText
+        ?: state.settledFirstSessionReply?.visibleText
+        ?: state.pet.message.takeUnless {
+            firstSessionMainAction(state.firstSession) != null
+        }
+
 fun hydrateExternalFirstSession(
     state: DashboardUiState,
     externalSession: LocalFirstSession,
@@ -583,7 +674,11 @@ private fun activateFood(
     food: DashboardFood,
     requestKey: String,
 ): DashboardUiState {
-    if (state.mode != DashboardMode.Feed || state.activeFeed != null) return state
+    if (
+        state.mode != DashboardMode.Feed ||
+        state.activeFeed != null ||
+        (state.firstSession != null && state.feedReply != null)
+    ) return state
     val firstSessionStage = state.firstSession?.stage
     if (firstSessionStage == com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood &&
         food != DashboardFood.BerryBowl

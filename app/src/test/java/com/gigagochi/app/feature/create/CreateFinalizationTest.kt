@@ -44,6 +44,21 @@ class CreateFinalizationTest {
     }
 
     @Test
+    fun foregroundFinalizationKeepsPendingCreateForBackgroundRecovery() = runBlocking {
+        val store = RecordingStore(mutableListOf())
+
+        val result = CreateFinalizationCoordinator(
+            "acct_owner_a",
+            AccountPetLifecycle(store),
+            store,
+        ).finalize(readyState(backgroundPending = true))
+
+        assertTrue(result is CreateFinalizationResult.Success)
+        assertEquals(1, store.snapshotWrites)
+        assertEquals(0, store.pendingDeletes)
+    }
+
+    @Test
     fun invalidStatePerformsNoSnapshotWriteOrPendingDelete() = runBlocking {
         val store = RecordingStore(mutableListOf())
         val result = CreateFinalizationCoordinator(
@@ -72,7 +87,7 @@ class CreateFinalizationTest {
         assertEquals("pet-real", (startup as com.gigagochi.app.core.database.AccountStartupDestination.Dashboard).pet.petId)
     }
 
-    private fun readyState() = CreatePetState(
+    private fun readyState(backgroundPending: Boolean = false) = CreatePetState(
         step = FinalCreationStep,
         answers = listOf("Ледяной дракон", "Тото", "Добрый", "Пауков", "Вантуз"),
         description = "Ледяной дракон",
@@ -81,6 +96,7 @@ class CreateFinalizationTest {
                 description = "Ледяной дракон",
                 petId = "pet-real",
                 assetSetId = "assets-real",
+                backgroundGenerationPending = backgroundPending,
             ),
         ),
         pending = PendingPetGeneration(

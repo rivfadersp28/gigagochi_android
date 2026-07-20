@@ -1,9 +1,15 @@
 package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
+import com.gigagochi.app.core.database.FirstSessionStage
+import com.gigagochi.app.core.database.LocalFirstSession
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterChat
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterFirstFood
 import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
 import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedyPortions
+import com.gigagochi.app.feature.onboarding.FirstSessionMainAction
+import com.gigagochi.app.feature.onboarding.firstSessionMainAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -35,6 +41,23 @@ class DashboardContractTest {
                 contextualNavigationForDashboardMode(mode),
             )
         }
+    }
+
+    @Test
+    fun visibleOutfitActionOpensEvenIfOnboardingStateChangesBeforeDispatch() {
+        val staleState = DashboardUiState(
+            pet = pet(),
+            firstSession = LocalFirstSession(
+                ownerId = "owner-a",
+                petId = "pet-instance-17",
+                stage = FirstSessionStage.AwaitingTravel,
+                updatedAtEpochMillis = 2,
+            ),
+        )
+
+        val opened = reduceDashboard(staleState, DashboardEvent.OpenOutfit)
+
+        assertEquals(DashboardMode.Outfit, opened.mode)
     }
 
     private fun pet(
@@ -120,6 +143,30 @@ class DashboardContractTest {
         assertNull(late.chatReply)
         assertEquals(0L, remainingThinkingDelayMillis(0, DashboardMinimumThinkingMillis))
         assertEquals(750L, remainingThinkingDelayMillis(0, 250))
+    }
+
+    @Test
+    fun chatSuccessPreservesExplicitSemanticPortions() {
+        var state = reduceDashboard(DashboardUiState(pet()), DashboardEvent.OpenChat)
+        state = reduceDashboard(state, DashboardEvent.UpdateChatDraft("Ничем"))
+        state = reduceDashboard(state, DashboardEvent.SubmitChat("chat-portions"))
+
+        state = reduceDashboard(
+            state,
+            DashboardEvent.ChatSucceeded(
+                "chat-portions",
+                DashboardChatResult(
+                    reply = "Звучит здорово! $FirstSessionAfterChat",
+                    pet = state.pet,
+                    explicitPortions = listOf("Звучит здорово!", FirstSessionAfterChat),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf("Звучит здорово!", FirstSessionAfterChat),
+            state.chatReply?.portions,
+        )
     }
 
     @Test
@@ -331,6 +378,135 @@ class DashboardContractTest {
 
         assertEquals(FirstSessionAfterRemedyPortions, result.feedReply?.portions)
         assertEquals(OnboardingBlockAutoAdvanceMillis, result.feedReply?.autoAdvanceDelayMillis)
+    }
+
+    @Test
+    fun completingFirstOnboardingChatKeepsChatOpenForFollowup() {
+        val reply = DashboardReply("chat-first", "Приятно познакомиться")
+        val state = DashboardUiState(
+            pet = pet(),
+            firstSession = LocalFirstSession(
+                "owner-a",
+                "pet-instance-17",
+                FirstSessionStage.AwaitingChatFollowup,
+                updatedAtEpochMillis = 2,
+            ),
+            mode = DashboardMode.Chat,
+            chatReply = reply,
+        )
+
+        val completed = reduceDashboard(state, DashboardEvent.CompleteReply(reply.requestKey))
+
+        assertEquals(DashboardMode.Chat, completed.mode)
+        assertNull(completed.chatReply)
+        assertFalse(isFirstSessionReplyPending(completed))
+        assertEquals(reply.visibleText, completed.settledFirstSessionReply?.visibleText)
+    }
+
+    @Test
+    fun completingSecondOnboardingChatReturnsToFeedAction() {
+        val reply = DashboardReply("chat-second", "Может, у тебя что-нибудь завалялось?")
+        val state = DashboardUiState(
+            pet = pet(),
+            firstSession = LocalFirstSession(
+                "owner-a",
+                "pet-instance-17",
+                FirstSessionStage.AwaitingFirstFood,
+                updatedAtEpochMillis = 3,
+            ),
+            mode = DashboardMode.Chat,
+            chatReply = reply,
+        )
+
+        val completed = reduceDashboard(state, DashboardEvent.CompleteReply(reply.requestKey))
+
+        assertEquals(DashboardMode.Idle, completed.mode)
+        assertNull(completed.chatReply)
+        assertEquals(FirstSessionMainAction.Feed, firstSessionMainAction(completed.firstSession))
+        assertEquals(reply.visibleText, dashboardIdleMessage(completed))
+    }
+
+    @Test
+    fun completedOnboardingInstructionDoesNotFallBackToDuplicatePetMessage() {
+        val session = LocalFirstSession(
+            "owner-a",
+            "pet-instance-17",
+            FirstSessionStage.AwaitingChat,
+            updatedAtEpochMillis = 1,
+        )
+        val speaking = DashboardUiState(
+            pet = pet().copy(message = "Как тебя зовут?"),
+            firstSession = session,
+        )
+        val introduction = checkNotNull(dashboardIdleMessage(speaking))
+        check(introduction.startsWith("Привет"))
+        check(introduction.endsWith("Как тебя зовут?"))
+
+        val finished = reduceDashboard(
+            speaking,
+            DashboardEvent.CompleteReply(checkNotNull(speaking.firstSessionIdleReply).requestKey),
+        )
+
+        assertEquals(introduction, dashboardIdleMessage(finished))
+        val onboardingCompleted = reduceDashboard(
+            finished,
+            DashboardEvent.FirstSessionSynced(
+                session.copy(stage = FirstSessionStage.Completed),
+                finished.pet,
+            ),
+        )
+        assertEquals(
+            "Как тебя зовут?",
+            dashboardIdleMessage(onboardingCompleted),
+        )
+    }
+
+    @Test
+    fun onboardingFoodWaitsForReplyThenRemedyReturnsToTravelAction() {
+        val firstReply = DashboardReply("feed-berry", FirstSessionAfterFirstFood)
+        val remedySession = LocalFirstSession(
+            "owner-a",
+            "pet-instance-17",
+            FirstSessionStage.AwaitingRemedy,
+            updatedAtEpochMillis = 4,
+        )
+        val replying = DashboardUiState(
+            pet = pet(),
+            firstSession = remedySession,
+            mode = DashboardMode.Feed,
+            feedReply = firstReply,
+        )
+
+        val blocked = reduceDashboard(
+            replying,
+            DashboardEvent.TapFood(DashboardFood.LeafCrunch, "too-early"),
+        )
+        assertNull(blocked.activeFeed)
+
+        val ready = reduceDashboard(
+            replying,
+            DashboardEvent.CompleteReply(firstReply.requestKey),
+        )
+        assertEquals(DashboardMode.Feed, ready.mode)
+        assertNull(ready.feedReply)
+        val accepted = reduceDashboard(
+            ready,
+            DashboardEvent.TapFood(DashboardFood.LeafCrunch, "remedy"),
+        )
+        check(accepted.activeFeed != null)
+
+        val remedyReply = DashboardReply("feed-remedy", FirstSessionAfterRemedy)
+        val travelReady = reduceDashboard(
+            ready.copy(
+                firstSession = remedySession.copy(stage = FirstSessionStage.AwaitingTravel),
+                feedReply = remedyReply,
+            ),
+            DashboardEvent.CompleteReply(remedyReply.requestKey),
+        )
+        assertEquals(DashboardMode.Idle, travelReady.mode)
+        assertNull(travelReady.feedReply)
+        assertEquals(FirstSessionMainAction.Travel, firstSessionMainAction(travelReady.firstSession))
+        assertEquals(remedyReply.visibleText, dashboardIdleMessage(travelReady))
     }
 
     @Test

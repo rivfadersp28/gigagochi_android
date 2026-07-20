@@ -51,7 +51,6 @@ object CreationMediaContract {
     const val TransitionEndUs = TransitionEndFrame * 1_000_000L / FramesPerSecond
     const val FormedStartUs = TransitionEndUs
     const val FormedEndUs = FormedEndFrame * 1_000_000L / FramesPerSecond
-    const val MusicVolume = .32f
 }
 
 data class PendingPetGeneration(
@@ -65,6 +64,7 @@ data class GeneratedPetFixture(
     val petId: String = "local-fake-pet",
     val assetSetId: String = "local-fake-pending",
     val generatedMedia: PetGeneratedMedia = PetGeneratedMedia(),
+    val backgroundGenerationPending: Boolean = false,
 )
 
 sealed interface GenerationStatus {

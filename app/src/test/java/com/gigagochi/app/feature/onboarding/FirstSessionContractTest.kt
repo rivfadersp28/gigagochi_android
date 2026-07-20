@@ -64,6 +64,16 @@ class FirstSessionContractTest {
         assertEquals(FirstSessionAfterChatFallback, firstSessionReactionReply(
             "Чем ещё увлекаешься?", FirstSessionAfterChatFallback,
         ))
+        assertEquals(FirstSessionAfterNameFallback, firstSessionReactionReply(
+            "Серега? А я Листик, лесной зверёк. Мы знакомы?",
+            FirstSessionAfterNameFallback,
+            "Листик",
+        ))
+        assertEquals(FirstSessionAfterChatFallback, firstSessionReactionReply(
+            "Ничем? Тогда я просто Листик — маленький лесной зверёк.",
+            FirstSessionAfterChatFallback,
+            "Листик",
+        ))
     }
 
     @Test

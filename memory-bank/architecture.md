@@ -4,7 +4,7 @@
 - `applicationId` и namespace: `com.gigagochi.app`; min SDK 23, target SDK 36, compile SDK 36.1.
 - Пакетные границы внутри модуля: `core/model`, `core/network`, `core/database`, `core/designsystem`, `core/auth`, `feature/create`, `feature/dashboard`, `feature/travel`; Google OAuth source и Credential Manager dependencies удалены.
 - `MainActivity` содержит production routes `Create`/`Dashboard` плюс recoverable `ConnectionError`/`LocalDataError`; пользовательского login route нет. При первом запуске приложение незаметно получает anonymous technical session, затем canonical anonymous owner выбирает локальный Room snapshot: существующий pet открывает Dashboard, пустой owner — Create. Intent review routes не создают и не читают production Room.
-- `feature/create` разделён на immutable state machine (`CreatePetContract`), boundary `PetGenerationAdapter`, debug-only fake и real Android feature adapter. Первый ответ создаёт durable owner-scoped pending с одним `petId/requestKey`; adapter допускается только после записи точной текущей revision, а следующие ответы обновляют ту же row, не сбрасывая backend recovery state. Real adapter submit/attach/poll использует `/api/android/create/jobs`; attached job после restart только poll'ится. Production finalization пишет полный snapshot/media, затем удаляет pending и только потом допускает Dashboard navigation.
+- `feature/create` разделён на immutable state machine (`CreatePetContract`), boundary `PetGenerationAdapter`, debug-only fake и real Android feature adapter. Первый ответ создаёт durable owner-scoped pending с одним `petId/requestKey`; adapter допускается только после записи точной текущей revision, а следующие ответы обновляют ту же row, не сбрасывая backend recovery state. Real adapter submit/attach/poll использует `/api/android/create/jobs`; attached job после restart только poll'ится. Как только `running` job публикует полный image set и normal video, production finalization пишет foreground snapshot и открывает Dashboard, сохраняя pending. Lifecycle-STARTED `CreateBackgroundMediaCoordinator` продолжает durable polling, заменяет media тем же `assetSetId` после `succeeded` и только затем удаляет pending; уже полный ответ сохраняется прежней одной транзакцией.
 - Create background использует один локальный MP4 через Media3/TextureView и три frame-based clipping segment: initial loop, transition one-shot, formed loop. Recovery начинает с formed. Reduced motion использует статичные posters.
 - Create audio локален: music loop 0.32 стартует только после trusted interaction, button WAV через SoundPool, haptic через platform view. Tilted buttons используют Haze source/effect, а не alpha-only glass.
 - `PetCreatingStage` — native bitmap mosaic: разрешённые PNG уменьшаются до 18/21/24 px без фильтра и растягиваются nearest-neighbor; reduced motion показывает full-resolution static image.
@@ -54,7 +54,8 @@
   bootstraps the anonymous Keystore session, checks due story once, performs exactly one pending
   Outfit/Travel recovery poll/apply, then emits one-channel local notifications. Room v1 dedupe is
   three nullable `notifiedAt` fields on existing completed rows; stable Android notification IDs
-  replace a prior post if the process dies before the durable mark. Create is never background work.
+  replace a prior post if the process dies before the durable mark. Create media recovery после
+  foreground-ready выполняется на Dashboard при lifecycle STARTED, но не через WorkManager.
   Scheduled-story delivery is therefore best-effort local notification, not server FCM. Event
   chronology has no backend list/backfill endpoint: it remains durable across normal app restarts,
   but clearing app data, reinstalling, or moving to another device loses older local history.

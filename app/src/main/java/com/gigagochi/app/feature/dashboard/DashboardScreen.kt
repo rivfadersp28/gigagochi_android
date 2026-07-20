@@ -16,6 +16,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,7 +58,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
@@ -194,6 +195,8 @@ private val OpenDialogueTop = 371.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
+private val OnboardingActionMaxWidth = 346.dp
+private val OnboardingActionHorizontalPadding = 20.dp
 private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
 private const val ImeMotionStartInsetDp = 40f
 private const val ImeMotionTravelDp = 292f
@@ -239,7 +242,7 @@ fun DashboardRoute(
     mediaActive: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    var state by remember(debugState, initialPet, recoveryRevision) {
+    var state by remember(debugState, initialPet.petId, recoveryRevision) {
         val base = dashboardDebugFixture(debugState, initialPet)
         mutableStateOf(
             if (debugState == DashboardDebugState.Idle) {
@@ -285,6 +288,12 @@ fun DashboardRoute(
     LaunchedEffect(initialFirstSession) {
         val externalSession = initialFirstSession ?: return@LaunchedEffect
         state = hydrateExternalFirstSession(state, externalSession)
+    }
+
+    LaunchedEffect(initialPet) {
+        if (state.pet != initialPet) {
+            state = state.copy(pet = initialPet)
+        }
     }
 
     fun nextRequestKey(prefix: String): String {
@@ -357,13 +366,18 @@ fun DashboardRoute(
                             if (session.stage == FirstSessionStage.AwaitingChat) {
                                 FirstSessionAfterNameFallback
                             } else FirstSessionAfterChatFallback,
+                            durablePet.name,
                         )
                         val prompt = if (session.stage == FirstSessionStage.AwaitingChat) {
                             FirstSessionAfterName
                         } else FirstSessionAfterChat
                         dispatch(DashboardEvent.ChatSucceeded(
                             request.requestKey,
-                            DashboardChatResult("$reaction $prompt", durablePet),
+                            DashboardChatResult(
+                                reply = "$reaction $prompt",
+                                pet = durablePet,
+                                explicitPortions = listOf(reaction, prompt),
+                            ),
                         ))
                     } else dispatch(DashboardEvent.ChatFailed(request.requestKey))
                 } else {
@@ -855,11 +869,21 @@ private fun DashboardInlineScreen(
                             top = dialogueTop,
                         )
                     } else {
-                        state.chatReply?.let { reply ->
+                        (state.chatReply ?: state.settledFirstSessionReply)?.let { reply ->
                             CharacterDialogueText(
                                 message = reply.visibleText,
                                 top = dialogueTop,
-                                animateEntrance = !debugState.freezesMotion && !reducedMotion,
+                                animateEntrance = state.chatReply != null &&
+                                    !debugState.freezesMotion &&
+                                    !reducedMotion,
+                                onRevealComplete = if (
+                                    state.chatReply != null &&
+                                    !debugState.freezesReplyAdvance &&
+                                    !reply.hasNextPortion &&
+                                    state.firstSession != null
+                                ) {
+                                    { onEvent(DashboardEvent.CompleteReply(reply.requestKey)) }
+                                } else null,
                             )
                         }
                     }
@@ -872,11 +896,21 @@ private fun DashboardInlineScreen(
                             top = 630.dp,
                         )
                     } else {
-                        state.feedReply?.let { reply ->
+                        (state.feedReply ?: state.settledFirstSessionReply)?.let { reply ->
                             CharacterDialogueText(
                                 message = reply.visibleText,
                                 top = 630.dp,
-                                animateEntrance = !debugState.freezesMotion && !reducedMotion,
+                                animateEntrance = state.feedReply != null &&
+                                    !debugState.freezesMotion &&
+                                    !reducedMotion,
+                                onRevealComplete = if (
+                                    state.feedReply != null &&
+                                    !debugState.freezesReplyAdvance &&
+                                    !reply.hasNextPortion &&
+                                    state.firstSession != null
+                                ) {
+                                    { onEvent(DashboardEvent.CompleteReply(reply.requestKey)) }
+                                } else null,
                             )
                         }
                     }
@@ -895,14 +929,29 @@ private fun DashboardInlineScreen(
                 )
 
                 DashboardMode.Idle -> {
-                    val transientReply = state.transientReply
-                    val message = transientReply?.visibleText
-                        ?: state.firstSessionIdleReply?.visibleText
-                        ?: state.pet.message
-                    CharacterDialogueText(
-                        message = message,
-                        animateEntrance = !debugState.freezesMotion && !reducedMotion,
-                    )
+                    val firstSessionReply = state.firstSessionIdleReply
+                    val displaysSettledFirstSessionReply = state.transientReply == null &&
+                        firstSessionReply == null &&
+                        state.settledFirstSessionReply != null
+                    dashboardIdleMessage(state)?.let { message ->
+                        CharacterDialogueText(
+                            message = message,
+                            animateEntrance = !displaysSettledFirstSessionReply &&
+                                !debugState.freezesMotion &&
+                                !reducedMotion,
+                            onRevealComplete = if (
+                                !debugState.freezesReplyAdvance &&
+                                firstSessionReply != null &&
+                                !firstSessionReply.hasNextPortion
+                            ) {
+                                {
+                                    onEvent(
+                                        DashboardEvent.CompleteReply(firstSessionReply.requestKey),
+                                    )
+                                }
+                            } else null,
+                        )
+                    }
                 }
             }
 
@@ -928,7 +977,7 @@ private fun DashboardInlineScreen(
                     busy = when {
                         isOutfit -> state.activeOutfit != null
                         isTravel -> state.activeTravel != null
-                        else -> state.activeChat != null
+                        else -> state.activeChat != null || isFirstSessionReplyPending(state)
                     },
                     hazeState = hazeState,
                     requestIme = requestImeOverride
@@ -966,10 +1015,11 @@ private fun DashboardInlineScreen(
                 )
             }
 
-            if (state.mode == DashboardMode.Idle) {
+            if (state.mode == DashboardMode.Idle && !isFirstSessionReplyPending(state)) {
                 DashboardActions(
                     hazeState = hazeState,
                     firstSessionAction = firstSessionMainAction(state.firstSession),
+                    reducedMotion = reducedMotion,
                     onChat = { onEvent(DashboardEvent.OpenChat) },
                     onEvents = onEvents,
                     unansweredEventCount = unansweredEventCount,
@@ -1036,6 +1086,7 @@ private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: Ha
 private fun BoxScope.DashboardActions(
     hazeState: HazeState,
     firstSessionAction: FirstSessionMainAction?,
+    reducedMotion: Boolean,
     onChat: () -> Unit,
     onEvents: () -> Unit,
     unansweredEventCount: Int,
@@ -1045,6 +1096,22 @@ private fun BoxScope.DashboardActions(
 ) {
     val actionScrollState = rememberDashboardActionScrollState()
     val actionTop = LocalDashboardActionTop.current
+    val onboardingEntrance = remember(firstSessionAction, reducedMotion) {
+        Animatable(if (firstSessionAction != null && !reducedMotion) .6f else 1f)
+    }
+    LaunchedEffect(firstSessionAction, reducedMotion) {
+        if (firstSessionAction != null && !reducedMotion) {
+            onboardingEntrance.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 300,
+                    easing = CubicBezierEasing(.34f, 1.56f, .64f, 1f),
+                ),
+            )
+        } else {
+            onboardingEntrance.snapTo(1f)
+        }
+    }
     val actionModifier = if (firstSessionAction == null) {
         Modifier
             .offset(y = actionTop)
@@ -1059,7 +1126,13 @@ private fun BoxScope.DashboardActions(
         horizontalArrangement = if (firstSessionAction == null) {
             Arrangement.spacedBy(19.dp)
         } else Arrangement.Center,
-        modifier = actionModifier,
+        modifier = actionModifier.graphicsLayer {
+            if (firstSessionAction != null) {
+                scaleX = onboardingEntrance.value
+                scaleY = onboardingEntrance.value
+                alpha = ((onboardingEntrance.value - .6f) / .4f).coerceIn(0f, 1f)
+            }
+        },
     ) {
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Chat) {
             GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
@@ -1081,9 +1154,14 @@ private fun BoxScope.DashboardActions(
             GlassAction(
                 if (firstSessionAction == FirstSessionMainAction.Travel) "Помочь летучей мыши" else "В путешествие",
                 ActionKind.Travel,
-                if (firstSessionAction == FirstSessionMainAction.Travel) 300.dp else 241.dp,
+                if (firstSessionAction == FirstSessionMainAction.Travel) {
+                    null
+                } else {
+                    241.dp
+                },
                 hazeState,
                 onTravel,
+                showGlyph = firstSessionAction != FirstSessionMainAction.Travel,
             )
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
@@ -1395,6 +1473,7 @@ private fun FeedFoodToken(
     val motion = if (isActiveToken) state.feedToken else FoodTokenMotion()
     val latestMotion by rememberUpdatedState(motion)
     val enabled = state.activeFeed == null && motion.phase == FoodTokenPhase.Idle &&
+        !isFirstSessionReplyPending(state) &&
         !(state.firstSession?.stage == FirstSessionStage.AwaitingFirstFood &&
             food != DashboardFood.BerryBowl)
     val scale = remember(food) { Animatable(1f) }
@@ -1922,6 +2001,7 @@ private fun BoxScope.CharacterDialogueText(
     message: String,
     top: Dp = 663.dp,
     animateEntrance: Boolean = true,
+    onRevealComplete: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val inspectionMode = LocalInspectionMode.current
@@ -1939,9 +2019,11 @@ private fun BoxScope.CharacterDialogueText(
     }
     val revealDurationMillis = CharacterMessageUnitDurationMillis +
         (animatedUnitCount - 1).coerceAtLeast(0) * CharacterMessageUnitStaggerMillis
+    val latestOnRevealComplete by rememberUpdatedState(onRevealComplete)
     LaunchedEffect(message, animateEntrance) {
         if (!animateEntrance || animatedUnitCount == 0) {
             elapsedMillis = Float.POSITIVE_INFINITY
+            latestOnRevealComplete?.invoke()
             return@LaunchedEffect
         }
         val startedAtNanos = withFrameNanos { it }
@@ -1951,6 +2033,7 @@ private fun BoxScope.CharacterDialogueText(
             elapsedMillis = (nowNanos - startedAtNanos) / 1_000_000f
         } while (elapsedMillis < revealDurationMillis)
         elapsedMillis = Float.POSITIVE_INFINITY
+        latestOnRevealComplete?.invoke()
     }
     val entranceFraction = if (elapsedMillis.isFinite()) {
         CharacterMessageEnterEasing.transform(
@@ -2033,45 +2116,51 @@ internal fun eventActionWidth(unansweredEventCount: Int): Dp =
 private fun GlassAction(
     label: String,
     kind: ActionKind,
-    width: Dp,
+    width: Dp?,
     hazeState: HazeState,
     onClick: () -> Unit,
     badgeCount: Int = 0,
+    showGlyph: Boolean = kind != ActionKind.Outfit,
 ) {
     val scale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
     val buttonPressFeedback = LocalButtonPressFeedback.current
     val latestOnClick by rememberUpdatedState(onClick)
     val latestButtonPressFeedback by rememberUpdatedState(buttonPressFeedback)
+    LaunchedEffect(pressed) {
+        scale.animateTo(
+            if (pressed) .92f else 1f,
+            spring(
+                dampingRatio = if (pressed) Spring.DampingRatioNoBouncy else .55f,
+                stiffness = if (pressed) Spring.StiffnessHigh else Spring.StiffnessMedium,
+            ),
+        )
+    }
     Box(
         modifier = Modifier
-            .requiredWidth(width)
+            .then(
+                if (width == null) {
+                    Modifier.widthIn(max = OnboardingActionMaxWidth)
+                } else {
+                    Modifier.requiredWidth(width)
+                },
+            )
             .height(58.203.dp)
             .scale(scale.value)
             .clip(DashboardGlassContract.ActionShape)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        scope.launch { scale.animateTo(.92f, spring(stiffness = Spring.StiffnessHigh)) }
-                        val released = tryAwaitRelease()
-                        scope.launch { scale.animateTo(1f, spring(dampingRatio = .55f, stiffness = Spring.StiffnessMedium)) }
-                        if (released) {
-                            latestButtonPressFeedback()
-                            latestOnClick()
-                        }
-                    },
-                )
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+            ) {
+                latestButtonPressFeedback()
+                latestOnClick()
             }
             .semantics {
-                role = Role.Button
                 contentDescription = if (badgeCount > 0) {
                     "$label, без ответа: $badgeCount"
                 } else label
-                onClick(label) {
-                    latestButtonPressFeedback()
-                    latestOnClick()
-                    true
-                }
             },
     ) {
         Box(
@@ -2095,10 +2184,26 @@ private fun GlassAction(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = Modifier.matchParentSize(),
+            modifier = if (width == null) {
+                Modifier
+                    .height(DashboardActionHeight)
+                    .widthIn(max = OnboardingActionMaxWidth)
+                    .padding(
+                        start = OnboardingActionHorizontalPadding,
+                        end = OnboardingActionHorizontalPadding,
+                        top = 14.dp,
+                        bottom = 16.dp,
+                    )
+            } else {
+                Modifier
+                    .matchParentSize()
+                    .padding(top = 14.dp, bottom = 16.dp)
+            },
         ) {
-            ActionGlyph(kind)
-            Spacer(Modifier.width(8.dp))
+            if (showGlyph) {
+                ActionGlyph(kind)
+                Spacer(Modifier.width(8.dp))
+            }
             Text(
                 label,
                 color = Color.White,

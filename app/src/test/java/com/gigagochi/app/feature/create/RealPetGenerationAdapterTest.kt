@@ -45,6 +45,33 @@ class RealPetGenerationAdapterTest {
     }
 
     @Test
+    fun foregroundResultReturnsBeforeBackgroundGenerationCompletes() = runBlocking {
+        val store = InMemoryFeatureStore().apply {
+            creates += pending(backendJobId = "job-fast", state = PendingBackendState.Attached)
+        }
+        val foreground = asset().copy(
+            videoUrl = "https://gigagochi.serega.works/static/generated/asset-a/normal.mp4",
+        )
+        val api = object : TestAndroidFeatureService() {
+            override suspend fun pollCreate(jobId: String) = FeatureApiResult.Success(
+                envelope(
+                    jobId,
+                    GenerationJobStatusDto.Running,
+                    foreground,
+                    GenerationJobPhaseDto.GeneratingSadImage,
+                ),
+            )
+        }
+
+        val result = RealPetGenerationAdapter("owner-a", store, store, api, 0, 1)
+            .generate(PendingPetGeneration("pet-a", "dragon", Key))
+
+        assertTrue(result.backgroundGenerationPending)
+        assertEquals(foreground.videoUrl, result.generatedMedia.videoUrl)
+        assertEquals(PendingBackendState.Attached, store.creates.single().backendState)
+    }
+
+    @Test
     fun dispatchingRestartNeverRepeatsAmbiguousSubmit() = runBlocking {
         val store = InMemoryFeatureStore().apply {
             creates += pending(backendJobId = null, state = PendingBackendState.Dispatching)
@@ -93,14 +120,18 @@ class RealPetGenerationAdapterTest {
         jobId: String,
         status: GenerationJobStatusDto,
         result: GenerationAssetDto? = null,
+        phase: GenerationJobPhaseDto = if (status == GenerationJobStatusDto.Succeeded) {
+            GenerationJobPhaseDto.Completed
+        } else {
+            GenerationJobPhaseDto.Queued
+        },
     ) = GenerationEnvelopeDto(
         Key,
         "pet-a",
         GenerationJobDto(
             jobId,
             status,
-            if (status == GenerationJobStatusDto.Succeeded) GenerationJobPhaseDto.Completed
-            else GenerationJobPhaseDto.Queued,
+            phase,
             "2026-07-17T10:11:12Z",
             "2026-07-17T10:11:12Z",
             result,

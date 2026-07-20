@@ -11,7 +11,6 @@ class CreationMediaContractTest {
         assertEquals(11_125_000L, CreationMediaContract.TransitionEndUs)
         assertEquals(CreationMediaContract.TransitionEndUs, CreationMediaContract.FormedStartUs)
         assertEquals(18_625_000L, CreationMediaContract.FormedEndUs)
-        assertEquals(.32f, CreationMediaContract.MusicVolume, 0f)
     }
 
     @Test
