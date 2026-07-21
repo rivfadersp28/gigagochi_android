@@ -2199,7 +2199,12 @@ private fun GlassAction(
         Box(
             Modifier
                 .matchParentSize()
-                .hazeEffect(state = hazeState, style = DashboardGlassContract.ActionStyle),
+                .background(DashboardGlassContract.ActionTint),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .hazeEffect(state = hazeState, style = DashboardGlassContract.ActionBlurStyle),
         )
         Box(
             Modifier
