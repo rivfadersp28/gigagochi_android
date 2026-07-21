@@ -185,6 +185,7 @@ class RealDashboardOutfitAdapter(
     private val api: AndroidFeatureService,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val onJobAttached: () -> Unit = {},
+    private val onOutfitFailed: (requestKey: String) -> Unit = {},
 ) : DashboardOutfitAdapter {
     override suspend fun queue(
         request: PendingOutfitRequest,
@@ -324,6 +325,7 @@ class RealDashboardOutfitAdapter(
                     PendingBackendState.Failed,
                     "GENERATION_FAILED",
                 )
+                onOutfitFailed(pending.requestKey)
                 throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Server, "GENERATION_FAILED"))
             }
             else -> false
@@ -365,6 +367,7 @@ class RealDashboardTravelAdapter(
     private val api: AndroidFeatureService,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val onJobAttached: () -> Unit = {},
+    private val onTravelFailed: (requestKey: String) -> Unit = {},
 ) : DashboardTravelAdapter {
     override suspend fun queue(
         request: PendingTravelRequest,
@@ -464,6 +467,7 @@ class RealDashboardTravelAdapter(
                     PendingBackendState.Failed,
                     "GENERATION_FAILED",
                 )
+                onTravelFailed(pending.requestKey)
                 throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Server, "GENERATION_FAILED"))
             }
             else -> Unit

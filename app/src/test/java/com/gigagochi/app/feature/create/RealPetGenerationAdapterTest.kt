@@ -95,6 +95,39 @@ class RealPetGenerationAdapterTest {
         assertEquals(0, submits)
     }
 
+    @Test
+    fun terminalFailureEmitsCallbackAndRequiresFreshRequest() = runBlocking {
+        val store = InMemoryFeatureStore().apply {
+            creates += pending(backendJobId = "job-failed", state = PendingBackendState.Attached)
+        }
+        val api = object : TestAndroidFeatureService() {
+            override suspend fun pollCreate(jobId: String) = FeatureApiResult.Success(
+                envelope(jobId, GenerationJobStatusDto.Failed),
+            )
+        }
+        val failures = mutableListOf<String>()
+        val adapter = RealPetGenerationAdapter(
+            "owner-a",
+            store,
+            store,
+            api,
+            pollDelayMillis = 0,
+            maxPollAttempts = 1,
+            onGenerationFailed = failures::add,
+        )
+
+        var failed = false
+        try {
+            adapter.generate(PendingPetGeneration("pet-a", "dragon", Key))
+        } catch (_: FeatureAdapterException) {
+            failed = true
+        }
+
+        assertTrue(failed)
+        assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
+        assertEquals(listOf(Key), failures)
+    }
+
     private fun pending(backendJobId: String?, state: PendingBackendState) =
         LocalPendingCreateGeneration(
             "owner-a", "pet-a", Key, backendJobId, PendingCreateStage.Generating,

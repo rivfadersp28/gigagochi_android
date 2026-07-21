@@ -150,6 +150,14 @@ class GigagochiSyncWorker(
             repository,
             repository,
             api,
+            onOutfitFailed = { requestKey ->
+                AndroidLocalNotificationEmitter(applicationContext).emit(
+                    manualGenerationFailedNotification(
+                        ManualGenerationKind.Outfit,
+                        requestKey,
+                    ),
+                )
+            },
         )
         val travel = RealDashboardTravelAdapter(
             session.accountId,
@@ -157,6 +165,14 @@ class GigagochiSyncWorker(
             repository,
             repository,
             api,
+            onTravelFailed = { requestKey ->
+                AndroidLocalNotificationEmitter(applicationContext).emit(
+                    manualGenerationFailedNotification(
+                        ManualGenerationKind.Travel,
+                        requestKey,
+                    ),
+                )
+            },
         )
         ForegroundPendingRecoveryCoordinator(
             session.accountId,
