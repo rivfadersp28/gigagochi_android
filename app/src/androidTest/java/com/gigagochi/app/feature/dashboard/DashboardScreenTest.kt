@@ -4,6 +4,8 @@ import android.graphics.Paint
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -46,6 +48,29 @@ import kotlin.math.roundToInt
 class DashboardScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun shortSafeViewportKeepsReferenceChromeAnchoredToTop() {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext
+            .resources.displayMetrics.density
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = testPet(hunger = 100).copy(experience = 50),
+                    requestImeOverride = false,
+                    reducedMotionOverride = true,
+                    modifier = Modifier.requiredSize(393.dp, 780.dp),
+                )
+            }
+        }
+
+        val rootTop = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.top
+        val experienceTop = composeRule.onNodeWithContentDescription("Experience: 50")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot.top
+
+        assertTrue(experienceTop - rootTop >= 84f * density)
+    }
 
     @Test
     fun onboardingRestoresFollowupPromptAndExactlyOneMainAction() {

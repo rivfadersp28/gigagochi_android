@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
@@ -187,14 +188,13 @@ private val DemoPet = PetDashboardState(
     message = "Как тебя зовут?",
 )
 
-private val ClosedConversationTop = 755.dp
-private val OpenConversationTop = 463.dp
 private val ClosedDialogueTop = 663.dp
 private val OpenDialogueTop = 371.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
 private val OnboardingActionMaxWidth = 346.dp
+internal val DashboardExperienceTop = 92.dp
 internal val DashboardActionStartPadding = 12.dp
 internal val DashboardActionEndPadding = 16.dp
 private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
@@ -663,7 +663,7 @@ fun DashboardScreen(
             ExperiencePill(
                 experience = state.experience,
                 hazeState = hazeState,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
             )
 
             Column(
@@ -733,8 +733,6 @@ private fun DashboardInlineScreen(
     val imeMotionProgress = (
         (imeBottomDp - ImeMotionStartInsetDp) / ImeMotionTravelDp
         ).coerceIn(0f, 1f)
-    val conversationTop = ClosedConversationTop -
-        (ClosedConversationTop - OpenConversationTop) * imeMotionProgress
     val composerDialogueLift = if (composerLineCount > 2) {
         ((composerLineCount - 2) * 24).dp
     } else {
@@ -847,7 +845,7 @@ private fun DashboardInlineScreen(
                 ExperiencePill(
                     experience = state.pet.experience,
                     hazeState = hazeState,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
                 )
             }
 
@@ -945,57 +943,6 @@ private fun DashboardInlineScreen(
                 }
             }
 
-            if (
-                state.mode == DashboardMode.Chat ||
-                state.mode == DashboardMode.Outfit ||
-                state.mode == DashboardMode.Travel
-            ) {
-                val isOutfit = state.mode == DashboardMode.Outfit
-                val isTravel = state.mode == DashboardMode.Travel
-                ConversationInputPanel(
-                    mode = state.mode,
-                    value = when {
-                        isOutfit -> state.outfitDraft
-                        isTravel -> state.travelDraft
-                        else -> state.chatDraft
-                    },
-                    error = when {
-                        isOutfit -> state.outfitError
-                        isTravel -> state.travelError
-                        else -> state.chatError
-                    },
-                    busy = when {
-                        isOutfit -> state.activeOutfit != null
-                        isTravel -> state.activeTravel != null
-                        else -> state.activeChat != null || isFirstSessionReplyPending(state)
-                    },
-                    hazeState = hazeState,
-                    requestIme = requestImeOverride
-                        ?: (debugState.requestsIme || debugState == DashboardDebugState.Idle),
-                    top = conversationTop,
-                    reducedMotion = reducedMotion,
-                    onValueChange = { value ->
-                        onEvent(
-                            when {
-                                isOutfit -> DashboardEvent.UpdateOutfitDraft(value)
-                                isTravel -> DashboardEvent.UpdateTravelDraft(value)
-                                else -> DashboardEvent.UpdateChatDraft(value)
-                            },
-                        )
-                    },
-                    onSubmit = {
-                        onEvent(
-                            when {
-                                isOutfit -> DashboardEvent.SubmitOutfit(nextRequestKey("outfit"))
-                                isTravel -> DashboardEvent.SubmitTravel(nextRequestKey("travel"))
-                                else -> DashboardEvent.SubmitChat(nextRequestKey("chat"))
-                            },
-                        )
-                    },
-                    onLineCountChange = { composerLineCount = it },
-                )
-            }
-
             if (state.mode == DashboardMode.Feed) {
                 FeedModeLayer(
                     state = state,
@@ -1026,6 +973,60 @@ private fun DashboardInlineScreen(
 
         }
 
+        if (
+            state.mode == DashboardMode.Chat ||
+            state.mode == DashboardMode.Outfit ||
+            state.mode == DashboardMode.Travel
+        ) {
+            val isOutfit = state.mode == DashboardMode.Outfit
+            val isTravel = state.mode == DashboardMode.Travel
+            ConversationInputPanel(
+                mode = state.mode,
+                value = when {
+                    isOutfit -> state.outfitDraft
+                    isTravel -> state.travelDraft
+                    else -> state.chatDraft
+                },
+                error = when {
+                    isOutfit -> state.outfitError
+                    isTravel -> state.travelError
+                    else -> state.chatError
+                },
+                busy = when {
+                    isOutfit -> state.activeOutfit != null
+                    isTravel -> state.activeTravel != null
+                    else -> state.activeChat != null || isFirstSessionReplyPending(state)
+                },
+                hazeState = hazeState,
+                requestIme = requestImeOverride
+                    ?: (debugState.requestsIme || debugState == DashboardDebugState.Idle),
+                reducedMotion = reducedMotion,
+                onValueChange = { value ->
+                    onEvent(
+                        when {
+                            isOutfit -> DashboardEvent.UpdateOutfitDraft(value)
+                            isTravel -> DashboardEvent.UpdateTravelDraft(value)
+                            else -> DashboardEvent.UpdateChatDraft(value)
+                        },
+                    )
+                },
+                onSubmit = {
+                    onEvent(
+                        when {
+                            isOutfit -> DashboardEvent.SubmitOutfit(nextRequestKey("outfit"))
+                            isTravel -> DashboardEvent.SubmitTravel(nextRequestKey("travel"))
+                            else -> DashboardEvent.SubmitChat(nextRequestKey("chat"))
+                        },
+                    )
+                },
+                onLineCountChange = { composerLineCount = it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                    .padding(bottom = 16.dp),
+            )
+        }
+
         contextualNavigationForDashboardMode(state.mode)?.let { action ->
             ContextualGlassNavigation(
                 action = action,
@@ -1050,7 +1051,7 @@ private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: Ha
     ExperiencePill(
         experience = pet.experience,
         hazeState = hazeState,
-        modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+        modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
     )
     Column(
         verticalArrangement = Arrangement.spacedBy(21.dp),
@@ -1184,11 +1185,11 @@ private fun ConversationInputPanel(
     busy: Boolean,
     hazeState: HazeState,
     requestIme: Boolean,
-    top: Dp,
     reducedMotion: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onLineCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val buttonPressFeedback = LocalButtonPressFeedback.current
     val isOutfit = mode == DashboardMode.Outfit
@@ -1231,9 +1232,8 @@ private fun ConversationInputPanel(
     val collapsedPanelHeight = 62.dp
     val expandedPanelHeight = 134.dp
     Box(
-        modifier = Modifier
+        modifier = modifier
             .requiredSize(362.dp, expandedPanelHeight)
-            .offset(x = 20.dp, y = top - (expandedPanelHeight - collapsedPanelHeight))
             .graphicsLayer { alpha = entranceAlpha.value },
     ) {
         Box(
@@ -1649,13 +1649,12 @@ private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
 @Composable
 private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        val density = LocalDensity.current
         val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
-        val safeBottom = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() }
-        val actionTop = dashboardActionTop(maxHeight, safeBottom, scale)
+        val actionTop = dashboardActionTop(maxHeight, scale)
         CompositionLocalProvider(LocalDashboardActionTop provides actionTop) {
             Box(
                 modifier = Modifier
+                    .wrapContentSize(Alignment.TopCenter, unbounded = true)
                     .requiredSize(402.dp, 874.dp)
                     .graphicsLayer {
                         scaleX = scale
@@ -1669,9 +1668,9 @@ private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
     }
 }
 
-internal fun dashboardActionTop(viewportHeight: Dp, safeBottom: Dp, scale: Float): Dp {
+internal fun dashboardActionTop(viewportHeight: Dp, scale: Float): Dp {
     require(scale > 0f)
-    val visibleReferenceBottom = (viewportHeight - safeBottom) / scale
+    val visibleReferenceBottom = viewportHeight / scale
     val preferredBottom = PreferredDashboardActionTop + DashboardActionHeight
     val overlap = (preferredBottom + DashboardActionBottomMargin - visibleReferenceBottom)
         .coerceAtLeast(0.dp)
