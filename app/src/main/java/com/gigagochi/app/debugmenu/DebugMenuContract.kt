@@ -21,4 +21,5 @@ data class DebugMenuBindings(
     val onKillPet: () -> Unit,
     val onRevivePet: () -> Unit,
     val onCreateNewPet: () -> Unit,
+    val onSendPush: () -> Unit,
 )

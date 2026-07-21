@@ -115,6 +115,7 @@ import com.gigagochi.app.core.database.FirstSessionStage
 import com.gigagochi.app.core.database.OwnedPetSnapshot
 import com.gigagochi.app.debugmenu.DebugMenuBindings
 import com.gigagochi.app.debugmenu.DebugMenuHost
+import com.gigagochi.app.debugmenu.scheduleDebugPush
 import com.gigagochi.app.debugmenu.clearDebugFixtureSelection
 import com.gigagochi.app.debugmenu.debugFixturePet
 import com.gigagochi.app.debugmenu.debugDeadPetId
@@ -1094,6 +1095,9 @@ class MainActivity : ComponentActivity() {
                         onCreateNewPet = {
                             debugTravelDemo = false
                             route = AppRoute.Create
+                        },
+                        onSendPush = {
+                            scheduleDebugPush(applicationContext)
                         },
                     ),
                     )

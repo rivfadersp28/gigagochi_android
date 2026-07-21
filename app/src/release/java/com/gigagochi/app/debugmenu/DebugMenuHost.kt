@@ -20,6 +20,7 @@ fun setDebugFixtureSelection(context: Context, fixturePetId: String, savedPetId:
 fun clearDebugFixtureSelection(context: Context) = Unit
 fun debugDeadPetId(context: Context): String? = null
 fun setDebugDeadPetId(context: Context, petId: String?) = Unit
+fun scheduleDebugPush(context: Context) = Unit
 fun recordDebugEvent(kind: String, title: String, text: String) = Unit
 fun debugGenerationAdapter(delegate: PetGenerationAdapter): PetGenerationAdapter = delegate
 fun debugChatAdapter(delegate: DashboardChatAdapter): DashboardChatAdapter = delegate
