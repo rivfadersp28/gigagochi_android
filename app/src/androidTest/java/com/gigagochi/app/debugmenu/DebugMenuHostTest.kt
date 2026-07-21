@@ -72,6 +72,16 @@ class DebugMenuHostTest {
         assertEquals(1, fixtureCalls)
     }
 
+    @Test
+    fun pushTestActionIsAvailableInDebugMenu() {
+        composeRule.setContent {
+            GigagochiTheme { DebugMenuHost(bindings()) }
+        }
+
+        composeRule.onNodeWithContentDescription("Открыть debug-меню").performClick()
+        composeRule.onNodeWithText("Отправить пуш").assertIsDisplayed()
+    }
+
     private fun bindings(
         routeName: String = "Dashboard",
         onboardingActive: Boolean = false,
@@ -98,5 +108,6 @@ class DebugMenuHostTest {
         onKillPet = {},
         onRevivePet = {},
         onCreateNewPet = {},
+        onSendPush = {},
     )
 }
