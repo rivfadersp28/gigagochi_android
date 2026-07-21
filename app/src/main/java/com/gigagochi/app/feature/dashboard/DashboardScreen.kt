@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -193,8 +194,11 @@ private val OpenDialogueTop = 371.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
+private val DashboardFeedRowHeight = 148.dp
 private val OnboardingActionMaxWidth = 346.dp
 internal val DashboardExperienceTop = 92.dp
+internal val DashboardInputHorizontalPadding = 20.dp
+internal val DashboardInputMaxWidth = 362.dp
 internal val DashboardActionStartPadding = 12.dp
 internal val DashboardActionEndPadding = 16.dp
 private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
@@ -1023,6 +1027,7 @@ private fun DashboardInlineScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                    .padding(horizontal = DashboardInputHorizontalPadding)
                     .padding(bottom = 16.dp),
             )
         }
@@ -1233,13 +1238,15 @@ private fun ConversationInputPanel(
     val expandedPanelHeight = 134.dp
     Box(
         modifier = modifier
-            .requiredSize(362.dp, expandedPanelHeight)
+            .fillMaxWidth()
+            .widthIn(max = DashboardInputMaxWidth)
+            .height(expandedPanelHeight)
             .graphicsLayer { alpha = entranceAlpha.value },
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .requiredWidth(362.dp)
+                .fillMaxWidth()
                 .heightIn(min = collapsedPanelHeight, max = expandedPanelHeight),
         ) {
             Box(
@@ -1284,7 +1291,7 @@ private fun ConversationInputPanel(
                     onLineCountChange(result.lineCount.coerceIn(1, 4))
                 },
                 modifier = Modifier
-                    .requiredWidth(362.dp)
+                    .fillMaxWidth()
                     .padding(
                         start = 24.dp,
                         end = if (isOutfit) 126.dp else 82.dp,
@@ -1323,9 +1330,10 @@ private fun ConversationInputPanel(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-                        .requiredWidth(314.dp)
+                        .fillMaxWidth()
                         .align(Alignment.TopStart)
-                        .offset(x = 24.dp, y = (-24).dp)
+                        .padding(horizontal = 24.dp)
+                        .offset(y = (-24).dp)
                         .semantics { contentDescription = error },
                 )
             }
@@ -1420,6 +1428,7 @@ private fun FeedModeLayer(
     nextRequestKey: (String) -> String,
     onEvent: (DashboardEvent) -> Unit,
 ) {
+    val feedRowTop = dashboardFeedRowTop(LocalDashboardActionTop.current)
     val pulseProgress = remember(state.feedPulseId) {
         Animatable(if (state.feedPulseId > 0 && freezeMotion) .42f else 0f)
     }
@@ -1454,7 +1463,7 @@ private fun FeedModeLayer(
             fontFamily = OpenRundeFontFamily,
             modifier = Modifier
                 .requiredWidth(346.dp)
-                .offset(x = 28.dp, y = 666.dp)
+                .offset(x = 28.dp, y = feedRowTop - 42.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF2B1116))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1464,8 +1473,8 @@ private fun FeedModeLayer(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .requiredSize(374.dp, 148.dp)
-            .offset(x = 14.dp, y = 708.dp)
+            .requiredSize(374.dp, DashboardFeedRowHeight)
+            .offset(x = 14.dp, y = feedRowTop)
             .semantics { contentDescription = "Еда" },
     ) {
         FeedFoodToken(
@@ -1676,6 +1685,9 @@ internal fun dashboardActionTop(viewportHeight: Dp, scale: Float): Dp {
         .coerceAtLeast(0.dp)
     return PreferredDashboardActionTop - overlap
 }
+
+internal fun dashboardFeedRowTop(actionTop: Dp): Dp =
+    actionTop + DashboardActionHeight - DashboardFeedRowHeight
 
 @OptIn(UnstableApi::class)
 @Composable
