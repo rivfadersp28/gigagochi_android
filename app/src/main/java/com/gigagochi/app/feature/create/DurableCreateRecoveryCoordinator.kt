@@ -1,6 +1,8 @@
 package com.gigagochi.app.feature.create
 
 import com.gigagochi.app.core.background.LocalNotificationEmitter
+import com.gigagochi.app.core.background.ManualGenerationKind
+import com.gigagochi.app.core.background.manualGenerationFailedNotification
 import com.gigagochi.app.core.background.petReadyNotification
 import com.gigagochi.app.core.database.OwnerRecoveryStore
 import com.gigagochi.app.core.database.OwnedPetSnapshot
@@ -52,7 +54,17 @@ class DurableCreateRecoveryCoordinator(
                 PendingBackendState.Failed,
                 "GENERATION_FAILED",
             )
-            return DurableCreateRecoveryResult.Terminal
+            return if (notificationEmitter.emit(
+                    manualGenerationFailedNotification(
+                        ManualGenerationKind.Create,
+                        pending.requestKey,
+                    ),
+                )
+            ) {
+                DurableCreateRecoveryResult.Terminal
+            } else {
+                DurableCreateRecoveryResult.Retry
+            }
         }
         val result = envelope.job.result ?: return DurableCreateRecoveryResult.Retry
         val media = api.media(result) ?: return protocolFailure(pending.requestKey)

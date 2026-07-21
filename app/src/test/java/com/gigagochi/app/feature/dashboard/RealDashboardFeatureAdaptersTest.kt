@@ -182,7 +182,15 @@ class RealDashboardFeatureAdaptersTest {
             override suspend fun submitTravel(request: com.gigagochi.app.core.network.TravelVideoRequestDto) =
                 FeatureApiResult.Success(travelDto("job-travel", TravelVideoStatusDto.Failed))
         }
-        val adapter = RealDashboardTravelAdapter("owner-a", store, store, store, api)
+        val failedNotifications = mutableListOf<String>()
+        val adapter = RealDashboardTravelAdapter(
+            "owner-a",
+            store,
+            store,
+            store,
+            api,
+            onTravelFailed = failedNotifications::add,
+        )
         var failed = false
         try {
             adapter.queue(PendingTravelRequest(Key, "Луна"), pet())
@@ -191,6 +199,41 @@ class RealDashboardFeatureAdaptersTest {
         }
         assertTrue(failed)
         assertEquals(PendingBackendState.Failed, store.travels.single().backendState)
+        assertEquals(listOf(Key), failedNotifications)
+    }
+
+    @Test
+    fun failedOutfitStatusEmitsTerminalFailureCallback() = runBlocking {
+        val store = InMemoryFeatureStore().apply {
+            outfits += outfit().copy(
+                backendJobId = "job-outfit",
+                backendState = PendingBackendState.Attached,
+            )
+        }
+        val api = object : TestAndroidFeatureService() {
+            override suspend fun pollOutfit(jobId: String) =
+                FeatureApiResult.Success(envelope(jobId, GenerationJobStatusDto.Failed))
+        }
+        val failedNotifications = mutableListOf<String>()
+        val adapter = RealDashboardOutfitAdapter(
+            "owner-a",
+            store,
+            store,
+            store,
+            api,
+            onOutfitFailed = failedNotifications::add,
+        )
+
+        var failed = false
+        try {
+            adapter.pollOnce(store.outfits.single())
+        } catch (_: FeatureAdapterException) {
+            failed = true
+        }
+
+        assertTrue(failed)
+        assertEquals(PendingBackendState.Failed, store.outfits.single().backendState)
+        assertEquals(listOf(Key), failedNotifications)
     }
 
     @Test

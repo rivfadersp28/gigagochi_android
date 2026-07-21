@@ -69,6 +69,26 @@ class DurableCreateRecoveryCoordinatorTest {
         assertEquals(PendingBackendState.Attached, store.creates.single().backendState)
     }
 
+    @Test
+    fun terminalFailureEmitsCreateFailureNotification() = runBlocking {
+        val store = RecoveryStore()
+        val notifications = mutableListOf<com.gigagochi.app.core.database.LocalCompletionNotification>()
+        val result = DurableCreateRecoveryCoordinator(
+            OwnerId,
+            store,
+            store,
+            api(envelope(GenerationJobStatusDto.Failed, GenerationJobPhaseDto.Completed, asset(false))),
+            LocalNotificationEmitter {
+                notifications += it
+                true
+            },
+        ).recoverOnce()
+
+        assertEquals(DurableCreateRecoveryResult.Terminal, result)
+        assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
+        assertEquals("Не получилось создать персонажа, попробуй еще раз", notifications.single().body)
+    }
+
     private fun coordinator(
         store: RecoveryStore,
         envelope: GenerationEnvelopeDto,

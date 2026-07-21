@@ -21,11 +21,39 @@ private const val CompletionChannelId = "gigagochi-completions"
 internal const val PetReadyTitle = "Ваш друг родился"
 internal const val PetReadyBody = "Скорее познакомьтесь с ним"
 
+enum class ManualGenerationKind(
+    val failureTitle: String,
+    val failureBody: String,
+) {
+    Create(
+        "Персонаж не создался",
+        "Не получилось создать персонажа, попробуй еще раз",
+    ),
+    Outfit(
+        "Переодевание не получилось",
+        "Не получилось переодеть питомца, попробуй еще раз",
+    ),
+    Travel(
+        "Путешествие не получилось",
+        "Не получилось отправиться в путешествие, попробуй еще раз",
+    ),
+}
+
 fun petReadyNotification(requestKey: String) = LocalCompletionNotification(
     kind = LocalNotificationKind.PetReady,
     stableKey = requestKey,
     title = PetReadyTitle,
     body = PetReadyBody,
+)
+
+fun manualGenerationFailedNotification(
+    generation: ManualGenerationKind,
+    requestKey: String,
+) = LocalCompletionNotification(
+    kind = LocalNotificationKind.GenerationFailed,
+    stableKey = "${generation.name.lowercase()}:$requestKey",
+    title = generation.failureTitle,
+    body = generation.failureBody,
 )
 
 fun notificationsAllowed(context: Context): Boolean =

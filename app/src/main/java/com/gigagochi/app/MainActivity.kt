@@ -66,6 +66,8 @@ import com.gigagochi.app.core.background.MvpSyncScheduler
 import com.gigagochi.app.core.background.CreateSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
+import com.gigagochi.app.core.background.ManualGenerationKind
+import com.gigagochi.app.core.background.manualGenerationFailedNotification
 import com.gigagochi.app.core.background.petReadyNotification
 import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.model.PetDashboardState
@@ -554,6 +556,14 @@ class MainActivity : ComponentActivity() {
                                     recoverySignal.request()
                                     scope.launch { routeLocalSession(session) }
                                 },
+                                onOutfitFailed = { requestKey ->
+                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                        manualGenerationFailedNotification(
+                                            ManualGenerationKind.Outfit,
+                                            requestKey,
+                                        ),
+                                    )
+                                },
                             )
                         }
                         val travelAdapter = remember(session.accountId, repository, api, recoverySignal) {
@@ -564,6 +574,14 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 api,
                                 onJobAttached = recoverySignal::request,
+                                onTravelFailed = { requestKey ->
+                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                        manualGenerationFailedNotification(
+                                            ManualGenerationKind.Travel,
+                                            requestKey,
+                                        ),
+                                    )
+                                },
                             )
                         }
                         val debugDashboardOutfitAdapter = remember(outfitAdapter) {
@@ -611,6 +629,14 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 api,
                                 onMediaReady = { pet -> activePet.value = pet },
+                                onGenerationFailed = { requestKey ->
+                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                        manualGenerationFailedNotification(
+                                            ManualGenerationKind.Create,
+                                            requestKey,
+                                        ),
+                                    )
+                                },
                             )
                         }
                         val lifecycleOwner = LocalLifecycleOwner.current
@@ -854,6 +880,14 @@ class MainActivity : ComponentActivity() {
                                                 requireNotNull(featureApi),
                                                 onJobAttached = {
                                                     CreateSyncScheduler.enqueue(applicationContext)
+                                                },
+                                                onGenerationFailed = { requestKey ->
+                                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                                        manualGenerationFailedNotification(
+                                                            ManualGenerationKind.Create,
+                                                            requestKey,
+                                                        ),
+                                                    )
                                                 },
                                             )
                                         }

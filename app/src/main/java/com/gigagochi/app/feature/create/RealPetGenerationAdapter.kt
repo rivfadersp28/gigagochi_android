@@ -26,6 +26,7 @@ class RealPetGenerationAdapter(
     private val pollDelayMillis: Long = 2_000L,
     private val maxPollAttempts: Int = 600,
     private val onJobAttached: () -> Unit = {},
+    private val onGenerationFailed: (requestKey: String) -> Unit = {},
 ) : PetGenerationAdapter {
     override suspend fun generate(request: PendingPetGeneration): GeneratedPetFixture {
         val persisted = store.loadOwnerRecovery(ownerId).pendingCreates.singleOrNull {
@@ -129,6 +130,7 @@ class RealPetGenerationAdapter(
                                 PendingBackendState.Failed,
                                 "GENERATION_FAILED",
                             )
+                            onGenerationFailed(request.requestKey)
                             throw FeatureAdapterException(
                                 FeatureFailure(
                                     FeatureFailureKind.Server,

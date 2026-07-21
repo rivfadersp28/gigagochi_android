@@ -71,6 +71,25 @@ class MvpSyncPassRunnerTest {
     }
 
     @Test
+    fun manualGenerationFailureNotificationsUseOperationCopyAndStableReplacementIds() {
+        val create = manualGenerationFailedNotification(ManualGenerationKind.Create, "same-key")
+        val outfit = manualGenerationFailedNotification(ManualGenerationKind.Outfit, "same-key")
+        val notification = manualGenerationFailedNotification(ManualGenerationKind.Travel, "same-key")
+
+        assertEquals(LocalNotificationKind.GenerationFailed, notification.kind)
+        assertEquals("Не получилось создать персонажа, попробуй еще раз", create.body)
+        assertEquals("Не получилось переодеть питомца, попробуй еще раз", outfit.body)
+        assertEquals("Путешествие не получилось", notification.title)
+        assertEquals(
+            "Не получилось отправиться в путешествие, попробуй еще раз",
+            notification.body,
+        )
+        assertEquals(stableNotificationId(notification), stableNotificationId(notification.copy()))
+        assertNotEquals(stableNotificationId(create), stableNotificationId(outfit))
+        assertNotEquals(stableNotificationId(outfit), stableNotificationId(notification))
+    }
+
+    @Test
     fun deniedPermissionLeavesRowsUnmarkedAndAppUsable() = runBlocking {
         var marked = 0
         val emitted = mutableListOf<LocalCompletionNotification>()

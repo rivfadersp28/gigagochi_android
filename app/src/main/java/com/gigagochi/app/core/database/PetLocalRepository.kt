@@ -1588,6 +1588,7 @@ class PetLocalRepository(
                     notifiedAtEpochMillis,
                 ) == 1
             }
+            LocalNotificationKind.GenerationFailed -> false
             LocalNotificationKind.Proactive -> dao.markProactiveNotificationNotified(
                 ownerId,
                 notification.stableKey,
