@@ -252,20 +252,27 @@ internal fun appRouteForAccountStartup(destination: AccountStartupDestination): 
         AccountStartupDestination.Failure -> AppRoute.LocalDataError
     }
 
+internal fun usesDarkNavigationBarIcons(route: AppRoute?): Boolean = route == AppRoute.Dashboard
+
+internal fun navigationBarBackground(route: AppRoute?): Color =
+    if (route == AppRoute.Dashboard) Color(0xFFBDBBB3) else Color.Black
+
 class MainActivity : ComponentActivity() {
     private val incomingIntentRevision = MutableStateFlow(0)
+    private var darkNavigationBarIcons = false
 
-    private fun configureSystemBars() {
+    private fun configureSystemBars(darkNavigationBarIcons: Boolean = this.darkNavigationBarIcons) {
+        this.darkNavigationBarIcons = darkNavigationBarIcons
         WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
-        window.navigationBarColor = android.graphics.Color.rgb(189, 187, 179)
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             window.isNavigationBarContrastEnforced = false
         }
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.statusBars())
             show(WindowInsetsCompat.Type.navigationBars())
-            isAppearanceLightNavigationBars = true
+            isAppearanceLightNavigationBars = darkNavigationBarIcons
         }
     }
 
@@ -321,6 +328,9 @@ class MainActivity : ComponentActivity() {
                 var focusedTravelRequestKey by remember { mutableStateOf<String?>(null) }
                 var route by remember {
                     mutableStateOf(explicitRouteValue?.let(::appRouteFromValue))
+                }
+                LaunchedEffect(route) {
+                    configureSystemBars(usesDarkNavigationBarIcons(route))
                 }
                 val isExplicitDebugRoute = explicitRouteValue != null
                 val usesRealFeatureAdapters = featureAdapterMode(explicitRouteValue) ==
@@ -954,7 +964,7 @@ class MainActivity : ComponentActivity() {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(Color(0xFFBDBBB3))
+                        .background(navigationBarBackground(route))
                         .windowInsetsPadding(
                             WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
                         )

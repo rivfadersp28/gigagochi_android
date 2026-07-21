@@ -49,17 +49,17 @@ class DashboardImageBoundsTest {
         val anchor = dialogueAnchorAboveInput(inputTop)
         val messageBottom = characterMessageContainerTop(anchor) + 132.dp
 
-        assertEquals(452.dp, messageBottom)
+        assertEquals(440.dp, messageBottom)
         assertTrue(messageBottom < inputTop)
     }
 
     @Test
-    fun thinkingIndicatorStaysTwelvePixelsAboveMeasuredInputSurface() {
+    fun thinkingIndicatorStaysTwentyFourPixelsAboveMeasuredInputSurface() {
         val inputTop = 464.dp
         val indicatorTop = thinkingIndicatorTopAboveInput(inputTop)
         val indicatorBottom = indicatorTop + CharacterThinkingIndicatorHeight
 
-        assertEquals(452.dp, indicatorBottom)
+        assertEquals(440.dp, indicatorBottom)
         assertEquals(
             characterThinkingIndicatorTop(dialogueAnchorAboveInput(inputTop)),
             indicatorTop,

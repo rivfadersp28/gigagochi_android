@@ -192,7 +192,7 @@ private val DemoPet = PetDashboardState(
 
 private val ClosedDialogueTop = 663.dp
 private val OpenDialogueTop = 371.dp
-private val DialogueInputGap = 12.dp
+private val DialogueInputGap = 24.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp

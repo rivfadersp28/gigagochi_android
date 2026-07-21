@@ -9,8 +9,28 @@ import org.junit.Test
 import androidx.lifecycle.Lifecycle
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.compose.ui.graphics.Color
 
 class AppRouteTest {
+    @Test
+    fun navigationBarMatchesTheVisibleRouteInsteadOfTheDashboardBehindIt() {
+        assertEquals(Color(0xFFBDBBB3), navigationBarBackground(AppRoute.Dashboard))
+        assertEquals(true, usesDarkNavigationBarIcons(AppRoute.Dashboard))
+
+        listOf(
+            null,
+            AppRoute.Create,
+            AppRoute.Events,
+            AppRoute.Travel,
+            AppRoute.Story,
+            AppRoute.ConnectionError,
+            AppRoute.LocalDataError,
+        ).forEach { route ->
+            assertEquals(Color.Black, navigationBarBackground(route))
+            assertEquals(false, usesDarkNavigationBarIcons(route))
+        }
+    }
+
     @Test
     fun routeDepthDefinesForwardAndBackSharedAxisDirection() {
         assertEquals(true, isForwardAppRouteTransition(AppRoute.Dashboard, AppRoute.Events))
