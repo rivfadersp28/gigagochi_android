@@ -58,6 +58,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -191,6 +192,7 @@ private val DemoPet = PetDashboardState(
 
 private val ClosedDialogueTop = 663.dp
 private val OpenDialogueTop = 371.dp
+private val DialogueInputGap = 12.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
@@ -733,6 +735,9 @@ private fun DashboardInlineScreen(
     var petTapHeartBursts by remember { mutableStateOf<List<PetTapHeartBurst>>(emptyList()) }
     var lastPetTapParticleAt by remember { mutableStateOf(Long.MIN_VALUE) }
     var composerLineCount by remember(state.mode) { mutableIntStateOf(1) }
+    var referenceFrameTopPx by remember { mutableFloatStateOf(0f) }
+    var referenceFrameScale by remember { mutableFloatStateOf(Float.NaN) }
+    var inputSurfaceTopPx by remember(state.mode) { mutableFloatStateOf(Float.NaN) }
     val imeBottomDp = with(density) { WindowInsets.ime.getBottom(this).toDp().value }
     val imeMotionProgress = (
         (imeBottomDp - ImeMotionStartInsetDp) / ImeMotionTravelDp
@@ -742,8 +747,18 @@ private fun DashboardInlineScreen(
     } else {
         0.dp
     }
-    val dialogueTop = ClosedDialogueTop -
+    val fallbackDialogueTop = ClosedDialogueTop -
         (ClosedDialogueTop - OpenDialogueTop) * imeMotionProgress - composerDialogueLift
+    val inputTopInReference = if (inputSurfaceTopPx.isFinite() && referenceFrameScale > 0f) {
+        with(density) {
+            ((inputSurfaceTopPx - referenceFrameTopPx) / referenceFrameScale).toDp()
+        }
+    } else null
+    val dialogueTop = inputTopInReference?.let {
+        dialogueAnchorAboveInput(it) - composerDialogueLift
+    } ?: fallbackDialogueTop
+    val chatThinkingTop = inputTopInReference?.let(::thinkingIndicatorTopAboveInput)
+        ?: characterThinkingIndicatorTop(dialogueTop)
     val mediaOffsetY = if (
         imeMotionProgress > 0f && (
             state.mode == DashboardMode.Chat ||
@@ -762,7 +777,16 @@ private fun DashboardInlineScreen(
         modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)),
         contentAlignment = Alignment.TopCenter,
     ) {
-        BoxWithReferenceFrame {
+        BoxWithReferenceFrame(
+            onReferenceFramePositioned = { coordinates ->
+                val top = coordinates.localToRoot(Offset.Zero).y
+                val bottom = coordinates.localToRoot(
+                    Offset(0f, coordinates.size.height.toFloat()),
+                ).y
+                referenceFrameTopPx = top
+                referenceFrameScale = (bottom - top) / coordinates.size.height
+            },
+        ) {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -858,7 +882,7 @@ private fun DashboardInlineScreen(
                     if (state.activeChat != null) {
                         CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            top = dialogueTop,
+                            top = chatThinkingTop,
                         )
                     } else {
                         (state.chatReply ?: state.settledFirstSessionReply)?.let { reply ->
@@ -885,7 +909,7 @@ private fun DashboardInlineScreen(
                     if (state.activeFeed != null) {
                         CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            top = 630.dp,
+                            top = 638.dp,
                         )
                     } else {
                         (state.feedReply ?: state.settledFirstSessionReply)?.let { reply ->
@@ -1024,6 +1048,7 @@ private fun DashboardInlineScreen(
                     )
                 },
                 onLineCountChange = { composerLineCount = it },
+                onInputSurfaceTopChange = { inputSurfaceTopPx = it },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
@@ -1194,6 +1219,7 @@ private fun ConversationInputPanel(
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onLineCountChange: (Int) -> Unit,
+    onInputSurfaceTopChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val buttonPressFeedback = LocalButtonPressFeedback.current
@@ -1247,7 +1273,10 @@ private fun ConversationInputPanel(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .heightIn(min = collapsedPanelHeight, max = expandedPanelHeight),
+                .heightIn(min = collapsedPanelHeight, max = expandedPanelHeight)
+                .onGloballyPositioned { coordinates ->
+                    onInputSurfaceTopChange(coordinates.positionInRoot().y)
+                },
         ) {
             Box(
                 Modifier
@@ -1650,13 +1679,16 @@ private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
         contentScale = ContentScale.FillBounds,
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .offset(y = top + 8.dp)
-            .requiredSize(80.dp, 55.5.dp),
+            .offset(y = top)
+            .requiredSize(80.dp, CharacterThinkingIndicatorHeight),
     )
 }
 
 @Composable
-private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
+private fun BoxWithReferenceFrame(
+    onReferenceFramePositioned: ((LayoutCoordinates) -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
         val actionTop = dashboardActionTop(maxHeight, scale)
@@ -1669,6 +1701,9 @@ private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
                         scaleX = scale
                         scaleY = scale
                         transformOrigin = TransformOrigin(.5f, 0f)
+                    }
+                    .onGloballyPositioned { coordinates ->
+                        onReferenceFramePositioned?.invoke(coordinates)
                     }
                     .clip(RoundedCornerShape(0.dp)),
                 content = content,
@@ -2144,8 +2179,15 @@ private fun BoxScope.CharacterDialogueText(
 private const val CharacterMessageEnterDurationMillis = 300f
 private val CharacterMessageMaxHeight = 132.dp
 internal val CharacterMessageFixedBottomOffset = 55.dp
+internal val CharacterThinkingIndicatorHeight = 55.5.dp
+internal fun dialogueAnchorAboveInput(inputTop: Dp): Dp =
+    inputTop - CharacterMessageFixedBottomOffset - DialogueInputGap
 internal fun characterMessageContainerTop(anchor: Dp): Dp =
     anchor + CharacterMessageFixedBottomOffset - CharacterMessageMaxHeight
+internal fun characterThinkingIndicatorTop(anchor: Dp): Dp =
+    anchor + CharacterMessageFixedBottomOffset - CharacterThinkingIndicatorHeight
+internal fun thinkingIndicatorTopAboveInput(inputTop: Dp): Dp =
+    inputTop - DialogueInputGap - CharacterThinkingIndicatorHeight
 private const val CharacterMessageUnitDurationMillis = 700f
 private const val CharacterMessageUnitStaggerMillis = 24f
 private const val CharacterMessageMaxAnimatedUnits = 80
