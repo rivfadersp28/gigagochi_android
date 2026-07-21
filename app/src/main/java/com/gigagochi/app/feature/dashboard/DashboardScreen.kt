@@ -749,14 +749,16 @@ private fun DashboardInlineScreen(
     }
     val fallbackDialogueTop = ClosedDialogueTop -
         (ClosedDialogueTop - OpenDialogueTop) * imeMotionProgress - composerDialogueLift
-    val dialogueTop = if (inputSurfaceTopPx.isFinite() && referenceFrameScale > 0f) {
-        val inputTopInReference = with(density) {
+    val inputTopInReference = if (inputSurfaceTopPx.isFinite() && referenceFrameScale > 0f) {
+        with(density) {
             ((inputSurfaceTopPx - referenceFrameTopPx) / referenceFrameScale).toDp()
         }
-        dialogueAnchorAboveInput(inputTopInReference) - composerDialogueLift
-    } else {
-        fallbackDialogueTop
-    }
+    } else null
+    val dialogueTop = inputTopInReference?.let {
+        dialogueAnchorAboveInput(it) - composerDialogueLift
+    } ?: fallbackDialogueTop
+    val chatThinkingTop = inputTopInReference?.let(::thinkingIndicatorTopAboveInput)
+        ?: characterThinkingIndicatorTop(dialogueTop)
     val mediaOffsetY = if (
         imeMotionProgress > 0f && (
             state.mode == DashboardMode.Chat ||
@@ -880,7 +882,7 @@ private fun DashboardInlineScreen(
                     if (state.activeChat != null) {
                         CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            top = dialogueTop,
+                            top = chatThinkingTop,
                         )
                     } else {
                         (state.chatReply ?: state.settledFirstSessionReply)?.let { reply ->
@@ -907,7 +909,7 @@ private fun DashboardInlineScreen(
                     if (state.activeFeed != null) {
                         CharacterThinkingIndicator(
                             freezeFrame = debugState.freezesMotion,
-                            top = 630.dp,
+                            top = 638.dp,
                         )
                     } else {
                         (state.feedReply ?: state.settledFirstSessionReply)?.let { reply ->
@@ -1677,8 +1679,8 @@ private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
         contentScale = ContentScale.FillBounds,
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .offset(y = top + 8.dp)
-            .requiredSize(80.dp, 55.5.dp),
+            .offset(y = top)
+            .requiredSize(80.dp, CharacterThinkingIndicatorHeight),
     )
 }
 
@@ -2177,10 +2179,15 @@ private fun BoxScope.CharacterDialogueText(
 private const val CharacterMessageEnterDurationMillis = 300f
 private val CharacterMessageMaxHeight = 132.dp
 internal val CharacterMessageFixedBottomOffset = 55.dp
+internal val CharacterThinkingIndicatorHeight = 55.5.dp
 internal fun dialogueAnchorAboveInput(inputTop: Dp): Dp =
     inputTop - CharacterMessageFixedBottomOffset - DialogueInputGap
 internal fun characterMessageContainerTop(anchor: Dp): Dp =
     anchor + CharacterMessageFixedBottomOffset - CharacterMessageMaxHeight
+internal fun characterThinkingIndicatorTop(anchor: Dp): Dp =
+    anchor + CharacterMessageFixedBottomOffset - CharacterThinkingIndicatorHeight
+internal fun thinkingIndicatorTopAboveInput(inputTop: Dp): Dp =
+    inputTop - DialogueInputGap - CharacterThinkingIndicatorHeight
 private const val CharacterMessageUnitDurationMillis = 700f
 private const val CharacterMessageUnitStaggerMillis = 24f
 private const val CharacterMessageMaxAnimatedUnits = 80
