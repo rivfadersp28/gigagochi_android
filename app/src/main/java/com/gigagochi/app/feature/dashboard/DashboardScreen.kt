@@ -144,7 +144,6 @@ import com.gigagochi.app.core.designsystem.LocalButtonPressFeedback
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import com.gigagochi.app.core.designsystem.SbSansDisplayFontFamily
 import com.gigagochi.app.core.model.PetDashboardState
-import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.FirstSessionStage
 import com.gigagochi.app.core.database.FirstSessionStore
 import com.gigagochi.app.core.database.FirstSessionMutationResult
@@ -235,7 +234,6 @@ fun DashboardRoute(
     durableOperations: DashboardDurableOperations? = null,
     requestKeyFactory: ((String) -> String)? = null,
     requestImeOverride: Boolean? = null,
-    travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
     unansweredEventCount: Int = 0,
@@ -605,7 +603,6 @@ fun DashboardRoute(
         requestImeOverride = requestImeOverride,
         mediaProjection = projectDashboardMedia(
             state.pet,
-            travelPresentation,
             resolveUrl = { mediaUrlPolicy?.resolve(it) },
             fixtureOnly = mediaUrlPolicy == null,
         ),
@@ -630,7 +627,6 @@ fun DashboardScreen(
     onEvents: () -> Unit = {},
     unansweredEventCount: Int = 0,
     modifier: Modifier = Modifier,
-    travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
 ) {
@@ -643,7 +639,6 @@ fun DashboardScreen(
                 DashboardVideo(
                     projection = projectDashboardMedia(
                         state,
-                        travelPresentation,
                         resolveUrl = { mediaUrlPolicy?.resolve(it) },
                         fixtureOnly = mediaUrlPolicy == null,
                     ),

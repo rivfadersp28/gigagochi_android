@@ -12,7 +12,6 @@ sealed interface AccountStartupDestination {
         val pendingOutfit: LocalPendingOutfit?,
         val pendingTravel: LocalPendingTravelVideo?,
         val storyReceipts: List<InteractiveStoryReceipt>,
-        val travelPresentation: LocalTravelVideoAsset? = null,
         val firstSession: LocalFirstSession? = null,
     ) : AccountStartupDestination
     data object Failure : AccountStartupDestination
@@ -45,9 +44,6 @@ class AccountPetLifecycle(
                             it.backendState != PendingBackendState.Failed
                     }
                     .maxByOrNull { it.acceptedAtEpochMillis },
-                travelPresentation = recovery.travelVideoAssets
-                    .filter { it.petId == snapshot.pet.petId && it.consumedAtEpochMillis != null }
-                    .maxByOrNull { it.consumedAtEpochMillis ?: Long.MIN_VALUE },
                 storyReceipts = recovery.storyReceipts.filter {
                     it.petId == snapshot.pet.petId
                 },

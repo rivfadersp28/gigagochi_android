@@ -1,6 +1,5 @@
 package com.gigagochi.app.feature.dashboard
 
-import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.PetMoodImage
@@ -28,7 +27,7 @@ class DashboardMediaProjectionTest {
                 "https://safe/happy.mp4",
                 "https://safe/happy.jpg",
             ),
-            projectDashboardMedia(pet, null, resolve, false),
+            projectDashboardMedia(pet, resolve, false),
         )
     }
 
@@ -46,13 +45,12 @@ class DashboardMediaProjectionTest {
         )
         assertEquals(
             DashboardMediaProjection.RemoteVideo("https://safe/sad.mp4", "https://safe/sad.jpg"),
-            projectDashboardMedia(pet().copy(hunger = 29, generatedMedia = media), null, resolve, false),
+            projectDashboardMedia(pet().copy(hunger = 29, generatedMedia = media), resolve, false),
         )
         assertEquals(
             DashboardMediaProjection.RemoteVideo("https://safe/normal.mp4", "https://safe/idle.jpg"),
             projectDashboardMedia(
                 pet().copy(hunger = 30, happiness = 69, energy = 100, generatedMedia = media),
-                null,
                 resolve,
                 false,
             ),
@@ -61,7 +59,6 @@ class DashboardMediaProjectionTest {
             DashboardMediaProjection.RemoteVideo("https://safe/happy.mp4", "https://safe/happy.jpg"),
             projectDashboardMedia(
                 pet().copy(hunger = 70, happiness = 70, energy = 70, generatedMedia = media),
-                null,
                 resolve,
                 false,
             ),
@@ -70,7 +67,6 @@ class DashboardMediaProjectionTest {
             DashboardMediaProjection.RemoteVideo("https://safe/sad.mp4", "https://safe/sad.jpg"),
             projectDashboardMedia(
                 pet().copy(hunger = 100, happiness = 100, energy = 29, generatedMedia = media),
-                null,
                 resolve,
                 false,
             ),
@@ -89,29 +85,18 @@ class DashboardMediaProjectionTest {
         )
         assertEquals(
             DashboardMediaProjection.RemoteVideo("https://safe/normal.mp4", "https://safe/idle.jpg"),
-            projectDashboardMedia(pet().copy(generatedMedia = media), null, resolve, false),
+            projectDashboardMedia(pet().copy(generatedMedia = media), resolve, false),
         )
     }
 
     @Test
-    fun consumedTravelOverridesPetButForeignOrUnconsumedTravelDoesNot() {
+    fun dashboardProjectionUsesOnlyPetMedia() {
         val pet = pet().copy(
             generatedMedia = PetGeneratedMedia(videoUrl = "https://safe/pet.mp4"),
         )
-        val travel = LocalTravelVideoAsset(
-            "owner", pet.petId, "request", "job", "prompt", null, null,
-            "https://safe/travel.jpg", "https://safe/travel.mp4", 1, 2,
-        )
-        assertEquals(
-            DashboardMediaProjection.RemoteVideo(
-                "https://safe/travel.mp4",
-                "https://safe/travel.jpg",
-            ),
-            projectDashboardMedia(pet, travel, resolve, false),
-        )
         assertEquals(
             DashboardMediaProjection.RemoteVideo("https://safe/pet.mp4", null),
-            projectDashboardMedia(pet, travel.copy(petId = "foreign"), resolve, false),
+            projectDashboardMedia(pet, resolve, false),
         )
     }
 
@@ -120,8 +105,8 @@ class DashboardMediaProjectionTest {
         val unsafe = pet().copy(
             generatedMedia = PetGeneratedMedia(videoUrl = "https://evil/media.mp4"),
         )
-        assertEquals(DashboardMediaProjection.Fixture, projectDashboardMedia(unsafe, null, resolve, false))
-        assertEquals(DashboardMediaProjection.Fixture, projectDashboardMedia(pet(), null, resolve, true))
+        assertEquals(DashboardMediaProjection.Fixture, projectDashboardMedia(unsafe, resolve, false))
+        assertEquals(DashboardMediaProjection.Fixture, projectDashboardMedia(pet(), resolve, true))
     }
 
     private fun pet() = PetDashboardState(

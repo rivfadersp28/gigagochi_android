@@ -35,7 +35,7 @@ class DailyProactiveCoordinator(
         ) {
             is FeatureApiResult.Failure -> false
             is FeatureApiResult.Success -> {
-                val reply = response.value.reply.trim()
+                val reply = sanitizeProactiveReply(response.value.reply, memory, nowEpochMillis)
                 if (reply.isBlank()) return false
                 repository.saveProactiveNotification(
                     ownerId,

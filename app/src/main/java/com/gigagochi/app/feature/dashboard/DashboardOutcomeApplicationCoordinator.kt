@@ -1,7 +1,6 @@
 package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.database.DashboardOutcomeStore
-import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.OutfitOutcomeApplicationResult
 import com.gigagochi.app.core.database.OwnerRecoveryStore
 import com.gigagochi.app.core.database.PendingBackendState
@@ -13,7 +12,6 @@ import kotlinx.coroutines.CancellationException
 sealed interface DashboardOutcomeRecoveryResult {
     data class Changed(
         val pet: PetDashboardState,
-        val travelPresentation: LocalTravelVideoAsset?,
     ) : DashboardOutcomeRecoveryResult
     data object Unchanged : DashboardOutcomeRecoveryResult
     data object Conflict : DashboardOutcomeRecoveryResult
@@ -68,12 +66,7 @@ class DashboardOutcomeApplicationCoordinator(
         val after = recoveryStore.loadOwnerRecovery(ownerId)
         val pet = after.petSnapshots.firstOrNull { it.pet.petId == petId }?.pet
             ?: return DashboardOutcomeRecoveryResult.Conflict
-        DashboardOutcomeRecoveryResult.Changed(
-            pet = pet,
-            travelPresentation = after.travelVideoAssets
-                .filter { it.petId == petId && it.consumedAtEpochMillis != null }
-                .maxByOrNull { it.consumedAtEpochMillis ?: Long.MIN_VALUE },
-        )
+        DashboardOutcomeRecoveryResult.Changed(pet = pet)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

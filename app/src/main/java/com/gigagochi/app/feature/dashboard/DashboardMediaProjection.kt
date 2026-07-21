@@ -1,6 +1,5 @@
 package com.gigagochi.app.feature.dashboard
 
-import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.model.PetDashboardState
 
 sealed interface DashboardMediaProjection {
@@ -11,17 +10,10 @@ sealed interface DashboardMediaProjection {
 
 fun projectDashboardMedia(
     pet: PetDashboardState,
-    travelPresentation: LocalTravelVideoAsset?,
     resolveUrl: (String?) -> String?,
     fixtureOnly: Boolean,
 ): DashboardMediaProjection {
     if (fixtureOnly) return DashboardMediaProjection.Fixture
-    if (travelPresentation?.petId == pet.petId && travelPresentation.consumedAtEpochMillis != null) {
-        val video = resolveUrl(travelPresentation.videoUrl)
-        val poster = resolveUrl(travelPresentation.imageUrl)
-        if (video != null) return DashboardMediaProjection.RemoteVideo(video, poster)
-        if (poster != null) return DashboardMediaProjection.RemotePoster(poster)
-    }
     val requestedMood = when {
         pet.hunger < 30 || pet.happiness < 30 || pet.energy < 30 -> "sad"
         pet.hunger >= 70 && pet.happiness >= 70 && pet.energy >= 70 -> "happy"

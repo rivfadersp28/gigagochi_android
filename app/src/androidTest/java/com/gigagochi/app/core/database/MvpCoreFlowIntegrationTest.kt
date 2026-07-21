@@ -26,7 +26,6 @@ import com.gigagochi.app.feature.dashboard.RealDashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.RealDashboardTravelAdapter
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -90,9 +89,10 @@ class MvpCoreFlowIntegrationTest {
         ).applyReady(PetId)
         assertTrue(applied is DashboardOutcomeRecoveryResult.Changed)
         assertEquals(0, (applied as DashboardOutcomeRecoveryResult.Changed).pet.experience)
-        assertNotNull(applied.travelPresentation)
-        assertEquals(VideoUrl, applied.travelPresentation?.videoUrl)
         assertTrue(repository.getPendingTravels(OwnerId).isEmpty())
+        val completedTravel = repository.getTravelVideoAssets(OwnerId, PetId).single()
+        assertEquals(VideoUrl, completedTravel.videoUrl)
+        assertEquals(40L, completedTravel.consumedAtEpochMillis)
 
         database.close()
         database = Room.databaseBuilder(context, GigagochiDatabase::class.java, databaseName).build()
@@ -102,8 +102,9 @@ class MvpCoreFlowIntegrationTest {
         assertEquals(InitialAssetSetId, restarted.pet.assetSetId)
         assertEquals(0, restarted.pet.experience)
         assertEquals(null, restarted.pendingTravel)
-        assertEquals(VideoUrl, restarted.travelPresentation?.videoUrl)
-        assertEquals(40L, restarted.travelPresentation?.consumedAtEpochMillis)
+        val persistedTravel = repository.getTravelVideoAssets(OwnerId, PetId).single()
+        assertEquals(VideoUrl, persistedTravel.videoUrl)
+        assertEquals(40L, persistedTravel.consumedAtEpochMillis)
 
         val replayAdapter = RealDashboardTravelAdapter(
             OwnerId,

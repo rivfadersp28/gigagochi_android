@@ -98,10 +98,9 @@ class AccountPetLifecycleTest {
         store.receipts += storyReceipt(
             "acct_owner_a", "pet-not-active", "receipt-newer", "story-newer",
         ).copy(appliedAtEpochMillis = 999)
-        val activeTravelPresentation = travelAsset(
+        store.assets += travelAsset(
             "acct_owner_a", ownerAPet.petId, "asset-active", consumedAt = 20,
         )
-        store.assets += activeTravelPresentation
         store.assets += travelAsset("acct_owner_a", ownerAPet.petId, "asset-unconsumed", null)
         store.assets += travelAsset("acct_owner_a", "pet-not-active", "asset-old", 999)
         store.assets += travelAsset("acct_owner_b", ownerBPet.petId, "asset-foreign", 999)
@@ -116,7 +115,6 @@ class AccountPetLifecycleTest {
                 store.outfits.first { it.ownerId == "acct_owner_a" },
                 store.travels.first { it.ownerId == "acct_owner_a" },
                 listOf(store.receipts.first { it.receiptKey == "receipt-a" }),
-                activeTravelPresentation,
             ),
             AccountPetLifecycle(store).startup("acct_owner_a"),
         )

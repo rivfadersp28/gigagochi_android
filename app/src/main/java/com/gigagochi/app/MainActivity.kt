@@ -652,7 +652,6 @@ class MainActivity : ComponentActivity() {
                                     firstSession = firstSession,
                                 )
                             },
-                            travelPresentation = recovery?.travelPresentation,
                             mediaUrlPolicy = mediaUrlPolicy,
                             chatAdapter = remember(api, session.accountId, repository, scope) {
                                 debugChatAdapter(
