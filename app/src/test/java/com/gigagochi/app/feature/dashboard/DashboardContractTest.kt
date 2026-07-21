@@ -21,10 +21,9 @@ import org.junit.Test
 
 class DashboardContractTest {
     @Test
-    fun eventsActionUsesCompactPaddingWithoutBadgeAndKeepsRoomForBadge() {
-        assertEquals(184.dp, eventActionWidth(0))
-        assertEquals(216.dp, eventActionWidth(1))
-        assertEquals(216.dp, eventActionWidth(100))
+    fun dashboardActionsUsePaperHorizontalInsets() {
+        assertEquals(12.dp, DashboardActionStartPadding)
+        assertEquals(16.dp, DashboardActionEndPadding)
     }
 
     @Test
@@ -219,18 +218,12 @@ class DashboardContractTest {
     }
 
     @Test
-    fun outfitInsufficientFailureAndAcceptedQueueChargeExactlyOnce() {
-        var insufficient = reduceDashboard(DashboardUiState(pet()), DashboardEvent.OpenOutfit)
-        insufficient = reduceDashboard(insufficient, DashboardEvent.UpdateOutfitDraft("В футболку Metallica"))
-        insufficient = reduceDashboard(insufficient, DashboardEvent.SubmitOutfit("outfit-0"))
-        assertEquals(OutfitInsufficientMessage, insufficient.outfitError)
-        assertNull(insufficient.activeOutfit)
-
-        var state = reduceDashboard(DashboardUiState(pet(experience = 200)), DashboardEvent.OpenOutfit)
+    fun outfitQueuesForFreeAndAcceptsExactlyOnce() {
+        var state = reduceDashboard(DashboardUiState(pet(experience = 0)), DashboardEvent.OpenOutfit)
         state = reduceDashboard(state, DashboardEvent.UpdateOutfitDraft("  В футболку Metallica  "))
         state = reduceDashboard(state, DashboardEvent.SubmitOutfit("outfit-1"))
         val failed = reduceDashboard(state, DashboardEvent.OutfitFailed("outfit-1"))
-        assertEquals(200, failed.pet.experience)
+        assertEquals(0, failed.pet.experience)
         assertEquals("  В футболку Metallica  ", failed.outfitDraft)
 
         state = reduceDashboard(failed, DashboardEvent.SubmitOutfit("outfit-2"))
@@ -247,7 +240,7 @@ class DashboardContractTest {
             DashboardEvent.OutfitQueued(
                 "outfit-2",
                 pending,
-                state.pet.copy(experience = 0),
+                state.pet,
                 DeterministicOutfitReply,
             ),
         )
@@ -545,7 +538,7 @@ class DashboardContractTest {
         assertEquals(200, state.pet.experience)
         assertEquals(pending, state.pendingTravel)
         assertEquals(setOf("travel-3"), state.queuedTravelRequestKeys)
-        assertEquals("${pending.prompt}? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь.", state.transientReply?.text)
+        assertEquals("${pending.prompt}? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь", state.transientReply?.text)
 
         val duplicateQueue = reduceDashboard(
             state,
@@ -617,5 +610,30 @@ class DashboardContractTest {
         )
         assertEquals(DeterministicTravelReply, state.transientReply?.visibleText)
         assertFalse(state.transientReply?.hasNextPortion ?: true)
+    }
+
+    @Test
+    fun queuedRepliesCapitalizeUserTextAndOmitTerminalPeriod() {
+        assertEquals(
+            "В столицу сша? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь",
+            travelQueuedReply("  в столицу сша...  "),
+        )
+        assertEquals(
+            "Футболка iron maiden? Интересно. Я получу заказ примерно через 10 минут",
+            outfitQueuedReply("футболка iron maiden"),
+        )
+    }
+
+    @Test
+    fun characterReplyCapitalizesEverySentenceForPresentation() {
+        val reply = DashboardReply(
+            requestKey = "lowercase-reply",
+            text = "первая фраза. вторая фраза? «третья фраза!»",
+        )
+
+        assertEquals(
+            "Первая фраза. Вторая фраза? «Третья фраза!»",
+            reply.visibleText,
+        )
     }
 }

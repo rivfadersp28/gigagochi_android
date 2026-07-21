@@ -196,7 +196,8 @@ private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
 private val OnboardingActionMaxWidth = 346.dp
-private val OnboardingActionHorizontalPadding = 20.dp
+internal val DashboardActionStartPadding = 12.dp
+internal val DashboardActionEndPadding = 16.dp
 private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
 private const val ImeMotionStartInsetDp = 40f
 private const val ImeMotionTravelDp = 292f
@@ -505,7 +506,7 @@ fun DashboardRoute(
                             requestKey = request.requestKey,
                             pending = pending,
                             acceptedPet = state.pet.copy(
-                                experience = (state.pet.experience - OutfitExperienceCost)
+                                experience = (state.pet.experience - OutfitExperienceCharge)
                                     .coerceAtLeast(0),
                             ),
                             reply = outfitQueuedReply(pending.displayItem),
@@ -702,18 +703,17 @@ fun DashboardScreen(
                     .horizontalScroll(actionScrollState)
                     .padding(start = 28.dp, end = 29.dp),
             ) {
-                GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+                GlassAction("Поболтать", ActionKind.Chat, hazeState, onChat)
                 GlassAction(
                     "События",
                     ActionKind.Events,
-                    eventActionWidth(unansweredEventCount),
                     hazeState,
                     onEvents,
                     badgeCount = unansweredEventCount,
                 )
-                GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
-                GlassAction("В путешествие", ActionKind.Travel, 241.dp, hazeState, onTravel)
-                GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+                GlassAction("Покормить", ActionKind.Feed, hazeState, onFeed)
+                GlassAction("В путешествие", ActionKind.Travel, hazeState, onTravel)
+                GlassAction("Нарядить", ActionKind.Outfit, hazeState, onOutfit)
             }
         }
     }
@@ -816,10 +816,10 @@ private fun DashboardInlineScreen(
                             )
                     ) {
                         lastPetTapParticleAt = now
-                        petTapHeartBursts = (
-                            petTapHeartBursts.takeLast(1) +
-                                PetTapHeartBurst(nextPetTapReactionId, center)
-                            )
+                        petTapHeartBursts = appendPetTapHeartBurst(
+                            current = petTapHeartBursts,
+                            next = PetTapHeartBurst(nextPetTapReactionId, center),
+                        )
                     }
                     onPetTapFeedback()
                 }
@@ -1142,33 +1142,27 @@ private fun BoxScope.DashboardActions(
         },
     ) {
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Chat) {
-            GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+            GlassAction("Поболтать", ActionKind.Chat, hazeState, onChat)
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Feed) {
-            GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
+            GlassAction("Покормить", ActionKind.Feed, hazeState, onFeed)
         }
         if (firstSessionAction == null) {
             GlassAction(
                 "События",
                 ActionKind.Events,
-                eventActionWidth(unansweredEventCount),
                 hazeState,
                 onEvents,
                 badgeCount = unansweredEventCount,
             )
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
-            GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+            GlassAction("Нарядить", ActionKind.Outfit, hazeState, onOutfit)
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Travel) {
             GlassAction(
                 if (firstSessionAction == FirstSessionMainAction.Travel) "Помочь летучей мыши" else "В путешествие",
                 ActionKind.Travel,
-                if (firstSessionAction == FirstSessionMainAction.Travel) {
-                    null
-                } else {
-                    241.dp
-                },
                 hazeState,
                 onTravel,
                 showGlyph = firstSessionAction != FirstSessionMainAction.Travel,
@@ -1261,7 +1255,16 @@ private fun ConversationInputPanel(
                     .innerShadow(
                         DashboardGlassContract.ConversationShape,
                         DashboardGlassContract.ConversationSoftInset,
-                    ),
+                    )
+                    .drawBehind {
+                        drawRoundRect(
+                            color = DashboardGlassContract.ConversationOutline,
+                            cornerRadius = CornerRadius(
+                                56.dp.toPx().coerceAtMost(size.height / 2f),
+                            ),
+                            style = Stroke(1.dp.toPx()),
+                        )
+                    },
             )
             BasicTextField(
                 value = value,
@@ -2139,18 +2142,14 @@ private val CharacterMessageUnitEasing = CubicBezierEasing(.2f, .8f, .2f, 1f)
 
 private enum class ActionKind { Chat, Events, Feed, Travel, Outfit }
 
-internal fun eventActionWidth(unansweredEventCount: Int): Dp =
-    if (unansweredEventCount > 0) 216.dp else 184.dp
-
 @Composable
 private fun GlassAction(
     label: String,
     kind: ActionKind,
-    width: Dp?,
     hazeState: HazeState,
     onClick: () -> Unit,
     badgeCount: Int = 0,
-    showGlyph: Boolean = kind != ActionKind.Outfit,
+    showGlyph: Boolean = true,
 ) {
     val scale = remember { Animatable(1f) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -2169,13 +2168,7 @@ private fun GlassAction(
     }
     Box(
         modifier = Modifier
-            .then(
-                if (width == null) {
-                    Modifier.widthIn(max = OnboardingActionMaxWidth)
-                } else {
-                    Modifier.requiredWidth(width)
-                },
-            )
+            .widthIn(max = OnboardingActionMaxWidth)
             .height(58.203.dp)
             .scale(scale.value)
             .clip(DashboardGlassContract.ActionShape)
@@ -2214,21 +2207,13 @@ private fun GlassAction(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = if (width == null) {
-                Modifier
-                    .height(DashboardActionHeight)
-                    .widthIn(max = OnboardingActionMaxWidth)
-                    .padding(
-                        start = OnboardingActionHorizontalPadding,
-                        end = OnboardingActionHorizontalPadding,
-                        top = 14.dp,
-                        bottom = 16.dp,
-                    )
-            } else {
-                Modifier
-                    .matchParentSize()
-                    .padding(top = 14.dp, bottom = 16.dp)
-            },
+            modifier = Modifier
+                .height(DashboardActionHeight)
+                .widthIn(max = OnboardingActionMaxWidth)
+                .padding(
+                    start = DashboardActionStartPadding,
+                    end = DashboardActionEndPadding,
+                ),
         ) {
             if (showGlyph) {
                 ActionGlyph(kind)
@@ -2276,15 +2261,19 @@ private fun EventBadge(count: Int) {
 
 @Composable
 private fun ActionGlyph(kind: ActionKind) {
-    if (kind == ActionKind.Outfit) return
     val drawable = when (kind) {
         ActionKind.Chat -> R.drawable.action_chat
         ActionKind.Events -> R.drawable.action_events
         ActionKind.Feed -> R.drawable.action_feed
         ActionKind.Travel -> R.drawable.action_travel
-        ActionKind.Outfit -> error("handled above")
+        ActionKind.Outfit -> R.drawable.action_outfit
     }
-    Image(painterResource(drawable), contentDescription = null, modifier = Modifier.size(28.dp))
+    val modifier = if (kind == ActionKind.Outfit) {
+        Modifier.requiredWidth(36.dp).requiredHeight(30.dp)
+    } else {
+        Modifier.size(28.dp)
+    }
+    Image(painterResource(drawable), contentDescription = null, modifier = modifier)
 }
 
 @Composable

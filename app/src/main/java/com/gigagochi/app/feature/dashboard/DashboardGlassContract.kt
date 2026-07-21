@@ -22,6 +22,7 @@ internal object DashboardGlassContract {
     val ConversationShape = RoundedCornerShape(56.dp)
     val FoodShape = RoundedCornerShape(28.dp)
     val InlineTint = Color.White.copy(alpha = .15f)
+    val ConversationOutline = Color.White.copy(alpha = .16f)
     val InlineStyle = HazeStyle(
         backgroundColor = Color.Transparent,
         tints = listOf(HazeTint(InlineTint)),

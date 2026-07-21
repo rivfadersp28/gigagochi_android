@@ -17,7 +17,7 @@ import org.junit.Test
 
 class DashboardDurableOperationsTest {
     @Test
-    fun failedOutfitQueueThenReopenRetriesSamePendingWithoutSecondDebit() = runBlocking {
+    fun failedOutfitQueueThenReopenRetriesSamePendingWithoutDebit() = runBlocking {
         val store = Store(pet(experience = 500))
         var queueCalls = 0
         val adapter = object : DashboardOutfitAdapter {
@@ -45,13 +45,13 @@ class DashboardDurableOperationsTest {
         )
         val request = PendingOutfitRequest("request-1", "В футболку Metallica")
         assertTrue(firstCoordinator.acceptOutfit(request, store.pet) is DurableOutfitResult.PersistedButQueueFailed)
-        assertEquals(300, store.pet.experience)
+        assertEquals(500, store.pet.experience)
 
         val restarted = DashboardDurableOperations(
             "owner-a", store, adapter, UnavailableDashboardTravelAdapter(), nowEpochMillis = { 20 },
         )
         assertTrue(restarted.acceptOutfit(PendingOutfitRequest("request-2", "Другой"), store.pet) is DurableOutfitResult.Queued)
-        assertEquals(300, store.pet.experience)
+        assertEquals(500, store.pet.experience)
         assertEquals(1, store.outfits.size)
         assertEquals("backend-1", store.outfits.single().backendJobId)
         assertEquals(2, queueCalls)
@@ -154,7 +154,7 @@ class DashboardDurableOperationsTest {
 
         assertTrue(result is DurableOutfitResult.Queued)
         assertEquals(listOf("outfit-new"), dispatchedKeys)
-        assertEquals(600, store.pet.experience)
+        assertEquals(800, store.pet.experience)
         assertEquals(listOf("outfit-failed", "outfit-new"), store.outfits.map { it.requestKey })
         assertEquals(PendingBackendState.Failed, store.outfits.first().backendState)
     }
@@ -251,7 +251,7 @@ class DashboardDurableOperationsTest {
         override suspend fun acceptOutfit(pending: LocalPendingOutfit): OutfitAcceptanceResult {
             if (outfits.any { it.requestKey == pending.requestKey }) return OutfitAcceptanceResult.AlreadyApplied
             outfits += pending
-            pet = pet.copy(experience = pet.experience - 200)
+            pet = pet.copy(experience = pet.experience - pending.experienceCost)
             return OutfitAcceptanceResult.Applied
         }
         override suspend fun attachOutfitBackendJob(

@@ -4,7 +4,7 @@ import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.ScheduledStory
 
-const val OutfitAcceptanceCost = 200
+const val OutfitAcceptanceCost = 0
 
 enum class FirstSessionStage(val storageValue: String) {
     AwaitingChat("awaiting-chat"),

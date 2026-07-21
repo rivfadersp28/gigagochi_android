@@ -13,17 +13,17 @@ const val FirstSessionAfterFirstFood =
     "Хм, вкусно! Но что-то я себя неважно чувствую. Может, у тебя есть какое-нибудь снадобье?"
 const val FirstSessionAfterRemedyCare =
     "Уф, мне лучше. Иногда я могу проголодаться или попасть в беду. " +
-        "Будет круто, если будешь заходить и помогать мне."
+        "Будет круто, если будешь заходить и помогать мне"
 const val FirstSessionAfterRemedyBat =
-    "Ой, что это? Я увидел летучую мышь, и ей нужна помощь."
-const val FirstSessionAfterRemedy = "$FirstSessionAfterRemedyCare $FirstSessionAfterRemedyBat"
+    "Ой, что это? Я увидел летучую мышь, и ей нужна помощь"
+const val FirstSessionAfterRemedy = "$FirstSessionAfterRemedyCare. $FirstSessionAfterRemedyBat"
 val FirstSessionAfterRemedyPortions = listOf(
     FirstSessionAfterRemedyCare,
     FirstSessionAfterRemedyBat,
 ).map(String::withoutTerminalPeriod)
 const val FirstSessionAfterChallenge =
     "За правильные ответы я получаю монетки. Их можно потратить на новый гардероб или " +
-        "внешность. Попробуй меня во что-то нарядить."
+        "внешность. Попробуй меня во что-то нарядить"
 
 enum class FirstSessionMainAction { Chat, Feed, Travel, Outfit }
 

@@ -117,7 +117,7 @@ class LocalPersistenceValidationTest {
         updatedAtEpochMillis = 1,
     )
 
-    private fun outfit(experienceCost: Int = 200) = LocalPendingOutfit(
+    private fun outfit(experienceCost: Int = OutfitAcceptanceCost) = LocalPendingOutfit(
         ownerId = "owner-a",
         petId = "pet-a",
         requestKey = "outfit-request",
