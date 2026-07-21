@@ -1,6 +1,11 @@
 package com.gigagochi.app.debugmenu
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,12 +37,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.debug.debugTestPetFixture
 import com.gigagochi.app.feature.create.GeneratedPetFixture
@@ -165,6 +172,21 @@ fun setDebugDeadPetId(context: Context, petId: String?) {
 fun DebugMenuHost(bindings: DebugMenuBindings) {
     var open by remember { mutableStateOf(false) }
     var confirmNewPet by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            open = false
+            bindings.onSendPush()
+        } else {
+            recordDebugEvent(
+                "error",
+                "Тестовый пуш не запланирован",
+                "Не выдано разрешение на уведомления.",
+            )
+        }
+    }
     val events by DebugEvents.collectAsState()
 
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
@@ -237,6 +259,20 @@ fun DebugMenuHost(bindings: DebugMenuBindings) {
                     DebugAction("Запустить демо-историю", bindings.pet != null) {
                         open = false
                         bindings.onOpenTravelDemo()
+                    }
+                    DebugAction("Отправить пуш", true) {
+                        if (
+                            Build.VERSION.SDK_INT >= 33 &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            open = false
+                            bindings.onSendPush()
+                        }
                     }
                     DebugAction("Сбросить параметры персонажа", bindings.pet != null) {
                         open = false
