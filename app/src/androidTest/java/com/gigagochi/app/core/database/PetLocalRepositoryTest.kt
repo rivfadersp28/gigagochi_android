@@ -128,7 +128,7 @@ class PetLocalRepositoryTest {
 
         assertNull(repository.getFirstSession(OwnerId, PetId))
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(outfit()))
-        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -223,7 +223,7 @@ class PetLocalRepositoryTest {
             PendingOutfitRequest("outfit-retry", "Зелёный плащ"),
             repository.getPetSnapshot(OwnerId, PetId)!!.pet,
         ) is DurableOutfitResult.PersistedButQueueFailed)
-        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(
             FirstSessionStage.AwaitingCompletionMessage,
             repository.getFirstSession(OwnerId, PetId)?.stage,
@@ -238,7 +238,7 @@ class PetLocalRepositoryTest {
         ) is DurableOutfitResult.Queued)
 
         assertEquals(2, calls)
-        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(1, repository.getPendingOutfits(OwnerId).size)
         assertEquals("outfit-retry", repository.getPendingOutfits(OwnerId).single().requestKey)
         assertEquals("backend-retry", repository.getPendingOutfits(OwnerId).single().backendJobId)
@@ -319,9 +319,9 @@ class PetLocalRepositoryTest {
             repository.attachOutfitBackendJob(OwnerId, "outfit-request", "outfit-backend"),
         )
         assertEquals(FirstSessionStage.Completed, repository.getFirstSession(OwnerId, PetId)?.stage)
-        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(outfit()))
-        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -404,13 +404,13 @@ class PetLocalRepositoryTest {
     }
 
     @Test
-    fun outfitAcceptanceDebitsOnceAndBackendJobAttachRejectsConflict() = runBlocking {
+    fun outfitAcceptanceIsFreeAndBackendJobAttachRejectsConflict() = runBlocking {
         repository.replacePetSnapshot(snapshot(experience = 500))
         val pending = outfit()
 
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(pending))
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
-        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(1, repository.getPendingOutfits(OwnerId).size)
 
         assertEquals(
@@ -621,7 +621,17 @@ class PetLocalRepositoryTest {
 
     @Test
     fun outfitApplyIsAtomicOwnerFencedIdempotentAndRejectsStaleSnapshotSave() = runBlocking {
-        repository.replacePetSnapshot(snapshot(experience = 500))
+        val previousMedia = PetGeneratedMedia(
+            videoUrl = "https://gigagochi.serega.works/static/previous-idle.mp4",
+            sadVideoUrl = "https://gigagochi.serega.works/static/previous-sad.mp4",
+            happyVideoUrl = "https://gigagochi.serega.works/static/previous-happy.mp4",
+            moodImages = mediaImages("previous"),
+        )
+        repository.replacePetSnapshot(
+            snapshot(experience = 500).copy(
+                pet = snapshot(experience = 500).pet.copy(generatedMedia = previousMedia),
+            ),
+        )
         val pending = outfit()
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(pending))
         repository.attachOutfitBackendJob(OwnerId, pending.requestKey, "job-ready")
@@ -637,7 +647,10 @@ class PetLocalRepositoryTest {
         val applied = repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey)
         assertTrue(applied is OutfitOutcomeApplicationResult.Applied)
         assertEquals("asset-${pending.requestKey}", repository.getPetSnapshot(OwnerId, PetId)?.pet?.assetSetId)
-        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        val appliedMedia = requireNotNull(repository.getPetSnapshot(OwnerId, PetId)?.pet?.generatedMedia)
+        assertEquals("https://gigagochi.serega.works/static/${pending.requestKey}-idle.mp4", appliedMedia.videoUrl)
+        assertEquals(false, appliedMedia.moodImages.any { it.url.contains("previous") })
+        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
         val outfitNotification = repository.getUnnotifiedNotifications(OwnerId, PetId).single()
         assertEquals(LocalNotificationKind.OutfitReady, outfitNotification.kind)
@@ -646,13 +659,13 @@ class PetLocalRepositoryTest {
         assertTrue(repository.getOutfitMediaOutcomes(OwnerId, PetId).isEmpty())
         assertTrue(repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey) is OutfitOutcomeApplicationResult.AlreadyApplied)
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
-        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
 
         val stale = snapshot(experience = 999)
         assertEquals(false, repository.replacePetSnapshotIfAssetCurrent(stale))
         assertEquals("asset-${pending.requestKey}", repository.getPetSnapshot(OwnerId, PetId)?.pet?.assetSetId)
-        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -818,6 +831,9 @@ class PetLocalRepositoryTest {
             "asset-$requestKey",
             PetGeneratedMedia(
                 generatedAt = "2026-07-17T10:11:12Z",
+                videoUrl = "https://gigagochi.serega.works/static/$requestKey-idle.mp4",
+                sadVideoUrl = "https://gigagochi.serega.works/static/$requestKey-sad.mp4",
+                happyVideoUrl = "https://gigagochi.serega.works/static/$requestKey-happy.mp4",
                 moodImages = images,
             ),
             20,

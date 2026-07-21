@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -78,6 +79,8 @@ import kotlin.math.abs
 
 private val EventCardShape = RoundedCornerShape(20.dp)
 private val HelpButtonShape = RoundedCornerShape(24.dp)
+internal val EventScreenHorizontalPadding = 20.dp
+internal val EventCardSpacing = 86.dp
 
 @Composable
 fun EventHistoryScreen(
@@ -120,10 +123,10 @@ fun EventHistoryScreen(
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(
-                start = 25.dp,
+                start = EventScreenHorizontalPadding,
                 top = safeTop + ContextualAppBarEdgePadding +
                     ContextualNavigationMinimumTouchTarget + ContextualAppBarContentGap,
-                end = 21.dp,
+                end = EventScreenHorizontalPadding,
                 bottom = 34.dp,
             ),
             modifier = Modifier
@@ -182,7 +185,7 @@ fun EventHistoryScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(43.dp))
+                Spacer(Modifier.height(EventCardSpacing))
             }
         }
 
@@ -215,7 +218,10 @@ private fun TravelVideoEventCard(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var sharing by remember(asset.requestKey) { mutableStateOf(false) }
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = asset.imageUrl,
             videoUrl = asset.videoUrl,
@@ -224,7 +230,7 @@ private fun TravelVideoEventCard(
             mediaUrlPolicy = mediaUrlPolicy,
             description = "Видео путешествия: ${travelEventCaption(asset)}",
             modifier = Modifier
-                .requiredWidth(353.dp)
+                .fillMaxWidth()
                 .aspectRatio(9f / 16f),
         )
         Spacer(Modifier.height(20.dp))
@@ -237,7 +243,7 @@ private fun TravelVideoEventCard(
             lineHeight = 23.9.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.requiredWidth(356.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(20.dp))
         TiltedEventButton(
@@ -271,7 +277,10 @@ private fun UnansweredEventCard(
     mediaUrlPolicy: StaticMediaUrlPolicy,
     onHelp: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = item.story.imageUrl,
             videoUrl = item.story.videoUrl,
@@ -290,7 +299,7 @@ private fun UnansweredEventCard(
             lineHeight = 23.9.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.requiredWidth(356.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(20.dp))
         HelpButton(onClick = onHelp)
@@ -305,7 +314,10 @@ private fun AnsweredEventCard(
     mediaUrlPolicy: StaticMediaUrlPolicy,
 ) {
     val result = item.story.result ?: return
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = item.story.resultImageUrl ?: item.story.imageUrl,
             videoUrl = item.story.resultVideoUrl ?: item.story.videoUrl,
@@ -315,16 +327,22 @@ private fun AnsweredEventCard(
             description = "Итог события: ${item.story.title}",
         )
         Spacer(Modifier.height(20.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        Column(
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(13.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             EventResultText(result.text)
             EventResultText(result.consequence)
             EventResultText(result.reaction, muted = true)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.semantics {
-                    contentDescription = "Получено ${result.experienceGained} монет"
-                },
+                modifier = Modifier
+                    .align(Alignment.Start)
+                    .semantics {
+                        contentDescription = "Получено ${result.experienceGained} монет"
+                    },
             ) {
                 Image(
                     painter = painterResource(R.drawable.xp_coin),
@@ -352,7 +370,7 @@ private fun EventMedia(
     reducedMotion: Boolean,
     mediaUrlPolicy: StaticMediaUrlPolicy,
     description: String,
-    modifier: Modifier = Modifier.requiredSize(353.dp, 355.dp),
+    modifier: Modifier = Modifier.fillMaxWidth().height(355.dp),
 ) {
     LoopingStoryMedia(
         fallbackPoster = R.drawable.event_media_placeholder,
@@ -377,7 +395,7 @@ private fun EventResultText(text: String, muted: Boolean = false) {
         fontSize = 20.sp,
         fontWeight = FontWeight.Bold,
         lineHeight = 24.sp,
-        modifier = Modifier.requiredWidth(356.dp),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 

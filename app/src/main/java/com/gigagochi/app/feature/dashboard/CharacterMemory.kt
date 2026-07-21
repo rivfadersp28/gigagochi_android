@@ -31,6 +31,15 @@ private val RecallQuestion = Regex(
     RegexOption.IGNORE_CASE,
 )
 private val IdentityRecall = Regex("кто я|как меня зовут|ты знаешь кто я", RegexOption.IGNORE_CASE)
+private val UserNameQuestion = Regex(
+    "^(?:(?:а|ну|кстати|слушай|эй)\\s+)*(?:(?:напомни|скажи)(?:\\s+мне)?[,!:]?\\s+|" +
+        "мне\\s+интересно[,!:]?\\s+)?(?:как\\s+(?:мне\\s+)?тебя\\s+" +
+        "(?:зовут|звать|называть)|как\\s+к\\s+тебе\\s+обращаться|тво[её]\\s+имя)",
+    RegexOption.IGNORE_CASE,
+)
+private val RememberedUserName = Regex(
+    "(?iu)зовут\\s+([\\p{L}\\p{N}_-]{2,32})",
+)
 private val TokenRegex = Regex("[\\p{L}\\p{N}]{3,}")
 private val StopWords = setOf(
     "меня", "мне", "мой", "моя", "мои", "это", "что", "как", "зовут", "где", "когда",
@@ -195,6 +204,7 @@ fun buildDailyProactiveContext(
     if (history.any { it.role == "pet" && nowEpochMillis - it.createdAtEpochMillis < 30 * 60_000L }) {
         return null
     }
+    val knownUserName = memory.activeUserNameMemories(nowEpochMillis).take(1)
     val due = memory.memories.filter { item ->
         val dueAt = item.dueAtEpochMillis ?: return@filter false
         val dueDay = LocalDate.ofInstant(Instant.ofEpochMilli(dueAt), zoneId)
@@ -210,7 +220,9 @@ fun buildDailyProactiveContext(
         return MemoryContextDto(
             summary = memory.summary,
             userProfile = memory.userProfile,
-            relevantMemories = due.map(LocalUserMemory::toContextDto),
+            relevantMemories = (knownUserName + due)
+                .distinctBy(LocalUserMemory::id)
+                .map(LocalUserMemory::toContextDto),
             proactiveCandidate = ProactiveCandidateDto(due.map { it.id }, reason = reason),
         )
     }
@@ -228,12 +240,26 @@ fun buildDailyProactiveContext(
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
+        relevantMemories = knownUserName.map(LocalUserMemory::toContextDto),
         episodes = listOf(episode),
         proactiveCandidate = ProactiveCandidateDto(
             episodeIds = listOf(episode.id),
             reason = "продолжить недавний разговор: ${lastText.take(180)}",
         ),
     )
+}
+
+internal fun sanitizeProactiveReply(
+    reply: String,
+    memory: LocalPetMemoryState,
+    nowEpochMillis: Long = System.currentTimeMillis(),
+): String {
+    val normalized = reply.trim().withCapitalizedSentenceStarts()
+    val knownUserName = memory.activeUserNameMemories(nowEpochMillis).firstOrNull()
+        ?: return normalized
+    if (!normalized.asksForUserName()) return normalized
+    val name = RememberedUserName.find(knownUserName.text)?.groupValues?.getOrNull(1)
+    return name?.let { "$it, ты снова здесь" } ?: "Хорошо, что ты снова здесь"
 }
 
 fun existingMemoryBrief(memory: LocalPetMemoryState): String = buildString {
@@ -335,6 +361,15 @@ private fun LocalUserMemory.toContextDto() = MemoryContextItemDto(
     lastMentionedAt = lastMentionedAtEpochMillis?.let { Instant.ofEpochMilli(it).toString() },
     dueAt = dueAtEpochMillis?.let { Instant.ofEpochMilli(it).toString() },
 )
+
+private fun LocalPetMemoryState.activeUserNameMemories(nowEpochMillis: Long): List<LocalUserMemory> =
+    memories.filter {
+        it.normalizedKey == "user-name" &&
+            (it.expiresAtEpochMillis == null || it.expiresAtEpochMillis > nowEpochMillis)
+    }
+
+private fun String.asksForUserName(): Boolean = split(Regex("[.!?…]+"))
+    .any { UserNameQuestion.containsMatchIn(it.trim()) }
 
 private fun fact(
     kind: String,

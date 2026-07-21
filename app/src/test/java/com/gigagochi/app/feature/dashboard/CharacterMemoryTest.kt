@@ -74,6 +74,52 @@ class CharacterMemoryTest {
     }
 
     @Test
+    fun proactiveContextAlwaysIncludesRememberedUserName() {
+        val context = requireNotNull(buildDailyProactiveContext(
+            LocalPetMemoryState(
+                memories = listOf(
+                    memory(
+                        id = "name-memory",
+                        kind = "user_fact",
+                        text = "Пользователя зовут Серёбра.",
+                        key = "user-name",
+                        memoryClass = "core",
+                    ),
+                ),
+            ),
+            history(),
+            now,
+            zone,
+        ))
+
+        assertEquals(listOf("name-memory"), context.relevantMemories.map { it.id })
+    }
+
+    @Test
+    fun proactiveDoesNotAskForNameThatIsAlreadyRemembered() {
+        val memory = LocalPetMemoryState(
+            memories = listOf(
+                memory(
+                    id = "name-memory",
+                    kind = "user_fact",
+                    text = "Пользователя зовут Серёбра.",
+                    key = "user-name",
+                    memoryClass = "core",
+                ),
+            ),
+        )
+
+        assertEquals(
+            "Серёбра, ты снова здесь",
+            sanitizeProactiveReply("Привет! Как тебя зовут?", memory, now),
+        )
+        assertEquals(
+            "Я помню, как тебя зовут",
+            sanitizeProactiveReply("я помню, как тебя зовут", memory, now),
+        )
+    }
+
+    @Test
     fun proactiveRunsOnlyOncePerLocalDay() {
         val memory = memory("exam", "deadline", "У пользователя экзамен.", "deadline-exam", dueAt = now)
         val alreadySent = LocalPetMemoryState(

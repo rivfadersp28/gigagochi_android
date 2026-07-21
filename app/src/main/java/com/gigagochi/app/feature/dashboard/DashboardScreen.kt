@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -41,6 +42,7 @@ import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
@@ -144,7 +146,6 @@ import com.gigagochi.app.core.designsystem.LocalButtonPressFeedback
 import com.gigagochi.app.core.designsystem.OpenRundeFontFamily
 import com.gigagochi.app.core.designsystem.SbSansDisplayFontFamily
 import com.gigagochi.app.core.model.PetDashboardState
-import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.database.FirstSessionStage
 import com.gigagochi.app.core.database.FirstSessionStore
 import com.gigagochi.app.core.database.FirstSessionMutationResult
@@ -188,15 +189,18 @@ private val DemoPet = PetDashboardState(
     message = "Как тебя зовут?",
 )
 
-private val ClosedConversationTop = 755.dp
-private val OpenConversationTop = 463.dp
 private val ClosedDialogueTop = 663.dp
 private val OpenDialogueTop = 371.dp
 private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
+private val DashboardFeedRowHeight = 148.dp
 private val OnboardingActionMaxWidth = 346.dp
-private val OnboardingActionHorizontalPadding = 20.dp
+internal val DashboardExperienceTop = 92.dp
+internal val DashboardInputHorizontalPadding = 20.dp
+internal val DashboardInputMaxWidth = 362.dp
+internal val DashboardActionStartPadding = 12.dp
+internal val DashboardActionEndPadding = 16.dp
 private val LocalDashboardActionTop = staticCompositionLocalOf { PreferredDashboardActionTop }
 private const val ImeMotionStartInsetDp = 40f
 private const val ImeMotionTravelDp = 292f
@@ -234,7 +238,6 @@ fun DashboardRoute(
     durableOperations: DashboardDurableOperations? = null,
     requestKeyFactory: ((String) -> String)? = null,
     requestImeOverride: Boolean? = null,
-    travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
     unansweredEventCount: Int = 0,
@@ -505,7 +508,7 @@ fun DashboardRoute(
                             requestKey = request.requestKey,
                             pending = pending,
                             acceptedPet = state.pet.copy(
-                                experience = (state.pet.experience - OutfitExperienceCost)
+                                experience = (state.pet.experience - OutfitExperienceCharge)
                                     .coerceAtLeast(0),
                             ),
                             reply = outfitQueuedReply(pending.displayItem),
@@ -604,7 +607,6 @@ fun DashboardRoute(
         requestImeOverride = requestImeOverride,
         mediaProjection = projectDashboardMedia(
             state.pet,
-            travelPresentation,
             resolveUrl = { mediaUrlPolicy?.resolve(it) },
             fixtureOnly = mediaUrlPolicy == null,
         ),
@@ -629,7 +631,6 @@ fun DashboardScreen(
     onEvents: () -> Unit = {},
     unansweredEventCount: Int = 0,
     modifier: Modifier = Modifier,
-    travelPresentation: LocalTravelVideoAsset? = null,
     mediaUrlPolicy: StaticMediaUrlPolicy? = null,
     reducedMotionOverride: Boolean? = null,
 ) {
@@ -642,7 +643,6 @@ fun DashboardScreen(
                 DashboardVideo(
                     projection = projectDashboardMedia(
                         state,
-                        travelPresentation,
                         resolveUrl = { mediaUrlPolicy?.resolve(it) },
                         fixtureOnly = mediaUrlPolicy == null,
                     ),
@@ -664,22 +664,10 @@ fun DashboardScreen(
                     .offset(x = 67.dp, y = 219.dp)
                     .pointerInput(Unit) { detectTapGestures(onTap = { onPetTap() }) },
             )
-            Text(
-                text = "Уровень: ${state.stageLabel}",
-                color = Color.White,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = OpenRundeFontFamily,
-                letterSpacing = (-0.15).sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 80.dp)
-                    .graphicsLayer { scaleX = 1.044f },
-            )
             ExperiencePill(
                 experience = state.experience,
                 hazeState = hazeState,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
             )
 
             Column(
@@ -702,20 +690,20 @@ fun DashboardScreen(
                     .horizontalScroll(actionScrollState)
                     .padding(start = 28.dp, end = 29.dp),
             ) {
-                GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+                GlassAction("Поболтать", ActionKind.Chat, hazeState, onChat)
                 GlassAction(
                     "События",
                     ActionKind.Events,
-                    eventActionWidth(unansweredEventCount),
                     hazeState,
                     onEvents,
                     badgeCount = unansweredEventCount,
                 )
-                GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
-                GlassAction("В путешествие", ActionKind.Travel, 241.dp, hazeState, onTravel)
-                GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+                GlassAction("Покормить", ActionKind.Feed, hazeState, onFeed)
+                GlassAction("В путешествие", ActionKind.Travel, hazeState, onTravel)
+                GlassAction("Нарядить", ActionKind.Outfit, hazeState, onOutfit)
             }
         }
+        DashboardLevelAppBar(state.stageLabel)
     }
 }
 
@@ -749,8 +737,6 @@ private fun DashboardInlineScreen(
     val imeMotionProgress = (
         (imeBottomDp - ImeMotionStartInsetDp) / ImeMotionTravelDp
         ).coerceIn(0f, 1f)
-    val conversationTop = ClosedConversationTop -
-        (ClosedConversationTop - OpenConversationTop) * imeMotionProgress
     val composerDialogueLift = if (composerLineCount > 2) {
         ((composerLineCount - 2) * 24).dp
     } else {
@@ -816,10 +802,10 @@ private fun DashboardInlineScreen(
                             )
                     ) {
                         lastPetTapParticleAt = now
-                        petTapHeartBursts = (
-                            petTapHeartBursts.takeLast(1) +
-                                PetTapHeartBurst(nextPetTapReactionId, center)
-                            )
+                        petTapHeartBursts = appendPetTapHeartBurst(
+                            current = petTapHeartBursts,
+                            next = PetTapHeartBurst(nextPetTapReactionId, center),
+                        )
                     }
                     onPetTapFeedback()
                 }
@@ -863,7 +849,7 @@ private fun DashboardInlineScreen(
                 ExperiencePill(
                     experience = state.pet.experience,
                     hazeState = hazeState,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
                 )
             }
 
@@ -961,57 +947,6 @@ private fun DashboardInlineScreen(
                 }
             }
 
-            if (
-                state.mode == DashboardMode.Chat ||
-                state.mode == DashboardMode.Outfit ||
-                state.mode == DashboardMode.Travel
-            ) {
-                val isOutfit = state.mode == DashboardMode.Outfit
-                val isTravel = state.mode == DashboardMode.Travel
-                ConversationInputPanel(
-                    mode = state.mode,
-                    value = when {
-                        isOutfit -> state.outfitDraft
-                        isTravel -> state.travelDraft
-                        else -> state.chatDraft
-                    },
-                    error = when {
-                        isOutfit -> state.outfitError
-                        isTravel -> state.travelError
-                        else -> state.chatError
-                    },
-                    busy = when {
-                        isOutfit -> state.activeOutfit != null
-                        isTravel -> state.activeTravel != null
-                        else -> state.activeChat != null || isFirstSessionReplyPending(state)
-                    },
-                    hazeState = hazeState,
-                    requestIme = requestImeOverride
-                        ?: (debugState.requestsIme || debugState == DashboardDebugState.Idle),
-                    top = conversationTop,
-                    reducedMotion = reducedMotion,
-                    onValueChange = { value ->
-                        onEvent(
-                            when {
-                                isOutfit -> DashboardEvent.UpdateOutfitDraft(value)
-                                isTravel -> DashboardEvent.UpdateTravelDraft(value)
-                                else -> DashboardEvent.UpdateChatDraft(value)
-                            },
-                        )
-                    },
-                    onSubmit = {
-                        onEvent(
-                            when {
-                                isOutfit -> DashboardEvent.SubmitOutfit(nextRequestKey("outfit"))
-                                isTravel -> DashboardEvent.SubmitTravel(nextRequestKey("travel"))
-                                else -> DashboardEvent.SubmitChat(nextRequestKey("chat"))
-                            },
-                        )
-                    },
-                    onLineCountChange = { composerLineCount = it },
-                )
-            }
-
             if (state.mode == DashboardMode.Feed) {
                 FeedModeLayer(
                     state = state,
@@ -1042,6 +977,61 @@ private fun DashboardInlineScreen(
 
         }
 
+        if (
+            state.mode == DashboardMode.Chat ||
+            state.mode == DashboardMode.Outfit ||
+            state.mode == DashboardMode.Travel
+        ) {
+            val isOutfit = state.mode == DashboardMode.Outfit
+            val isTravel = state.mode == DashboardMode.Travel
+            ConversationInputPanel(
+                mode = state.mode,
+                value = when {
+                    isOutfit -> state.outfitDraft
+                    isTravel -> state.travelDraft
+                    else -> state.chatDraft
+                },
+                error = when {
+                    isOutfit -> state.outfitError
+                    isTravel -> state.travelError
+                    else -> state.chatError
+                },
+                busy = when {
+                    isOutfit -> state.activeOutfit != null
+                    isTravel -> state.activeTravel != null
+                    else -> state.activeChat != null || isFirstSessionReplyPending(state)
+                },
+                hazeState = hazeState,
+                requestIme = requestImeOverride
+                    ?: (debugState.requestsIme || debugState == DashboardDebugState.Idle),
+                reducedMotion = reducedMotion,
+                onValueChange = { value ->
+                    onEvent(
+                        when {
+                            isOutfit -> DashboardEvent.UpdateOutfitDraft(value)
+                            isTravel -> DashboardEvent.UpdateTravelDraft(value)
+                            else -> DashboardEvent.UpdateChatDraft(value)
+                        },
+                    )
+                },
+                onSubmit = {
+                    onEvent(
+                        when {
+                            isOutfit -> DashboardEvent.SubmitOutfit(nextRequestKey("outfit"))
+                            isTravel -> DashboardEvent.SubmitTravel(nextRequestKey("travel"))
+                            else -> DashboardEvent.SubmitChat(nextRequestKey("chat"))
+                        },
+                    )
+                },
+                onLineCountChange = { composerLineCount = it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                    .padding(horizontal = DashboardInputHorizontalPadding)
+                    .padding(bottom = 16.dp),
+            )
+        }
+
         contextualNavigationForDashboardMode(state.mode)?.let { action ->
             ContextualGlassNavigation(
                 action = action,
@@ -1057,27 +1047,16 @@ private fun DashboardInlineScreen(
                     .padding(start = 16.dp, top = 16.dp),
             )
         }
+        DashboardLevelAppBar(state.pet.stageLabel)
     }
 }
 
 @Composable
 private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: HazeState) {
-    Text(
-        text = "Уровень: ${pet.stageLabel}",
-        color = Color.White,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Bold,
-        fontFamily = OpenRundeFontFamily,
-        letterSpacing = (-0.15).sp,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = 80.dp)
-            .graphicsLayer { scaleX = 1.044f },
-    )
     ExperiencePill(
         experience = pet.experience,
         hazeState = hazeState,
-        modifier = Modifier.align(Alignment.TopCenter).padding(top = 112.dp),
+        modifier = Modifier.align(Alignment.TopCenter).padding(top = DashboardExperienceTop),
     )
     Column(
         verticalArrangement = Arrangement.spacedBy(21.dp),
@@ -1086,6 +1065,32 @@ private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: Ha
         StatusRing(pet.hunger, StatusKind.Hunger)
         StatusRing(pet.happiness, StatusKind.Mood)
         StatusRing(pet.energy, StatusKind.Energy)
+    }
+}
+
+@Composable
+private fun BoxScope.DashboardLevelAppBar(stageLabel: String) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(
+                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                ),
+            )
+            .padding(top = 16.dp)
+            .requiredSize(220.dp, 48.dp),
+    ) {
+        Text(
+            text = "Уровень: $stageLabel",
+            color = Color.White,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = OpenRundeFontFamily,
+            letterSpacing = (-0.15).sp,
+            modifier = Modifier.graphicsLayer { scaleX = 1.044f },
+        )
     }
 }
 
@@ -1142,33 +1147,27 @@ private fun BoxScope.DashboardActions(
         },
     ) {
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Chat) {
-            GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
+            GlassAction("Поболтать", ActionKind.Chat, hazeState, onChat)
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Feed) {
-            GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
+            GlassAction("Покормить", ActionKind.Feed, hazeState, onFeed)
         }
         if (firstSessionAction == null) {
             GlassAction(
                 "События",
                 ActionKind.Events,
-                eventActionWidth(unansweredEventCount),
                 hazeState,
                 onEvents,
                 badgeCount = unansweredEventCount,
             )
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
-            GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
+            GlassAction("Нарядить", ActionKind.Outfit, hazeState, onOutfit)
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Travel) {
             GlassAction(
                 if (firstSessionAction == FirstSessionMainAction.Travel) "Помочь летучей мыши" else "В путешествие",
                 ActionKind.Travel,
-                if (firstSessionAction == FirstSessionMainAction.Travel) {
-                    null
-                } else {
-                    241.dp
-                },
                 hazeState,
                 onTravel,
                 showGlyph = firstSessionAction != FirstSessionMainAction.Travel,
@@ -1191,11 +1190,11 @@ private fun ConversationInputPanel(
     busy: Boolean,
     hazeState: HazeState,
     requestIme: Boolean,
-    top: Dp,
     reducedMotion: Boolean,
     onValueChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onLineCountChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val buttonPressFeedback = LocalButtonPressFeedback.current
     val isOutfit = mode == DashboardMode.Outfit
@@ -1238,15 +1237,16 @@ private fun ConversationInputPanel(
     val collapsedPanelHeight = 62.dp
     val expandedPanelHeight = 134.dp
     Box(
-        modifier = Modifier
-            .requiredSize(362.dp, expandedPanelHeight)
-            .offset(x = 20.dp, y = top - (expandedPanelHeight - collapsedPanelHeight))
+        modifier = modifier
+            .fillMaxWidth()
+            .widthIn(max = DashboardInputMaxWidth)
+            .height(expandedPanelHeight)
             .graphicsLayer { alpha = entranceAlpha.value },
     ) {
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .requiredWidth(362.dp)
+                .fillMaxWidth()
                 .heightIn(min = collapsedPanelHeight, max = expandedPanelHeight),
         ) {
             Box(
@@ -1261,7 +1261,16 @@ private fun ConversationInputPanel(
                     .innerShadow(
                         DashboardGlassContract.ConversationShape,
                         DashboardGlassContract.ConversationSoftInset,
-                    ),
+                    )
+                    .drawBehind {
+                        drawRoundRect(
+                            color = DashboardGlassContract.ConversationOutline,
+                            cornerRadius = CornerRadius(
+                                56.dp.toPx().coerceAtMost(size.height / 2f),
+                            ),
+                            style = Stroke(1.dp.toPx()),
+                        )
+                    },
             )
             BasicTextField(
                 value = value,
@@ -1282,7 +1291,7 @@ private fun ConversationInputPanel(
                     onLineCountChange(result.lineCount.coerceIn(1, 4))
                 },
                 modifier = Modifier
-                    .requiredWidth(362.dp)
+                    .fillMaxWidth()
                     .padding(
                         start = 24.dp,
                         end = if (isOutfit) 126.dp else 82.dp,
@@ -1321,9 +1330,10 @@ private fun ConversationInputPanel(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
-                        .requiredWidth(314.dp)
+                        .fillMaxWidth()
                         .align(Alignment.TopStart)
-                        .offset(x = 24.dp, y = (-24).dp)
+                        .padding(horizontal = 24.dp)
+                        .offset(y = (-24).dp)
                         .semantics { contentDescription = error },
                 )
             }
@@ -1418,6 +1428,7 @@ private fun FeedModeLayer(
     nextRequestKey: (String) -> String,
     onEvent: (DashboardEvent) -> Unit,
 ) {
+    val feedRowTop = dashboardFeedRowTop(LocalDashboardActionTop.current)
     val pulseProgress = remember(state.feedPulseId) {
         Animatable(if (state.feedPulseId > 0 && freezeMotion) .42f else 0f)
     }
@@ -1452,7 +1463,7 @@ private fun FeedModeLayer(
             fontFamily = OpenRundeFontFamily,
             modifier = Modifier
                 .requiredWidth(346.dp)
-                .offset(x = 28.dp, y = 666.dp)
+                .offset(x = 28.dp, y = feedRowTop - 42.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(Color(0xFF2B1116))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -1462,8 +1473,8 @@ private fun FeedModeLayer(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .requiredSize(374.dp, 148.dp)
-            .offset(x = 14.dp, y = 708.dp)
+            .requiredSize(374.dp, DashboardFeedRowHeight)
+            .offset(x = 14.dp, y = feedRowTop)
             .semantics { contentDescription = "Еда" },
     ) {
         FeedFoodToken(
@@ -1647,13 +1658,12 @@ private fun BoxScope.CharacterThinkingIndicator(freezeFrame: Boolean, top: Dp) {
 @Composable
 private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        val density = LocalDensity.current
         val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
-        val safeBottom = with(density) { WindowInsets.safeDrawing.getBottom(this).toDp() }
-        val actionTop = dashboardActionTop(maxHeight, safeBottom, scale)
+        val actionTop = dashboardActionTop(maxHeight, scale)
         CompositionLocalProvider(LocalDashboardActionTop provides actionTop) {
             Box(
                 modifier = Modifier
+                    .wrapContentSize(Alignment.TopCenter, unbounded = true)
                     .requiredSize(402.dp, 874.dp)
                     .graphicsLayer {
                         scaleX = scale
@@ -1667,14 +1677,17 @@ private fun BoxWithReferenceFrame(content: @Composable BoxScope.() -> Unit) {
     }
 }
 
-internal fun dashboardActionTop(viewportHeight: Dp, safeBottom: Dp, scale: Float): Dp {
+internal fun dashboardActionTop(viewportHeight: Dp, scale: Float): Dp {
     require(scale > 0f)
-    val visibleReferenceBottom = (viewportHeight - safeBottom) / scale
+    val visibleReferenceBottom = viewportHeight / scale
     val preferredBottom = PreferredDashboardActionTop + DashboardActionHeight
     val overlap = (preferredBottom + DashboardActionBottomMargin - visibleReferenceBottom)
         .coerceAtLeast(0.dp)
     return PreferredDashboardActionTop - overlap
 }
+
+internal fun dashboardFeedRowTop(actionTop: Dp): Dp =
+    actionTop + DashboardActionHeight - DashboardFeedRowHeight
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -2101,10 +2114,10 @@ private fun BoxScope.CharacterDialogueText(
         }
     }
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.BottomCenter,
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .offset(y = top - CharacterMessageOverflowExpansion / 2)
+            .offset(y = characterMessageContainerTop(top))
             .requiredSize(356.dp, CharacterMessageMaxHeight)
             .graphicsLayer {
                 alpha = entranceFraction
@@ -2130,7 +2143,9 @@ private fun BoxScope.CharacterDialogueText(
 
 private const val CharacterMessageEnterDurationMillis = 300f
 private val CharacterMessageMaxHeight = 132.dp
-private val CharacterMessageOverflowExpansion = 44.dp
+internal val CharacterMessageFixedBottomOffset = 55.dp
+internal fun characterMessageContainerTop(anchor: Dp): Dp =
+    anchor + CharacterMessageFixedBottomOffset - CharacterMessageMaxHeight
 private const val CharacterMessageUnitDurationMillis = 700f
 private const val CharacterMessageUnitStaggerMillis = 24f
 private const val CharacterMessageMaxAnimatedUnits = 80
@@ -2139,18 +2154,14 @@ private val CharacterMessageUnitEasing = CubicBezierEasing(.2f, .8f, .2f, 1f)
 
 private enum class ActionKind { Chat, Events, Feed, Travel, Outfit }
 
-internal fun eventActionWidth(unansweredEventCount: Int): Dp =
-    if (unansweredEventCount > 0) 216.dp else 184.dp
-
 @Composable
 private fun GlassAction(
     label: String,
     kind: ActionKind,
-    width: Dp?,
     hazeState: HazeState,
     onClick: () -> Unit,
     badgeCount: Int = 0,
-    showGlyph: Boolean = kind != ActionKind.Outfit,
+    showGlyph: Boolean = true,
 ) {
     val scale = remember { Animatable(1f) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -2169,13 +2180,7 @@ private fun GlassAction(
     }
     Box(
         modifier = Modifier
-            .then(
-                if (width == null) {
-                    Modifier.widthIn(max = OnboardingActionMaxWidth)
-                } else {
-                    Modifier.requiredWidth(width)
-                },
-            )
+            .widthIn(max = OnboardingActionMaxWidth)
             .height(58.203.dp)
             .scale(scale.value)
             .clip(DashboardGlassContract.ActionShape)
@@ -2196,7 +2201,12 @@ private fun GlassAction(
         Box(
             Modifier
                 .matchParentSize()
-                .hazeEffect(state = hazeState, style = DashboardGlassContract.ActionStyle),
+                .hazeEffect(state = hazeState, style = DashboardGlassContract.ActionBlurStyle),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .background(DashboardGlassContract.ActionTint),
         )
         Box(
             Modifier
@@ -2214,21 +2224,13 @@ private fun GlassAction(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center,
-            modifier = if (width == null) {
-                Modifier
-                    .height(DashboardActionHeight)
-                    .widthIn(max = OnboardingActionMaxWidth)
-                    .padding(
-                        start = OnboardingActionHorizontalPadding,
-                        end = OnboardingActionHorizontalPadding,
-                        top = 14.dp,
-                        bottom = 16.dp,
-                    )
-            } else {
-                Modifier
-                    .matchParentSize()
-                    .padding(top = 14.dp, bottom = 16.dp)
-            },
+            modifier = Modifier
+                .height(DashboardActionHeight)
+                .widthIn(max = OnboardingActionMaxWidth)
+                .padding(
+                    start = DashboardActionStartPadding,
+                    end = DashboardActionEndPadding,
+                ),
         ) {
             if (showGlyph) {
                 ActionGlyph(kind)
@@ -2276,15 +2278,19 @@ private fun EventBadge(count: Int) {
 
 @Composable
 private fun ActionGlyph(kind: ActionKind) {
-    if (kind == ActionKind.Outfit) return
     val drawable = when (kind) {
         ActionKind.Chat -> R.drawable.action_chat
         ActionKind.Events -> R.drawable.action_events
         ActionKind.Feed -> R.drawable.action_feed
         ActionKind.Travel -> R.drawable.action_travel
-        ActionKind.Outfit -> error("handled above")
+        ActionKind.Outfit -> R.drawable.action_outfit
     }
-    Image(painterResource(drawable), contentDescription = null, modifier = Modifier.size(28.dp))
+    val modifier = if (kind == ActionKind.Outfit) {
+        Modifier.requiredWidth(36.dp).requiredHeight(30.dp)
+    } else {
+        Modifier.size(28.dp)
+    }
+    Image(painterResource(drawable), contentDescription = null, modifier = modifier)
 }
 
 @Composable

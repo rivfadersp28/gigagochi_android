@@ -16,12 +16,14 @@ internal object DashboardGlassContract {
     val ActionShape = GlassActionSurfaceContract.Shape
     val ActionTint = GlassActionSurfaceContract.Tint
     val ActionStyle = GlassActionSurfaceContract.Style
+    val ActionBlurStyle = GlassActionSurfaceContract.BlurStyle
     val ActionHighlightInset = GlassActionSurfaceContract.HighlightInset
     val ActionShadeInset = GlassActionSurfaceContract.ShadeInset
 
     val ConversationShape = RoundedCornerShape(56.dp)
     val FoodShape = RoundedCornerShape(28.dp)
     val InlineTint = Color.White.copy(alpha = .15f)
+    val ConversationOutline = Color.White.copy(alpha = .16f)
     val InlineStyle = HazeStyle(
         backgroundColor = Color.Transparent,
         tints = listOf(HazeTint(InlineTint)),

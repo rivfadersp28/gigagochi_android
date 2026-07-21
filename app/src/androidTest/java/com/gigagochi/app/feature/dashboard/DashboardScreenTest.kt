@@ -4,6 +4,8 @@ import android.graphics.Paint
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
@@ -46,6 +48,29 @@ import kotlin.math.roundToInt
 class DashboardScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun shortSafeViewportKeepsReferenceChromeAnchoredToTop() {
+        val density = InstrumentationRegistry.getInstrumentation().targetContext
+            .resources.displayMetrics.density
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = testPet(hunger = 100).copy(experience = 50),
+                    requestImeOverride = false,
+                    reducedMotionOverride = true,
+                    modifier = Modifier.requiredSize(393.dp, 780.dp),
+                )
+            }
+        }
+
+        val rootTop = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.top
+        val experienceTop = composeRule.onNodeWithContentDescription("Experience: 50")
+            .assertIsDisplayed()
+            .fetchSemanticsNode().boundsInRoot.top
+
+        assertTrue(experienceTop - rootTop >= 84f * density)
+    }
 
     @Test
     fun onboardingRestoresFollowupPromptAndExactlyOneMainAction() {
@@ -466,13 +491,17 @@ class DashboardScreenTest {
         assertEquals(23, DashboardGlassContract.MinimumSupportedSdk)
         assertEquals(31, DashboardGlassContract.NativeBlurMinimumSdk)
         assertEquals(12.dp, DashboardGlassContract.ActionStyle.blurRadius)
+        assertEquals(12.dp, DashboardGlassContract.ActionBlurStyle.blurRadius)
         assertEquals(8.dp, DashboardGlassContract.ExperienceStyle.blurRadius)
         assertEquals(0f, DashboardGlassContract.ActionStyle.noiseFactor, 0f)
+        assertEquals(0f, DashboardGlassContract.ActionBlurStyle.noiseFactor, 0f)
         assertEquals(0f, DashboardGlassContract.ExperienceStyle.noiseFactor, 0f)
         assertEquals(Color.White.copy(alpha = .15f), DashboardGlassContract.ActionTint)
         assertEquals(Color(0x29845C05), DashboardGlassContract.ExperienceTint)
         assertEquals(DashboardGlassContract.ActionTint, DashboardGlassContract.ActionStyle.tints.single().color)
         assertEquals(DashboardGlassContract.ActionTint, DashboardGlassContract.ActionStyle.fallbackTint.color)
+        assertTrue(DashboardGlassContract.ActionBlurStyle.tints.isEmpty())
+        assertEquals(Color.Transparent, DashboardGlassContract.ActionBlurStyle.fallbackTint.color)
         assertEquals(DashboardGlassContract.ExperienceTint, DashboardGlassContract.ExperienceStyle.tints.single().color)
         assertEquals(DashboardGlassContract.ExperienceTint, DashboardGlassContract.ExperienceStyle.fallbackTint.color)
         assertEquals(3.dp, DashboardGlassContract.ActionHighlightInset.radius)

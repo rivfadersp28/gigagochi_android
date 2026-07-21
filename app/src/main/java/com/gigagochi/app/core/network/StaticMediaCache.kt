@@ -51,6 +51,14 @@ object StaticMediaCache {
         decodedImages.put(url, bitmap)
     }
 
+    @Synchronized
+    fun evict(urls: Set<String>) {
+        urls.forEach { url ->
+            decodedImages.remove(url)
+            runCatching { diskCache?.removeResource(url) }
+        }
+    }
+
     fun readBytes(
         context: Context,
         url: String,

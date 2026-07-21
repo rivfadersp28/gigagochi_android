@@ -19,6 +19,13 @@ internal object GlassActionSurfaceContract {
         noiseFactor = 0f,
         fallbackTint = HazeTint(Tint),
     )
+    val BlurStyle = HazeStyle(
+        backgroundColor = Color.Transparent,
+        tints = emptyList(),
+        blurRadius = 12.dp,
+        noiseFactor = 0f,
+        fallbackTint = HazeTint(Color.Transparent),
+    )
     val HighlightInset = Shadow(
         radius = 3.dp,
         color = Color.White.copy(alpha = .2f),

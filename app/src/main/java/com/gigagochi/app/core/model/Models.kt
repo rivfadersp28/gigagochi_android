@@ -36,6 +36,22 @@ data class PetGeneratedMedia(
     val moodImages: List<PetMoodImage> = emptyList(),
 )
 
+fun PetGeneratedMedia.hasCompleteDashboardVideos(): Boolean =
+    !videoUrl.isNullOrBlank() &&
+        !sadVideoUrl.isNullOrBlank() &&
+        !happyVideoUrl.isNullOrBlank()
+
+fun PetGeneratedMedia.urls(): Set<String> = buildSet {
+    listOfNotNull(
+        videoUrl,
+        sadVideoUrl,
+        happyVideoUrl,
+        blinkImageUrl,
+        spriteSheetUrl,
+    ).filterTo(this) { it.isNotBlank() }
+    moodImages.mapTo(this) { it.url }
+}
+
 data class ScheduledStoryResult(
     val text: String,
     val reaction: String,

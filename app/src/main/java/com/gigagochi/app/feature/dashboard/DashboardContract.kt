@@ -15,6 +15,7 @@ const val DashboardReplyAutoAdvanceMillis = 3_000L
 const val OnboardingBlockAutoAdvanceMillis = 5_500L
 const val PetTapThanksVisibleMillis = 5_000L
 const val OutfitExperienceCost = 200
+const val OutfitExperienceCharge = 0
 const val ChatFailureMessage = "Не получилось отправить сообщение. Попробуйте ещё раз."
 const val FeedFailureMessage = "Питомец поел, но не смог ответить. Попробуйте ещё раз."
 const val OutfitInsufficientMessage = "Не хватает опыта для нового наряда."
@@ -30,9 +31,9 @@ const val PetTapsPerHappinessReward = 5
 const val PetTapHappinessReward = 15
 val PetTapThanksReplies = listOf("Приятно!", "Щекотно!", "Мне нравится!")
 const val DeterministicOutfitReply =
-    "Футболка Metallica? Интересно. Я получу заказ примерно через 10 минут."
+    "Футболка Metallica? Интересно. Я получу заказ примерно через 10 минут"
 const val DeterministicTravelReply =
-    "На ночной рынок духов? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь."
+    "На ночной рынок духов? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь"
 
 enum class DashboardMode { Idle, Chat, Feed, Outfit, Travel }
 
@@ -83,7 +84,7 @@ data class PendingOutfitGeneration(
     val requestKey: String,
     val prompt: String,
     val displayItem: String,
-    val experienceCost: Int = OutfitExperienceCost,
+    val experienceCost: Int = OutfitExperienceCharge,
     val localJobId: String,
     val backendJobId: String? = null,
     val createdAtEpochMillis: Long,
@@ -112,11 +113,27 @@ data class DashboardReply(
     val autoAdvanceDelayMillis: Long = DashboardReplyAutoAdvanceMillis,
 ) {
     val portions: List<String>
-        get() = explicitPortions ?: splitDashboardReplyPortions(text)
+        get() = explicitPortions?.map(String::withCapitalizedSentenceStarts)
+            ?: splitDashboardReplyPortions(text.withCapitalizedSentenceStarts())
     val visibleText: String
         get() = portions.getOrNull(portionIndex) ?: text
     val hasNextPortion: Boolean
         get() = portionIndex < portions.lastIndex
+}
+
+internal fun String.withCapitalizedSentenceStarts(): String {
+    var capitalizeNextLetter = true
+    return buildString(length) {
+        this@withCapitalizedSentenceStarts.forEach { character ->
+            if (capitalizeNextLetter && character.isLetter()) {
+                append(character.titlecase())
+                capitalizeNextLetter = false
+            } else {
+                append(character)
+            }
+            if (character in ".!?…") capitalizeNextLetter = true
+        }
+    }
 }
 
 data class DashboardUiState(
@@ -433,7 +450,6 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
             state.mode != DashboardMode.Outfit || prompt.isEmpty() ||
                 state.activeOutfit != null || state.pendingOutfit != null -> state
             event.requestKey in state.chargedOutfitRequestKeys -> state
-            state.pet.experience < OutfitExperienceCost -> state.copy(outfitError = OutfitInsufficientMessage)
             else -> state.copy(
                 outfitError = null,
                 activeOutfit = PendingOutfitRequest(event.requestKey, prompt),

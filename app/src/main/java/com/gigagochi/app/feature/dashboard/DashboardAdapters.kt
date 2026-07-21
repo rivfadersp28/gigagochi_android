@@ -134,11 +134,14 @@ fun canonicalOutfitDisplayItem(prompt: String): String {
 
 fun outfitQueuedReply(displayItem: String): String {
     val normalized = displayItem.trim()
-    val titled = normalized.replaceFirstChar { it.titlecase() }.ifBlank { "Наряд" }
-    return "$titled? Интересно. Я получу заказ примерно через 10 минут."
+    val titled = normalized.withCapitalizedSentenceStarts().ifBlank { "Наряд" }
+    return "$titled? Интересно. Я получу заказ примерно через 10 минут"
 }
 
 fun travelQueuedReply(destination: String): String {
-    val normalized = destination.trim().trimEnd('.', '!', '?', '…')
-    return "$normalized? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь."
+    val normalized = destination
+        .trim()
+        .trimEnd('.', '!', '?', '…')
+        .withCapitalizedSentenceStarts()
+    return "$normalized? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь"
 }

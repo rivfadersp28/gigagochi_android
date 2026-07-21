@@ -1,6 +1,7 @@
 package com.gigagochi.app.feature.dashboard
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -22,6 +24,8 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 internal const val PetTapParticleIntervalMillis = 80L
+internal const val MaxActivePetTapHeartBursts = 2
+internal const val PetTapParticleFadeMillis = 120
 internal const val PetTapParticleCount = 9
 internal const val PetTapBulgeDurationMillis = 250
 internal const val PetTapBulgeAttackMillis = 120
@@ -71,7 +75,24 @@ internal data class PetTapReaction(
 internal data class PetTapHeartBurst(
     val id: Int,
     val center: Offset,
+    val isExiting: Boolean = false,
 )
+
+internal fun appendPetTapHeartBurst(
+    current: List<PetTapHeartBurst>,
+    next: PetTapHeartBurst,
+): List<PetTapHeartBurst> {
+    val activeBursts = current.filterNot(PetTapHeartBurst::isExiting)
+    if (activeBursts.size < MaxActivePetTapHeartBursts) return current + next
+
+    val oldestActiveId = activeBursts.first().id
+    val retainedBursts = current
+        .filterNot(PetTapHeartBurst::isExiting)
+        .map { burst ->
+            if (burst.id == oldestActiveId) burst.copy(isExiting = true) else burst
+        }
+    return retainedBursts + next
+}
 
 internal object PetTapThanksSession {
     private val claimedPetIds = mutableSetOf<String>()
@@ -120,12 +141,25 @@ internal fun PetTapHeartBurst(
     modifier: Modifier = Modifier,
 ) {
     val progress = remember(burst.id) { Animatable(0f) }
+    val exitAlpha = remember(burst.id) { Animatable(1f) }
+    val latestOnFinished by rememberUpdatedState(onFinished)
     LaunchedEffect(burst.id) {
         progress.animateTo(
             1f,
             tween(PetTapParticleLifetimeMillis, easing = LinearEasing),
         )
-        onFinished(burst.id)
+        latestOnFinished(burst.id)
+    }
+    LaunchedEffect(burst.id, burst.isExiting) {
+        if (!burst.isExiting) return@LaunchedEffect
+        exitAlpha.animateTo(
+            0f,
+            tween(
+                durationMillis = PetTapParticleFadeMillis,
+                easing = CubicBezierEasing(.16f, 1f, .3f, 1f),
+            ),
+        )
+        latestOnFinished(burst.id)
     }
     val colors = remember {
         listOf(
@@ -164,7 +198,7 @@ internal fun PetTapHeartBurst(
                 y = y,
             )
             val color = colors[particle.colorIndex].copy(
-                alpha = colors[particle.colorIndex].alpha * opacity,
+                alpha = colors[particle.colorIndex].alpha * opacity * exitAlpha.value,
             )
             rotate(particle.rotation, center) {
                 drawHeart(

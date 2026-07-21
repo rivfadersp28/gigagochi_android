@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import com.gigagochi.app.core.model.CharacterBibleMaxUtf8Bytes
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
+import com.gigagochi.app.core.model.hasCompleteDashboardVideos
 import com.gigagochi.app.core.model.PetMoodImage
 import com.gigagochi.app.core.model.ScheduledStory
 import com.gigagochi.app.core.model.ScheduledStoryResult
@@ -1231,9 +1232,16 @@ class PetLocalRepository(
                 ?: return@withTransaction OutfitOutcomeApplicationResult.Conflict
             val outcomeImages = dao.getOutfitMoodImages(ownerId, requestKey)
                 .map(OutfitMoodImageEntity::toModel)
+            val outcomeMedia = outcome.toModel(outcomeImages).media
+            if (!outcomeMedia.hasCompleteDashboardVideos()) {
+                dao.deleteOutfitMediaOutcome(ownerId, requestKey)
+                dao.deleteOutfitMoodImages(ownerId, requestKey)
+                dao.markIncompleteOutfitFailed(ownerId, requestKey)
+                return@withTransaction OutfitOutcomeApplicationResult.NotReady
+            }
             val appliedPet = current.pet.copy(
                 assetSetId = outcome.assetSetId,
-                generatedMedia = outcome.toModel(outcomeImages).media,
+                generatedMedia = outcomeMedia,
             )
             LocalPersistenceValidation.petSnapshot(
                 OwnedPetSnapshot(ownerId, appliedPet, outcome.completedAtEpochMillis),
@@ -1799,6 +1807,9 @@ object LocalPersistenceValidation {
         backendJobId(value.backendJobId)
         bounded("displayItem", value.displayItem, PromptMax)
         bounded("assetSetId", value.assetSetId, AssetSetIdMax)
+        require(value.media.hasCompleteDashboardVideos()) {
+            "outfit outcome requires idle, sad, and happy videos"
+        }
         value.media.moodImages.forEach { safeUrl("media url", it.url) }
         listOfNotNull(
             value.media.videoUrl,

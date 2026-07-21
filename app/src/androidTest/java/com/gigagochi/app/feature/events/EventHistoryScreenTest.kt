@@ -12,6 +12,7 @@ import com.gigagochi.app.core.database.LocalScheduledStory
 import com.gigagochi.app.core.database.LocalTravelVideoAsset
 import com.gigagochi.app.core.designsystem.GigagochiTheme
 import com.gigagochi.app.core.model.ScheduledStory
+import com.gigagochi.app.core.model.ScheduledStoryResult
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
 import kotlin.math.abs
 import org.junit.Assert.assertEquals
@@ -25,6 +26,7 @@ class EventHistoryScreenTest {
 
     @Test
     fun nativeBackIsVisibleAndHelpButtonMatchesPaperLeftLane() {
+        assertEquals(86.dp, EventCardSpacing)
         var backCalls = 0
         composeRule.setContent {
             GigagochiTheme {
@@ -54,17 +56,70 @@ class EventHistoryScreenTest {
             .top
         assertTrue("title top=$titleTop back bottom=$backBottom", titleTop - backBottom >= 18f)
 
-        val mediaLeft = composeRule.onNodeWithContentDescription("Видео события: Шорох у старого дерева")
+        val mediaBounds = composeRule.onNodeWithContentDescription("Видео события: Шорох у старого дерева")
             .assertIsDisplayed()
             .fetchSemanticsNode()
             .boundsInRoot
-            .left
+        val mediaLeft = mediaBounds.left
         val helpLeft = composeRule.onNodeWithContentDescription("Помочь")
             .assertIsDisplayed()
             .fetchSemanticsNode()
             .boundsInRoot
             .left
-        assertTrue("help left=$helpLeft media left=$mediaLeft", abs(helpLeft - mediaLeft) <= 3f)
+        val storyTextLeft = composeRule
+            .onNodeWithText("Тото услышал шорох и заметил, что кому-то нужна помощь.")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .left
+        val expectedLeft = with(composeRule.density) { EventScreenHorizontalPadding.toPx() }
+        val screenRight = composeRule.onNodeWithContentDescription("История событий")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .right
+        assertTrue("media left=$mediaLeft expected=$expectedLeft", abs(mediaLeft - expectedLeft) <= 1f)
+        assertTrue(
+            "media right=${mediaBounds.right} expected=${screenRight - expectedLeft}",
+            abs(mediaBounds.right - (screenRight - expectedLeft)) <= 1f,
+        )
+        assertTrue(
+            "help left=$helpLeft media left=$mediaLeft",
+            abs(helpLeft - mediaLeft) <= 3f * composeRule.density.density,
+        )
+        assertTrue(
+            "story text left=$storyTextLeft media left=$mediaLeft",
+            abs(storyTextLeft - mediaLeft) <= 1f,
+        )
+    }
+
+    @Test
+    fun experienceRewardUsesTheSameLeftLaneAsResultText() {
+        composeRule.setContent {
+            GigagochiTheme {
+                EventHistoryScreen(
+                    stories = listOf(answeredStory()),
+                    mediaUrlPolicy = StaticMediaUrlPolicy("https://gigagochi.test", true),
+                    onHelp = {},
+                    onBack = {},
+                )
+            }
+        }
+
+        val resultTextLeft = composeRule.onNodeWithText("Всё получилось")
+            .performScrollTo()
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .left
+        val rewardLeft = composeRule.onNodeWithContentDescription("Получено 125 монет")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .left
+
+        assertTrue(
+            "reward left=$rewardLeft result text left=$resultTextLeft",
+            abs(rewardLeft - resultTextLeft) <= 1f,
+        )
     }
 
     @Test
@@ -144,6 +199,19 @@ class EventHistoryScreenTest {
             imageUrl = null,
             videoUrl = null,
         ),
+    )
+
+    private fun answeredStory() = activeStory().copy(
+        story = activeStory().story.copy(
+            selectedChoice = "Подойти",
+            result = ScheduledStoryResult(
+                text = "Герой помог",
+                reaction = "Спасибо",
+                consequence = "Всё получилось",
+                experienceGained = 125,
+            ),
+        ),
+        choiceRequestKey = "123e4567-e89b-42d3-a456-426614174000",
     )
 
     private fun travelVideo(

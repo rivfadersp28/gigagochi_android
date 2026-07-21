@@ -17,16 +17,29 @@ class DashboardImageBoundsTest {
     }
 
     @Test
-    fun dashboardActionsStayAbovePhysicalDeviceSafeBottomAfterCoverScale() {
-        assertEquals(762.dp, dashboardActionTop(874.dp, 0.dp, 1f))
+    fun dashboardActionsUseAlreadyInsetViewportAfterCoverScale() {
+        assertEquals(92.dp, DashboardExperienceTop)
+        assertEquals(20.dp, DashboardInputHorizontalPadding)
+        assertEquals(362.dp, DashboardInputMaxWidth)
+        assertEquals(762.dp, dashboardActionTop(874.dp, 1f))
+        assertEquals(672.203.dp, dashboardFeedRowTop(762.dp))
 
         val scale = 411f / 402f
         val viewportHeight = 823.dp
-        val safeBottom = 24.dp
-        val actionTop = dashboardActionTop(viewportHeight, safeBottom, scale)
-        val visibleReferenceBottom = (viewportHeight - safeBottom) / scale
+        val actionTop = dashboardActionTop(viewportHeight, scale)
+        val visibleReferenceBottom = viewportHeight / scale
 
         assertTrue(actionTop < 762.dp)
         assertTrue(actionTop + 58.203.dp + 16.dp <= visibleReferenceBottom)
+        assertTrue(dashboardFeedRowTop(actionTop) + 148.dp + 16.dp <= visibleReferenceBottom)
+    }
+
+    @Test
+    fun characterMessageUsesAFixedBottomBoundary() {
+        val anchor = 663.dp
+        val containerTop = characterMessageContainerTop(anchor)
+
+        assertEquals(586.dp, containerTop)
+        assertEquals(anchor + CharacterMessageFixedBottomOffset, containerTop + 132.dp)
     }
 }
