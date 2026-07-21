@@ -31,6 +31,9 @@ internal data class PetSnapshotEntity(
     val blinkImageUrl: String? = null,
     val spriteSheetUrl: String? = null,
     val characterBibleJson: String? = null,
+    val hungerTickAtEpochMillis: Long,
+    val happinessTickAtEpochMillis: Long,
+    val energyTickAtEpochMillis: Long,
     val updatedAtEpochMillis: Long,
 )
 

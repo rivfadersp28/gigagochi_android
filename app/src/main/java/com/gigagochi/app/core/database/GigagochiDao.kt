@@ -121,6 +121,9 @@ internal interface GigagochiDao {
             hunger = :hunger,
             happiness = :happiness,
             energy = :energy,
+            hungerTickAtEpochMillis = CASE WHEN hunger != :hunger THEN :updatedAtEpochMillis ELSE hungerTickAtEpochMillis END,
+            happinessTickAtEpochMillis = CASE WHEN happiness != :happiness THEN :updatedAtEpochMillis ELSE happinessTickAtEpochMillis END,
+            energyTickAtEpochMillis = CASE WHEN energy != :energy THEN :updatedAtEpochMillis ELSE energyTickAtEpochMillis END,
             updatedAtEpochMillis = :updatedAtEpochMillis
         WHERE ownerId = :ownerId AND petId = :petId
         """,
@@ -133,6 +136,31 @@ internal interface GigagochiDao {
         happiness: Int,
         energy: Int,
         updatedAtEpochMillis: Long,
+    ): Int
+
+    @Query(
+        """
+        UPDATE pet_snapshots
+        SET hunger = :hunger,
+            happiness = :happiness,
+            energy = :energy,
+            mood = :mood,
+            hungerTickAtEpochMillis = :hungerTickAtEpochMillis,
+            happinessTickAtEpochMillis = :happinessTickAtEpochMillis,
+            energyTickAtEpochMillis = :energyTickAtEpochMillis
+        WHERE ownerId = :ownerId AND petId = :petId
+        """,
+    )
+    suspend fun updatePetDecay(
+        ownerId: String,
+        petId: String,
+        hunger: Int,
+        happiness: Int,
+        energy: Int,
+        mood: String,
+        hungerTickAtEpochMillis: Long,
+        happinessTickAtEpochMillis: Long,
+        energyTickAtEpochMillis: Long,
     ): Int
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)

@@ -133,6 +133,7 @@ interface DashboardOutcomeStore {
 
 class PetLocalRepository(
     private val database: GigagochiDatabase,
+    private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) : OwnerRecoveryStore, PendingBackendStateStore, FeatureMediaOutcomeStore, DashboardOutcomeStore,
     ScheduledStoryStore {
     private val dao: GigagochiDao = database.gigagochiDao()
@@ -650,7 +651,7 @@ class PetLocalRepository(
                         snapshot.ownerId,
                         merged,
                         maxOf(existingEntity.updatedAtEpochMillis, snapshot.updatedAtEpochMillis),
-                    ).toEntity(),
+                    ).toEntity(existingEntity),
                 )
                 if (snapshot.pet.generatedMedia.moodImages.isNotEmpty()) {
                     dao.deleteMoodImages(snapshot.ownerId, snapshot.pet.petId)
@@ -856,7 +857,7 @@ class PetLocalRepository(
     override suspend fun replacePetSnapshot(snapshot: OwnedPetSnapshot) {
         LocalPersistenceValidation.petSnapshot(snapshot)
         database.withTransaction {
-            dao.upsertPet(snapshot.toEntity())
+            dao.upsertPet(snapshot.toEntity(dao.getPet(snapshot.ownerId, snapshot.pet.petId)))
             dao.deleteMoodImages(snapshot.ownerId, snapshot.pet.petId)
             val images = snapshot.pet.generatedMedia.moodImages.map {
                 PetMoodImageEntity(snapshot.ownerId, snapshot.pet.petId, it.stage, it.mood, it.url)
@@ -872,7 +873,7 @@ class PetLocalRepository(
             if (current != null && current.assetSetId != snapshot.pet.assetSetId) {
                 return@withTransaction false
             }
-            dao.upsertPet(snapshot.toEntity())
+            dao.upsertPet(snapshot.toEntity(current))
             dao.deleteMoodImages(snapshot.ownerId, snapshot.pet.petId)
             val images = snapshot.pet.generatedMedia.moodImages.map {
                 PetMoodImageEntity(snapshot.ownerId, snapshot.pet.petId, it.stage, it.mood, it.url)
@@ -887,6 +888,17 @@ class PetLocalRepository(
         LocalPersistenceValidation.petId(petId)
         return dao.getPet(ownerId, petId)?.let {
             it.toModel(dao.getMoodImages(ownerId, petId))
+        }
+    }
+
+    suspend fun decayPetSnapshot(ownerId: String, petId: String): OwnedPetSnapshot? {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return database.withTransaction {
+            dao.getPet(ownerId, petId)?.let { entity ->
+                decayAndPersist(entity, nowEpochMillis())
+                    .toModel(dao.getMoodImages(ownerId, petId))
+            }
         }
     }
 
@@ -1647,9 +1659,10 @@ class PetLocalRepository(
     override suspend fun loadOwnerRecovery(ownerId: String): OwnerRecoveryData {
         LocalPersistenceValidation.ownerId(ownerId)
         return database.withTransaction {
+            val now = nowEpochMillis()
             OwnerRecoveryData(
                 petSnapshots = dao.getPets(ownerId).map { entity ->
-                    entity.toModel(dao.getMoodImages(ownerId, entity.petId))
+                    decayAndPersist(entity, now).toModel(dao.getMoodImages(ownerId, entity.petId))
                 },
                 pendingCreates = dao.getPendingCreates(ownerId)
                     .map(PendingCreateGenerationEntity::toModel),
@@ -1671,6 +1684,28 @@ class PetLocalRepository(
                 firstSessions = dao.getFirstSessions(ownerId).map(FirstSessionEntity::toModel),
             )
         }
+    }
+
+    private suspend fun decayAndPersist(
+        entity: PetSnapshotEntity,
+        nowEpochMillis: Long,
+    ): PetSnapshotEntity {
+        val decayed = entity.withDecayedStats(nowEpochMillis)
+        if (decayed == entity) return entity
+        check(
+            dao.updatePetDecay(
+                ownerId = entity.ownerId,
+                petId = entity.petId,
+                hunger = decayed.hunger,
+                happiness = decayed.happiness,
+                energy = decayed.energy,
+                mood = decayed.mood,
+                hungerTickAtEpochMillis = decayed.hungerTickAtEpochMillis,
+                happinessTickAtEpochMillis = decayed.happinessTickAtEpochMillis,
+                energyTickAtEpochMillis = decayed.energyTickAtEpochMillis,
+            ) == 1,
+        )
+        return decayed
     }
 }
 
@@ -2000,30 +2035,59 @@ private fun ScheduledStoryEntity.toModel() = LocalScheduledStory(
     notifiedAtEpochMillis = notifiedAtEpochMillis,
 ).also(LocalPersistenceValidation::scheduledStory)
 
-private fun OwnedPetSnapshot.toEntity() = PetSnapshotEntity(
-    ownerId = ownerId,
-    petId = pet.petId,
-    assetSetId = pet.assetSetId,
-    description = pet.description,
-    name = pet.name,
-    stage = pet.stage,
-    stageLabel = pet.stageLabel,
-    mood = pet.mood,
-    experience = pet.experience,
-    hunger = pet.hunger,
-    happiness = pet.happiness,
-    energy = pet.energy,
-    message = pet.message,
-    petTapProgress = pet.petTapProgress,
-    generatedAt = pet.generatedMedia.generatedAt,
-    videoUrl = pet.generatedMedia.videoUrl,
-    sadVideoUrl = pet.generatedMedia.sadVideoUrl,
-    happyVideoUrl = pet.generatedMedia.happyVideoUrl,
-    blinkImageUrl = pet.generatedMedia.blinkImageUrl,
-    spriteSheetUrl = pet.generatedMedia.spriteSheetUrl,
-    characterBibleJson = pet.generatedMedia.characterBibleJson,
-    updatedAtEpochMillis = updatedAtEpochMillis,
-)
+private fun OwnedPetSnapshot.toEntity(current: PetSnapshotEntity? = null): PetSnapshotEntity {
+    fun tick(
+        previousValue: Int?,
+        incomingValue: Int,
+        previousTick: Long?,
+        initialDelayMillis: Long,
+    ): Long =
+        if (previousValue == incomingValue && previousTick != null) previousTick
+        else updatedAtEpochMillis + if (previousValue == null) initialDelayMillis else 0L
+
+    return PetSnapshotEntity(
+        ownerId = ownerId,
+        petId = pet.petId,
+        assetSetId = pet.assetSetId,
+        description = pet.description,
+        name = pet.name,
+        stage = pet.stage,
+        stageLabel = pet.stageLabel,
+        mood = pet.mood,
+        experience = pet.experience,
+        hunger = pet.hunger,
+        happiness = pet.happiness,
+        energy = pet.energy,
+        message = pet.message,
+        petTapProgress = pet.petTapProgress,
+        generatedAt = pet.generatedMedia.generatedAt,
+        videoUrl = pet.generatedMedia.videoUrl,
+        sadVideoUrl = pet.generatedMedia.sadVideoUrl,
+        happyVideoUrl = pet.generatedMedia.happyVideoUrl,
+        blinkImageUrl = pet.generatedMedia.blinkImageUrl,
+        spriteSheetUrl = pet.generatedMedia.spriteSheetUrl,
+        characterBibleJson = pet.generatedMedia.characterBibleJson,
+        hungerTickAtEpochMillis = tick(
+            current?.hunger,
+            pet.hunger,
+            current?.hungerTickAtEpochMillis,
+            0L,
+        ),
+        happinessTickAtEpochMillis = tick(
+            current?.happiness,
+            pet.happiness,
+            current?.happinessTickAtEpochMillis,
+            2 * 60 * 60 * 1_000L,
+        ),
+        energyTickAtEpochMillis = tick(
+            current?.energy,
+            pet.energy,
+            current?.energyTickAtEpochMillis,
+            4 * 60 * 60 * 1_000L,
+        ),
+        updatedAtEpochMillis = updatedAtEpochMillis,
+    )
+}
 
 private fun PetSnapshotEntity.toModel(images: List<PetMoodImageEntity>) = OwnedPetSnapshot(
     ownerId = ownerId,

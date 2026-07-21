@@ -135,8 +135,10 @@ import com.gigagochi.app.debugmenu.debugScheduledStoryService
 import com.gigagochi.app.debugmenu.ensureDebugFixtureStories
 import com.gigagochi.app.debugmenu.setDebugFixtureSelection
 import com.gigagochi.app.debugmenu.setDebugDeadPetId
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 internal enum class AppRoute { Create, Dashboard, Events, Travel, Story, ConnectionError, LocalDataError }
@@ -433,6 +435,22 @@ class MainActivity : ComponentActivity() {
                     launch {
                         repository.observeEventHistoryLastViewed(session.accountId, pet.petId)
                             .collect { eventHistoryLastViewed = it }
+                    }
+                }
+
+                LaunchedEffect(
+                    petRepository,
+                    inMemorySession.value?.accountId,
+                    activePet.value?.petId,
+                ) {
+                    val repository = petRepository ?: return@LaunchedEffect
+                    val ownerId = inMemorySession.value?.accountId ?: return@LaunchedEffect
+                    val petId = activePet.value?.petId ?: return@LaunchedEffect
+                    while (isActive) {
+                        delay(15 * 60 * 1_000L)
+                        repository.decayPetSnapshot(ownerId, petId)?.pet?.let {
+                            activePet.value = it
+                        }
                     }
                 }
 

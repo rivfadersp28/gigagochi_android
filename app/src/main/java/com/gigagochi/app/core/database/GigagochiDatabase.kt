@@ -32,7 +32,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProactiveNotificationEntity::class,
         EventHistoryViewEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -78,10 +78,32 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration5To6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `pet_snapshots` ADD COLUMN `hungerTickAtEpochMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `pet_snapshots` ADD COLUMN `happinessTickAtEpochMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `pet_snapshots` ADD COLUMN `energyTickAtEpochMillis` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """
+                    UPDATE `pet_snapshots`
+                    SET `hungerTickAtEpochMillis` = `updatedAtEpochMillis`,
+                        `happinessTickAtEpochMillis` = `updatedAtEpochMillis` + 7200000,
+                        `energyTickAtEpochMillis` = `updatedAtEpochMillis` + 14400000
+                    """.trimIndent(),
+                )
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
             DatabaseName,
-        ).addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5).build()
+        ).addMigrations(
+            Migration1To2,
+            Migration2To3,
+            Migration3To4,
+            Migration4To5,
+            Migration5To6,
+        ).build()
     }
 }

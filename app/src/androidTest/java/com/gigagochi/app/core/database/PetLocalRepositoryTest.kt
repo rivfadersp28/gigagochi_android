@@ -75,6 +75,33 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun decayPersistsIndependentStatClocksAndResetsOnlyChangedStat() = runBlocking {
+        val startedAt = 1_000_000L
+        var now = startedAt + PetStatFullDecayMillis / 2
+        repository = PetLocalRepository(database) { now }
+        repository.replacePetSnapshot(snapshot().copy(updatedAtEpochMillis = startedAt))
+
+        val halfway = requireNotNull(repository.decayPetSnapshot(OwnerId, PetId))
+        assertEquals(50, halfway.pet.hunger)
+        assertEquals(59, halfway.pet.happiness)
+        assertEquals(67, halfway.pet.energy)
+
+        repository.replacePetSnapshot(
+            halfway.copy(
+                pet = halfway.pet.copy(hunger = 75),
+                updatedAtEpochMillis = now,
+            ),
+        )
+        now = startedAt + PetStatFullDecayMillis
+        val finished = requireNotNull(repository.decayPetSnapshot(OwnerId, PetId))
+
+        assertEquals(25, finished.pet.hunger)
+        assertEquals(9, finished.pet.happiness)
+        assertEquals(17, finished.pet.energy)
+        assertEquals("hungry", finished.pet.mood)
+    }
+
+    @Test
     fun chatComplimentRewardAndLedgerAreDurableAndIdempotent() = runBlocking {
         repository.replacePetSnapshot(snapshot(happiness = 10))
         val messages = listOf(
