@@ -7,6 +7,7 @@ import com.gigagochi.app.core.database.PendingBackendState
 import com.gigagochi.app.core.database.PendingBackendStateStore
 import com.gigagochi.app.core.database.TravelAssetConsumptionResult
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.core.model.urls
 import kotlinx.coroutines.CancellationException
 
 sealed interface DashboardOutcomeRecoveryResult {
@@ -24,6 +25,7 @@ class DashboardOutcomeApplicationCoordinator(
     private val outcomeStore: DashboardOutcomeStore,
     private val stateStore: PendingBackendStateStore? = null,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
+    private val onMediaReplaced: (Set<String>) -> Unit = {},
 ) {
     suspend fun applyReady(petId: String): DashboardOutcomeRecoveryResult {
         return try {
@@ -66,6 +68,9 @@ class DashboardOutcomeApplicationCoordinator(
         val after = recoveryStore.loadOwnerRecovery(ownerId)
         val pet = after.petSnapshots.firstOrNull { it.pet.petId == petId }?.pet
             ?: return DashboardOutcomeRecoveryResult.Conflict
+        val previousUrls = before.petSnapshots.firstOrNull { it.pet.petId == petId }
+            ?.pet?.generatedMedia?.urls().orEmpty()
+        runCatching { onMediaReplaced(previousUrls - pet.generatedMedia.urls()) }
         DashboardOutcomeRecoveryResult.Changed(pet = pet)
         } catch (cancelled: CancellationException) {
             throw cancelled

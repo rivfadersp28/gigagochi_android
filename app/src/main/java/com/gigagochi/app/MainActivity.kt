@@ -75,6 +75,7 @@ import com.gigagochi.app.core.database.AccountStartupDestination
 import com.gigagochi.app.core.database.GigagochiDatabase
 import com.gigagochi.app.core.database.PetLocalRepository
 import com.gigagochi.app.core.network.AndroidFeatureApi
+import com.gigagochi.app.core.network.StaticMediaCache
 import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
@@ -581,6 +582,7 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 repository,
                                 repository,
+                                onMediaReplaced = StaticMediaCache::evict,
                             )
                             ForegroundPendingRecoveryCoordinator(
                                 session.accountId,

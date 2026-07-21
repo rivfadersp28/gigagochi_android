@@ -11,6 +11,7 @@ import com.gigagochi.app.core.database.OwnerRecoveryStore
 import com.gigagochi.app.core.database.PendingBackendState
 import com.gigagochi.app.core.database.PendingBackendStateStore
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.core.model.hasCompleteDashboardVideos
 import com.gigagochi.app.core.network.AndroidFeatureService
 import com.gigagochi.app.core.network.ChatRequestDto
 import com.gigagochi.app.core.network.FeatureApiResult
@@ -270,14 +271,10 @@ class RealDashboardOutfitAdapter(
             }
             is FeatureApiResult.Success -> {
                 if (result.value.job.jobId != jobId) protocolFailure()
-                persistReadyIfPresent(
+                return persistReadyIfPresent(
                     pending,
                     pending.preparedDisplayItem ?: canonicalOutfitDisplayItem(pending.prompt),
                     result.value,
-                )
-                return result.value.job.status in setOf(
-                    GenerationJobStatusDto.Succeeded,
-                    GenerationJobStatusDto.Failed,
                 )
             }
         }
@@ -288,11 +285,12 @@ class RealDashboardOutfitAdapter(
         pending: LocalPendingOutfit,
         displayItem: String,
         envelope: GenerationEnvelopeDto,
-    ) {
-        when (envelope.job.status) {
+    ): Boolean {
+        return when (envelope.job.status) {
             GenerationJobStatusDto.Succeeded -> {
                 val result = envelope.job.result ?: protocolFailure()
                 val media = api.media(result) ?: protocolFailure()
+                if (!media.hasCompleteDashboardVideos()) return false
                 outcomeStore.saveOutfitMediaOutcome(
                     LocalOutfitMediaOutcome(
                         ownerId,
@@ -310,6 +308,7 @@ class RealDashboardOutfitAdapter(
                     pending.requestKey,
                     PendingBackendState.Ready,
                 )
+                true
             }
             GenerationJobStatusDto.Failed -> {
                 stateStore.updateOutfitBackendState(
@@ -320,7 +319,7 @@ class RealDashboardOutfitAdapter(
                 )
                 throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Server, "GENERATION_FAILED"))
             }
-            else -> Unit
+            else -> false
         }
     }
 

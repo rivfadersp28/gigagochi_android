@@ -23,6 +23,7 @@ import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.network.AndroidFeatureApi
 import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.FeatureFailure
+import com.gigagochi.app.core.network.StaticMediaCache
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.feature.dashboard.DashboardOutcomeApplicationCoordinator
 import com.gigagochi.app.feature.dashboard.DailyProactiveCoordinator
@@ -169,6 +170,7 @@ class GigagochiSyncWorker(
                 repository,
                 repository,
                 repository,
+                onMediaReplaced = StaticMediaCache::evict,
             ),
         ).recoverForeground(pet.petId)
         DailyProactiveCoordinator(session.accountId, repository, api).generateIfDue(pet)

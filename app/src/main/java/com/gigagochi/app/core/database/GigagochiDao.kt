@@ -242,6 +242,9 @@ internal interface GigagochiDao {
     @Query("UPDATE pending_outfits SET backendState = 'Failed', backendErrorCode = 'APPLY_CONFLICT' WHERE ownerId = :ownerId AND requestKey = :requestKey AND backendState = 'Ready'")
     suspend fun markOutfitApplyConflict(ownerId: String, requestKey: String): Int
 
+    @Query("UPDATE pending_outfits SET backendState = 'Failed', backendErrorCode = 'INCOMPLETE_MEDIA' WHERE ownerId = :ownerId AND requestKey = :requestKey AND backendState = 'Ready'")
+    suspend fun markIncompleteOutfitFailed(ownerId: String, requestKey: String): Int
+
     @Query("UPDATE pending_outfits SET preparedDisplayItem = :displayItem WHERE ownerId = :ownerId AND requestKey = :requestKey AND preparedDisplayItem IS NULL")
     suspend fun prepareOutfitDisplayItem(ownerId: String, requestKey: String, displayItem: String): Int
 

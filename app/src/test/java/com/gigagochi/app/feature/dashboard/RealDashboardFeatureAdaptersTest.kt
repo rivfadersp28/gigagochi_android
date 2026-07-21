@@ -89,6 +89,38 @@ class RealDashboardFeatureAdaptersTest {
     }
 
     @Test
+    fun succeededOutfitWaitsForAllThreeDashboardVideos() = runBlocking {
+        val store = InMemoryFeatureStore().apply {
+            outfits += outfit().copy(
+                backendJobId = "job-outfit",
+                backendState = PendingBackendState.Attached,
+            )
+        }
+        var complete = false
+        val api = object : TestAndroidFeatureService() {
+            override suspend fun pollOutfit(jobId: String) = FeatureApiResult.Success(
+                envelope(
+                    jobId,
+                    GenerationJobStatusDto.Succeeded,
+                    RealPetGenerationAdapterTestAsset.asset(complete),
+                ),
+            )
+        }
+        val adapter = RealDashboardOutfitAdapter("owner-a", store, store, store, api)
+
+        assertEquals(false, adapter.pollOnce(store.outfits.single()))
+        assertTrue(store.outfitOutcomes.isEmpty())
+        assertEquals(PendingBackendState.Attached, store.outfits.single().backendState)
+
+        complete = true
+        assertEquals(true, adapter.pollOnce(store.outfits.single()))
+        assertEquals(PendingBackendState.Ready, store.outfits.single().backendState)
+        assertTrue(store.outfitOutcomes.single().media.videoUrl != null)
+        assertTrue(store.outfitOutcomes.single().media.sadVideoUrl != null)
+        assertTrue(store.outfitOutcomes.single().media.happyVideoUrl != null)
+    }
+
+    @Test
     fun identityMismatchBecomesDurableOutcomeUnknown() = runBlocking {
         val store = InMemoryFeatureStore().apply { outfits += outfit() }
         val api = object : TestAndroidFeatureService() {
@@ -385,7 +417,7 @@ private class ConflictOutcomeStore : InMemoryFeatureStore(), DashboardOutcomeSto
 }
 
 private object RealPetGenerationAdapterTestAsset {
-    fun asset(): com.gigagochi.app.core.network.GenerationAssetDto {
+    fun asset(completeVideos: Boolean = true): com.gigagochi.app.core.network.GenerationAssetDto {
         val moods = mapOf(
             "idle" to "https://gigagochi.serega.works/static/i.png",
             "happy" to "https://gigagochi.serega.works/static/h.png",
@@ -395,6 +427,9 @@ private object RealPetGenerationAdapterTestAsset {
         return com.gigagochi.app.core.network.GenerationAssetDto(
             "asset-new", "2026-07-17T10:11:12Z",
             mapOf("baby" to moods, "teen" to moods, "adult" to moods),
+            videoUrl = "https://gigagochi.serega.works/static/idle.mp4",
+            sadVideoUrl = if (completeVideos) "https://gigagochi.serega.works/static/sad.mp4" else null,
+            happyVideoUrl = if (completeVideos) "https://gigagochi.serega.works/static/happy.mp4" else null,
         )
     }
 }

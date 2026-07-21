@@ -621,7 +621,17 @@ class PetLocalRepositoryTest {
 
     @Test
     fun outfitApplyIsAtomicOwnerFencedIdempotentAndRejectsStaleSnapshotSave() = runBlocking {
-        repository.replacePetSnapshot(snapshot(experience = 500))
+        val previousMedia = PetGeneratedMedia(
+            videoUrl = "https://gigagochi.serega.works/static/previous-idle.mp4",
+            sadVideoUrl = "https://gigagochi.serega.works/static/previous-sad.mp4",
+            happyVideoUrl = "https://gigagochi.serega.works/static/previous-happy.mp4",
+            moodImages = mediaImages("previous"),
+        )
+        repository.replacePetSnapshot(
+            snapshot(experience = 500).copy(
+                pet = snapshot(experience = 500).pet.copy(generatedMedia = previousMedia),
+            ),
+        )
         val pending = outfit()
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(pending))
         repository.attachOutfitBackendJob(OwnerId, pending.requestKey, "job-ready")
@@ -637,6 +647,9 @@ class PetLocalRepositoryTest {
         val applied = repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey)
         assertTrue(applied is OutfitOutcomeApplicationResult.Applied)
         assertEquals("asset-${pending.requestKey}", repository.getPetSnapshot(OwnerId, PetId)?.pet?.assetSetId)
+        val appliedMedia = requireNotNull(repository.getPetSnapshot(OwnerId, PetId)?.pet?.generatedMedia)
+        assertEquals("https://gigagochi.serega.works/static/${pending.requestKey}-idle.mp4", appliedMedia.videoUrl)
+        assertEquals(false, appliedMedia.moodImages.any { it.url.contains("previous") })
         assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
         val outfitNotification = repository.getUnnotifiedNotifications(OwnerId, PetId).single()
@@ -818,6 +831,9 @@ class PetLocalRepositoryTest {
             "asset-$requestKey",
             PetGeneratedMedia(
                 generatedAt = "2026-07-17T10:11:12Z",
+                videoUrl = "https://gigagochi.serega.works/static/$requestKey-idle.mp4",
+                sadVideoUrl = "https://gigagochi.serega.works/static/$requestKey-sad.mp4",
+                happyVideoUrl = "https://gigagochi.serega.works/static/$requestKey-happy.mp4",
                 moodImages = images,
             ),
             20,
