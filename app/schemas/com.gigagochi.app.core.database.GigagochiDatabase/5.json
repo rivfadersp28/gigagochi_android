@@ -1,0 +1,1819 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "f28ba62c5fd6b8ea4fa2cfbb8d98c8aa",
+    "entities": [
+      {
+        "tableName": "pet_snapshots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT NOT NULL, `stage` TEXT NOT NULL, `stageLabel` TEXT NOT NULL, `mood` TEXT NOT NULL, `experience` INTEGER NOT NULL, `hunger` INTEGER NOT NULL, `happiness` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `message` TEXT NOT NULL, `petTapProgress` INTEGER NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetSetId",
+            "columnName": "assetSetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stageLabel",
+            "columnName": "stageLabel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mood",
+            "columnName": "mood",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "experience",
+            "columnName": "experience",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hunger",
+            "columnName": "hunger",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "happiness",
+            "columnName": "happiness",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "energy",
+            "columnName": "energy",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "message",
+            "columnName": "message",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petTapProgress",
+            "columnName": "petTapProgress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generatedAt",
+            "columnName": "generatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "videoUrl",
+            "columnName": "videoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sadVideoUrl",
+            "columnName": "sadVideoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "happyVideoUrl",
+            "columnName": "happyVideoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "blinkImageUrl",
+            "columnName": "blinkImageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "spriteSheetUrl",
+            "columnName": "spriteSheetUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "characterBibleJson",
+            "columnName": "characterBibleJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId"
+          ]
+        }
+      },
+      {
+        "tableName": "pending_create_generations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `backendJobId` TEXT, `stage` TEXT NOT NULL, `description` TEXT NOT NULL, `name` TEXT, `personality` TEXT, `fear` TEXT, `favoriteItem` TEXT, `currentStep` INTEGER NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, `backendState` TEXT NOT NULL DEFAULT 'Pending', `backendErrorCode` TEXT, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendJobId",
+            "columnName": "backendJobId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "personality",
+            "columnName": "personality",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fear",
+            "columnName": "fear",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "favoriteItem",
+            "columnName": "favoriteItem",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "currentStep",
+            "columnName": "currentStep",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendState",
+            "columnName": "backendState",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'Pending'"
+          },
+          {
+            "fieldPath": "backendErrorCode",
+            "columnName": "backendErrorCode",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_create_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_create_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          },
+          {
+            "name": "index_create_owner_backend_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "backendJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_create_owner_backend_job` ON `${TABLE_NAME}` (`ownerId`, `backendJobId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pending_outfits",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `localJobId` TEXT NOT NULL, `backendJobId` TEXT, `prompt` TEXT NOT NULL, `baseAssetSetId` TEXT NOT NULL, `acceptedAtEpochMillis` INTEGER NOT NULL, `experienceCost` INTEGER NOT NULL, `backendState` TEXT NOT NULL DEFAULT 'Pending', `backendErrorCode` TEXT, `preparedDisplayItem` TEXT, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localJobId",
+            "columnName": "localJobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendJobId",
+            "columnName": "backendJobId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "prompt",
+            "columnName": "prompt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "baseAssetSetId",
+            "columnName": "baseAssetSetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedAtEpochMillis",
+            "columnName": "acceptedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "experienceCost",
+            "columnName": "experienceCost",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendState",
+            "columnName": "backendState",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'Pending'"
+          },
+          {
+            "fieldPath": "backendErrorCode",
+            "columnName": "backendErrorCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "preparedDisplayItem",
+            "columnName": "preparedDisplayItem",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outfit_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          },
+          {
+            "name": "index_outfit_owner_local_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "localJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_owner_local_job` ON `${TABLE_NAME}` (`ownerId`, `localJobId`)"
+          },
+          {
+            "name": "index_outfit_owner_backend_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "backendJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_owner_backend_job` ON `${TABLE_NAME}` (`ownerId`, `backendJobId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pending_travel_videos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `localJobId` TEXT NOT NULL, `backendJobId` TEXT, `prompt` TEXT NOT NULL, `acceptedAtEpochMillis` INTEGER NOT NULL, `backendState` TEXT NOT NULL DEFAULT 'Pending', `backendErrorCode` TEXT, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localJobId",
+            "columnName": "localJobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendJobId",
+            "columnName": "backendJobId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "prompt",
+            "columnName": "prompt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acceptedAtEpochMillis",
+            "columnName": "acceptedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendState",
+            "columnName": "backendState",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'Pending'"
+          },
+          {
+            "fieldPath": "backendErrorCode",
+            "columnName": "backendErrorCode",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_travel_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_travel_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          },
+          {
+            "name": "index_travel_owner_local_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "localJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_travel_owner_local_job` ON `${TABLE_NAME}` (`ownerId`, `localJobId`)"
+          },
+          {
+            "name": "index_travel_owner_backend_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "backendJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_travel_owner_backend_job` ON `${TABLE_NAME}` (`ownerId`, `backendJobId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "applied_story_receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `receiptKey` TEXT NOT NULL, `travelId` TEXT NOT NULL, `partKey` TEXT NOT NULL, `experienceDelta` INTEGER NOT NULL, `hungerDelta` INTEGER NOT NULL, `happinessDelta` INTEGER NOT NULL, `energyDelta` INTEGER NOT NULL, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `receiptKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receiptKey",
+            "columnName": "receiptKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "travelId",
+            "columnName": "travelId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partKey",
+            "columnName": "partKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "experienceDelta",
+            "columnName": "experienceDelta",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hungerDelta",
+            "columnName": "hungerDelta",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "happinessDelta",
+            "columnName": "happinessDelta",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "energyDelta",
+            "columnName": "energyDelta",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appliedAtEpochMillis",
+            "columnName": "appliedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "receiptKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_story_owner_travel_part",
+            "unique": true,
+            "columnNames": [
+              "ownerId",
+              "travelId",
+              "partKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_story_owner_travel_part` ON `${TABLE_NAME}` (`ownerId`, `travelId`, `partKey`)"
+          },
+          {
+            "name": "index_story_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_story_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pet_mood_images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `stage` TEXT NOT NULL, `mood` TEXT NOT NULL, `url` TEXT NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `stage`, `mood`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mood",
+            "columnName": "mood",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "stage",
+            "mood"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "travel_video_assets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `backendJobId` TEXT NOT NULL, `prompt` TEXT NOT NULL, `title` TEXT, `scenario` TEXT, `imageUrl` TEXT, `videoUrl` TEXT NOT NULL, `completedAtEpochMillis` INTEGER NOT NULL, `consumedAtEpochMillis` INTEGER, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendJobId",
+            "columnName": "backendJobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "prompt",
+            "columnName": "prompt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "scenario",
+            "columnName": "scenario",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "videoUrl",
+            "columnName": "videoUrl",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "consumedAtEpochMillis",
+            "columnName": "consumedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_travel_asset_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_travel_asset_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          },
+          {
+            "name": "index_travel_asset_owner_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "backendJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_travel_asset_owner_job` ON `${TABLE_NAME}` (`ownerId`, `backendJobId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "outfit_media_outcomes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `backendJobId` TEXT NOT NULL, `displayItem` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `generatedAt` TEXT, `videoUrl` TEXT, `sadVideoUrl` TEXT, `happyVideoUrl` TEXT, `blinkImageUrl` TEXT, `spriteSheetUrl` TEXT, `characterBibleJson` TEXT, `completedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "backendJobId",
+            "columnName": "backendJobId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayItem",
+            "columnName": "displayItem",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetSetId",
+            "columnName": "assetSetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "generatedAt",
+            "columnName": "generatedAt",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "videoUrl",
+            "columnName": "videoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sadVideoUrl",
+            "columnName": "sadVideoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "happyVideoUrl",
+            "columnName": "happyVideoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "blinkImageUrl",
+            "columnName": "blinkImageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "spriteSheetUrl",
+            "columnName": "spriteSheetUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "characterBibleJson",
+            "columnName": "characterBibleJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "completedAtEpochMillis",
+            "columnName": "completedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outfit_outcome_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_outcome_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          },
+          {
+            "name": "index_outfit_outcome_owner_job",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "backendJobId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_outcome_owner_job` ON `${TABLE_NAME}` (`ownerId`, `backendJobId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "outfit_mood_images",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `stage` TEXT NOT NULL, `mood` TEXT NOT NULL, `url` TEXT NOT NULL, PRIMARY KEY(`ownerId`, `requestKey`, `stage`, `mood`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mood",
+            "columnName": "mood",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "url",
+            "columnName": "url",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey",
+            "stage",
+            "mood"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_outfit_image_owner_request",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "requestKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_outfit_image_owner_request` ON `${TABLE_NAME}` (`ownerId`, `requestKey`)"
+          }
+        ]
+      },
+      {
+        "tableName": "applied_outfit_receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `assetSetId` TEXT NOT NULL, `displayItem` TEXT NOT NULL DEFAULT '', `appliedAtEpochMillis` INTEGER NOT NULL, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "assetSetId",
+            "columnName": "assetSetId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayItem",
+            "columnName": "displayItem",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "appliedAtEpochMillis",
+            "columnName": "appliedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_applied_outfit_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_applied_outfit_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "scheduled_stories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `storyId` TEXT NOT NULL, `petId` TEXT NOT NULL, `title` TEXT NOT NULL, `text` TEXT NOT NULL, `question` TEXT NOT NULL, `choice0` TEXT NOT NULL, `choice1` TEXT NOT NULL, `choice2` TEXT NOT NULL, `choice3` TEXT NOT NULL, `createdAt` TEXT NOT NULL, `imageUrl` TEXT, `videoUrl` TEXT, `choiceRequestKey` TEXT, `pendingChoice` TEXT, `selectedChoice` TEXT, `resultText` TEXT, `resultReaction` TEXT, `resultConsequence` TEXT, `resultExperienceGained` INTEGER, `resultImageUrl` TEXT, `resultVideoUrl` TEXT, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `storyId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "storyId",
+            "columnName": "storyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "question",
+            "columnName": "question",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice0",
+            "columnName": "choice0",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice1",
+            "columnName": "choice1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice2",
+            "columnName": "choice2",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "choice3",
+            "columnName": "choice3",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "videoUrl",
+            "columnName": "videoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "choiceRequestKey",
+            "columnName": "choiceRequestKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pendingChoice",
+            "columnName": "pendingChoice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "selectedChoice",
+            "columnName": "selectedChoice",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultText",
+            "columnName": "resultText",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultReaction",
+            "columnName": "resultReaction",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultConsequence",
+            "columnName": "resultConsequence",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultExperienceGained",
+            "columnName": "resultExperienceGained",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resultImageUrl",
+            "columnName": "resultImageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "resultVideoUrl",
+            "columnName": "resultVideoUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "storyId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_scheduled_story_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_scheduled_story_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "first_sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `stage` TEXT NOT NULL, `selectedDestination` TEXT, `lastActionKey` TEXT, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "selectedDestination",
+            "columnName": "selectedDestination",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastActionKey",
+            "columnName": "lastActionKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_first_session_owner_stage",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "stage"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_first_session_owner_stage` ON `${TABLE_NAME}` (`ownerId`, `stage`)"
+          }
+        ]
+      },
+      {
+        "tableName": "first_session_action_receipts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `actionKey` TEXT NOT NULL, `actionKind` TEXT NOT NULL, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `actionKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionKey",
+            "columnName": "actionKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actionKind",
+            "columnName": "actionKind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "appliedAtEpochMillis",
+            "columnName": "appliedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "actionKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_first_session_action_owner_pet",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_first_session_action_owner_pet` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "chat_messages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `messageId` TEXT NOT NULL, `role` TEXT NOT NULL, `text` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `messageId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "messageId",
+            "columnName": "messageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "role",
+            "columnName": "role",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "messageId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_chat_owner_pet_created",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "createdAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_chat_owner_pet_created` ON `${TABLE_NAME}` (`ownerId`, `petId`, `createdAtEpochMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "compliment_ledger",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `normalizedKey` TEXT NOT NULL, `complimentKey` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `normalizedKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedKey",
+            "columnName": "normalizedKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "complimentKey",
+            "columnName": "complimentKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "normalizedKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_compliment_owner_pet_created",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "createdAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_compliment_owner_pet_created` ON `${TABLE_NAME}` (`ownerId`, `petId`, `createdAtEpochMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "applied_chat_responses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `happinessDelta` INTEGER NOT NULL, `complimentKey` TEXT, `appliedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `requestKey`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "requestKey",
+            "columnName": "requestKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "happinessDelta",
+            "columnName": "happinessDelta",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "complimentKey",
+            "columnName": "complimentKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "appliedAtEpochMillis",
+            "columnName": "appliedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "requestKey"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_applied_chat_responses_ownerId_petId",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_applied_chat_responses_ownerId_petId` ON `${TABLE_NAME}` (`ownerId`, `petId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "user_memories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `memoryId` TEXT NOT NULL, `kind` TEXT NOT NULL, `text` TEXT NOT NULL, `normalizedKey` TEXT NOT NULL, `confidence` REAL NOT NULL, `importance` REAL NOT NULL, `memoryClass` TEXT NOT NULL, `recordedAtEpochMillis` INTEGER NOT NULL, `occurredAtEpochMillis` INTEGER, `dueAtEpochMillis` INTEGER, `expiresAtEpochMillis` INTEGER, `lastMentionedAtEpochMillis` INTEGER, `mentionCount` INTEGER NOT NULL, `tagsJson` TEXT NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`, `memoryId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "memoryId",
+            "columnName": "memoryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "text",
+            "columnName": "text",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "normalizedKey",
+            "columnName": "normalizedKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importance",
+            "columnName": "importance",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "memoryClass",
+            "columnName": "memoryClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordedAtEpochMillis",
+            "columnName": "recordedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAtEpochMillis",
+            "columnName": "occurredAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dueAtEpochMillis",
+            "columnName": "dueAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "expiresAtEpochMillis",
+            "columnName": "expiresAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastMentionedAtEpochMillis",
+            "columnName": "lastMentionedAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mentionCount",
+            "columnName": "mentionCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tagsJson",
+            "columnName": "tagsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "memoryId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_memory_owner_pet_key",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "normalizedKey"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_memory_owner_pet_key` ON `${TABLE_NAME}` (`ownerId`, `petId`, `normalizedKey`)"
+          },
+          {
+            "name": "index_memory_owner_pet_due",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "dueAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_memory_owner_pet_due` ON `${TABLE_NAME}` (`ownerId`, `petId`, `dueAtEpochMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "memory_learnings",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `learningId` TEXT NOT NULL, `status` TEXT NOT NULL, `observation` TEXT NOT NULL, `patternKey` TEXT, `kind` TEXT, `confidence` REAL NOT NULL, `importance` REAL NOT NULL, `recurrenceCount` INTEGER NOT NULL, `firstSeenAtEpochMillis` INTEGER NOT NULL, `lastSeenAtEpochMillis` INTEGER NOT NULL, `occurredAtEpochMillis` INTEGER, `dueAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `petId`, `learningId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "learningId",
+            "columnName": "learningId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "observation",
+            "columnName": "observation",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "patternKey",
+            "columnName": "patternKey",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "importance",
+            "columnName": "importance",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recurrenceCount",
+            "columnName": "recurrenceCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstSeenAtEpochMillis",
+            "columnName": "firstSeenAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSeenAtEpochMillis",
+            "columnName": "lastSeenAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "occurredAtEpochMillis",
+            "columnName": "occurredAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "dueAtEpochMillis",
+            "columnName": "dueAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "learningId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_learning_owner_pet_status",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_learning_owner_pet_status` ON `${TABLE_NAME}` (`ownerId`, `petId`, `status`)"
+          }
+        ]
+      },
+      {
+        "tableName": "pet_memory_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `summary` TEXT, `userProfile` TEXT, `lastExtractionAtEpochMillis` INTEGER, `lastConsolidationAtEpochMillis` INTEGER, `lastProactiveAtEpochMillis` INTEGER, `proactiveLogJson` TEXT NOT NULL, `updatedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "summary",
+            "columnName": "summary",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "userProfile",
+            "columnName": "userProfile",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastExtractionAtEpochMillis",
+            "columnName": "lastExtractionAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastConsolidationAtEpochMillis",
+            "columnName": "lastConsolidationAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastProactiveAtEpochMillis",
+            "columnName": "lastProactiveAtEpochMillis",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "proactiveLogJson",
+            "columnName": "proactiveLogJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAtEpochMillis",
+            "columnName": "updatedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId"
+          ]
+        }
+      },
+      {
+        "tableName": "proactive_notifications",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `notificationId` TEXT NOT NULL, `reply` TEXT NOT NULL, `memoryIdsJson` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `petId`, `notificationId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notificationId",
+            "columnName": "notificationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reply",
+            "columnName": "reply",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "memoryIdsJson",
+            "columnName": "memoryIdsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAtEpochMillis",
+            "columnName": "createdAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notifiedAtEpochMillis",
+            "columnName": "notifiedAtEpochMillis",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId",
+            "notificationId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_proactive_owner_pet_notified",
+            "unique": false,
+            "columnNames": [
+              "ownerId",
+              "petId",
+              "notifiedAtEpochMillis"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_proactive_owner_pet_notified` ON `${TABLE_NAME}` (`ownerId`, `petId`, `notifiedAtEpochMillis`)"
+          }
+        ]
+      },
+      {
+        "tableName": "event_history_views",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `lastViewedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))",
+        "fields": [
+          {
+            "fieldPath": "ownerId",
+            "columnName": "ownerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "petId",
+            "columnName": "petId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastViewedAtEpochMillis",
+            "columnName": "lastViewedAtEpochMillis",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "ownerId",
+            "petId"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f28ba62c5fd6b8ea4fa2cfbb8d98c8aa')"
+    ]
+  }
+}

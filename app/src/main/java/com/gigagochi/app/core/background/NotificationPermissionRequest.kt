@@ -12,12 +12,16 @@ private const val PermissionPreferences = "gigagochi-notification-permission"
 private const val PermissionAsked = "asked"
 
 @Composable
-fun RequestNotificationPermissionOnce(enabled: Boolean) {
+fun RequestNotificationPermissionOnce(
+    enabled: Boolean,
+    onPermissionResult: (Boolean) -> Unit = {},
+) {
     if (!enabled || Build.VERSION.SDK_INT < 33) return
     val context = LocalContext.current
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { }
+        onPermissionResult,
+    )
     LaunchedEffect(enabled) {
         val preferences = context.getSharedPreferences(PermissionPreferences, 0)
         if (!preferences.getBoolean(PermissionAsked, false)) {

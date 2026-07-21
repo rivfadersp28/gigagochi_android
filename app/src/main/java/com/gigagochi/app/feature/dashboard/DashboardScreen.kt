@@ -2236,7 +2236,7 @@ private fun GlassAction(
             }
             .semantics {
                 contentDescription = if (badgeCount > 0) {
-                    "$label, без ответа: $badgeCount"
+                    "$label, требуют внимания: $badgeCount"
                 } else label
             },
     ) {

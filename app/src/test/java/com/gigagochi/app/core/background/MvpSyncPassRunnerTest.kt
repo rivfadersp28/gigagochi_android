@@ -106,6 +106,22 @@ class MvpSyncPassRunnerTest {
     }
 
     @Test
+    fun foregroundDispatcherEmitsAndMarksReadyContent() = runBlocking {
+        val row = notification(LocalNotificationKind.TravelReady, "travel-ready")
+        val emitted = mutableListOf<LocalCompletionNotification>()
+        val marked = mutableListOf<LocalCompletionNotification>()
+        CompletionNotificationDispatcher(
+            notificationsAllowed = { true },
+            loadNotifications = { _, _ -> listOf(row) },
+            emitter = LocalNotificationEmitter { emitted += it; true },
+            markNotified = { _, notification -> marked += notification },
+        ).dispatch("owner-a", "pet-a")
+
+        assertEquals(listOf(row), emitted)
+        assertEquals(listOf(row), marked)
+    }
+
+    @Test
     fun crashAfterPostRetriesWithSameStableNotificationId() = runBlocking {
         val row = story()
         val emittedIds = mutableListOf<Int>()

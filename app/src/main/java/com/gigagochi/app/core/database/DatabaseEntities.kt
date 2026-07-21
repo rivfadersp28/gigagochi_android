@@ -422,6 +422,16 @@ internal data class ScheduledStoryEntity(
     val notifiedAtEpochMillis: Long? = null,
 )
 
+@Entity(
+    tableName = "event_history_views",
+    primaryKeys = ["ownerId", "petId"],
+)
+internal data class EventHistoryViewEntity(
+    val ownerId: String,
+    val petId: String,
+    val lastViewedAtEpochMillis: Long,
+)
+
 internal class DatabaseTypeConverters {
     @TypeConverter
     fun pendingCreateStageToStorage(value: PendingCreateStage): String = value.name

@@ -39,7 +39,15 @@ data class EventHistoryUiState(
     val unansweredCount: Int = items.count {
         it is EventHistoryItem.ScheduledStory && !it.answered
     }
+    val latestTimestampMillis: Long? = items.maxOfOrNull(EventHistoryItem::timestampMillis)
+        ?.takeIf { it >= 0L }
     val isEmpty: Boolean = items.isEmpty()
+
+    fun badgeCount(lastViewedAtEpochMillis: Long?): Int = items.count { item ->
+        val needsAnswer = item is EventHistoryItem.ScheduledStory && !item.answered
+        val isNew = lastViewedAtEpochMillis == null || item.timestampMillis > lastViewedAtEpochMillis
+        needsAnswer || isNew
+    }
 }
 
 fun eventHistoryUiState(

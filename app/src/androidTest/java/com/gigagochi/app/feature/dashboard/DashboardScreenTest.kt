@@ -478,7 +478,7 @@ class DashboardScreenTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("События, без ответа: 3")
+        composeRule.onNodeWithContentDescription("События, требуют внимания: 3")
             .performClick()
         composeRule.runOnIdle { assertEquals(1, eventClicks) }
     }

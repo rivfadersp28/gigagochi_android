@@ -35,6 +35,8 @@ class EventHistoryContractTest {
             state.items.map(EventHistoryItem::key),
         )
         assertEquals(2, state.unansweredCount)
+        assertEquals(3, state.badgeCount(lastViewedAtEpochMillis = Long.MAX_VALUE - 2))
+        assertEquals(2, state.badgeCount(lastViewedAtEpochMillis = Long.MAX_VALUE))
     }
 
     @Test
@@ -55,6 +57,18 @@ class EventHistoryContractTest {
 
         assertTrue(state.isEmpty)
         assertEquals(0, state.unansweredCount)
+        assertEquals(0, state.badgeCount(lastViewedAtEpochMillis = null))
+    }
+
+    @Test
+    fun consumedTravelVideoIsBadgedUntilEventsAreViewed() {
+        val state = eventHistoryUiState(
+            stories = emptyList(),
+            travelVideos = listOf(travel("new", completedAt = 200L)),
+        )
+
+        assertEquals(1, state.badgeCount(lastViewedAtEpochMillis = 199L))
+        assertEquals(0, state.badgeCount(lastViewedAtEpochMillis = 200L))
     }
 
     private fun story(

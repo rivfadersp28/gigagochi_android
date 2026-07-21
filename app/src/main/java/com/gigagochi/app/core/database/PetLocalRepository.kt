@@ -1465,6 +1465,26 @@ class PetLocalRepository(
         }
     }
 
+    fun observeEventHistoryLastViewed(
+        ownerId: String,
+        petId: String,
+    ): Flow<Long?> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return dao.observeEventHistoryView(ownerId, petId).map { it?.lastViewedAtEpochMillis }
+    }
+
+    suspend fun markEventHistoryViewed(
+        ownerId: String,
+        petId: String,
+        viewedAtEpochMillis: Long,
+    ) {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        require(viewedAtEpochMillis >= 0L)
+        dao.markEventHistoryViewed(ownerId, petId, viewedAtEpochMillis)
+    }
+
     override suspend fun claimScheduledStoryChoice(
         ownerId: String,
         storyId: String,
@@ -1619,6 +1639,7 @@ class PetLocalRepository(
             dao.deleteOwnerMemoryLearnings(ownerId)
             dao.deleteOwnerPetMemoryStates(ownerId)
             dao.deleteOwnerProactiveNotifications(ownerId)
+            dao.deleteOwnerEventHistoryViews(ownerId)
             dao.deleteOwnerPets(ownerId)
         }
     }

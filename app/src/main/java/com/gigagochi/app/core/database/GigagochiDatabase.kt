@@ -30,8 +30,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MemoryLearningEntity::class,
         PetMemoryStateEntity::class,
         ProactiveNotificationEntity::class,
+        EventHistoryViewEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -71,10 +72,16 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration4To5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `event_history_views` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `lastViewedAtEpochMillis` INTEGER NOT NULL, PRIMARY KEY(`ownerId`, `petId`))")
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
             DatabaseName,
-        ).addMigrations(Migration1To2, Migration2To3, Migration3To4).build()
+        ).addMigrations(Migration1To2, Migration2To3, Migration3To4, Migration4To5).build()
     }
 }

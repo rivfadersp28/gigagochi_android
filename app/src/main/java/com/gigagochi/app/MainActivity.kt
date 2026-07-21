@@ -66,8 +66,10 @@ import com.gigagochi.app.core.background.MvpSyncScheduler
 import com.gigagochi.app.core.background.CreateSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
+import com.gigagochi.app.core.background.CompletionNotificationDispatcher
 import com.gigagochi.app.core.background.ManualGenerationKind
 import com.gigagochi.app.core.background.manualGenerationFailedNotification
+import com.gigagochi.app.core.background.notificationsAllowed
 import com.gigagochi.app.core.background.petReadyNotification
 import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.model.PetDashboardState
@@ -347,6 +349,7 @@ class MainActivity : ComponentActivity() {
                         emptyList(),
                     )
                 }
+                var eventHistoryLastViewed by remember { mutableStateOf<Long?>(null) }
                 var dashboardRecoveryRevision by remember { mutableIntStateOf(0) }
                 var debugTravelDemo by remember { mutableStateOf(false) }
                 var debugVisualMoodOverride by remember { mutableStateOf<String?>(null) }
@@ -409,10 +412,12 @@ class MainActivity : ComponentActivity() {
                     if (repository == null || session == null || pet == null) {
                         scheduledStories.value = emptyList()
                         travelVideoAssets.value = emptyList()
+                        eventHistoryLastViewed = null
                         return@LaunchedEffect
                     }
                     scheduledStories.value = emptyList()
                     travelVideoAssets.value = emptyList()
+                    eventHistoryLastViewed = null
                     launch {
                         repository.observeScheduledStories(session.accountId, pet.petId).collect {
                             scheduledStories.value = it
@@ -422,6 +427,10 @@ class MainActivity : ComponentActivity() {
                         repository.observeTravelVideoAssets(session.accountId, pet.petId).collect {
                             travelVideoAssets.value = it
                         }
+                    }
+                    launch {
+                        repository.observeEventHistoryLastViewed(session.accountId, pet.petId)
+                            .collect { eventHistoryLastViewed = it }
                     }
                 }
 
@@ -543,11 +552,31 @@ class MainActivity : ComponentActivity() {
                             modifier = dashboardModifier,
                         )
                     } else {
-                        RequestNotificationPermissionOnce(enabled = true)
                         val recovery = activeStartup.value as? AccountStartupDestination.Dashboard
                         val session = requireNotNull(inMemorySession.value)
                         val repository = requireNotNull(petRepository)
                         val api = requireNotNull(featureApi)
+                        val completionNotifications = remember(session.accountId, repository) {
+                            CompletionNotificationDispatcher(
+                                notificationsAllowed = { notificationsAllowed(applicationContext) },
+                                loadNotifications = repository::getUnnotifiedNotifications,
+                                emitter = AndroidLocalNotificationEmitter(applicationContext),
+                                markNotified = { ownerId, notification ->
+                                    repository.markNotificationSent(
+                                        ownerId,
+                                        notification,
+                                        System.currentTimeMillis(),
+                                    )
+                                },
+                            )
+                        }
+                        RequestNotificationPermissionOnce(enabled = true) { granted ->
+                            if (granted) scope.launch {
+                                activePet.value?.petId?.let { petId ->
+                                    completionNotifications.dispatch(session.accountId, petId)
+                                }
+                            }
+                        }
                         val recoverySignal = remember(session.accountId) { ForegroundRecoverySignal() }
                         val mediaUrlPolicy = remember {
                             StaticMediaUrlPolicy(
@@ -622,6 +651,10 @@ class MainActivity : ComponentActivity() {
                                 outcomeApplication = outcomeApplication,
                                 onOutcomeApplied = {
                                     routeLocalSession(session)
+                                    completionNotifications.dispatch(
+                                        session.accountId,
+                                        requireNotNull(activePet.value).petId,
+                                    )
                                 },
                                 onOutcomeConflict = {
                                     route = appRouteForOutcomeApplyConflict()
@@ -661,6 +694,10 @@ class MainActivity : ComponentActivity() {
                         ) {
                             lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
                                 scheduledStoryCoordinator.checkDue(requireNotNull(activePet.value))
+                                completionNotifications.dispatch(
+                                    session.accountId,
+                                    requireNotNull(activePet.value).petId,
+                                )
                             }
                         }
                         LaunchedEffect(pendingRecovery, activePet.value?.petId, lifecycleOwner) {
@@ -715,7 +752,7 @@ class MainActivity : ComponentActivity() {
                             unansweredEventCount = eventHistoryUiState(
                                 scheduledStories.value,
                                 travelVideoAssets.value,
-                            ).unansweredCount,
+                            ).badgeCount(eventHistoryLastViewed),
                             onEvents = {
                                 focusedTravelRequestKey = null
                                 route = AppRoute.Events
@@ -746,6 +783,20 @@ class MainActivity : ComponentActivity() {
                         AppRoute.Events -> {
                         val mediaUrlPolicy = remember {
                             StaticMediaUrlPolicy(BuildConfig.BACKEND_BASE_URL, BuildConfig.DEBUG)
+                        }
+                        val latestEventTimestamp = eventHistoryUiState(
+                            scheduledStories.value,
+                            travelVideoAssets.value,
+                        ).latestTimestampMillis
+                        LaunchedEffect(latestEventTimestamp, inMemorySession.value?.accountId) {
+                            val timestamp = latestEventTimestamp ?: return@LaunchedEffect
+                            val session = inMemorySession.value ?: return@LaunchedEffect
+                            val pet = activePet.value ?: return@LaunchedEffect
+                            petRepository?.markEventHistoryViewed(
+                                session.accountId,
+                                pet.petId,
+                                timestamp,
+                            )
                         }
                         EventHistoryScreen(
                             stories = scheduledStories.value,

@@ -60,8 +60,9 @@
   chronology has no backend list/backfill endpoint: it remains durable across normal app restarts,
   but clearing app data, reinstalling, or moving to another device loses older local history.
 - `feature/events` merges the owner+pet `scheduled_stories` and consumed `travel_video_assets` Room
-  flows into one newest-first in-app chronology. Dashboard badge remains the live unanswered-story
-  count; `Помочь` reuses `ScheduledStoryRoute`. Travel cards keep the generated 9:16 ratio and share
+  flows into one newest-first in-app chronology. A durable owner+pet last-viewed watermark adds new
+  event content to the Dashboard badge; unanswered stories remain badged until answered.
+  `Помочь` reuses `ScheduledStoryRoute`. Travel cards keep the generated 9:16 ratio and share
   a securely cached MP4 through Android `FileProvider`/`ACTION_SEND`. Travel-ready notifications carry
   the durable request key; cold and singleTop warm launches open Events and scroll to that card.
   Event cards reuse the shared lifecycle-aware story media player, but only the card nearest the

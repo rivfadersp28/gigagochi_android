@@ -31,13 +31,12 @@ class MvpSyncPassRunner(
             if (failure?.kind == FeatureFailureKind.SessionInvalid) {
                 return MvpSyncPassResult.Success
             }
-            if (notificationsAllowed()) {
-                loadNotifications(session.accountId, pet.petId).forEach { notification ->
-                    if (emitter.emit(notification)) {
-                        markNotified(session.accountId, notification)
-                    }
-                }
-            }
+            CompletionNotificationDispatcher(
+                notificationsAllowed,
+                loadNotifications,
+                emitter,
+                markNotified,
+            ).dispatch(session.accountId, pet.petId)
             if (failure?.kind in RetryableSyncFailures) {
                 MvpSyncPassResult.Retry
             } else {
@@ -47,6 +46,21 @@ class MvpSyncPassRunner(
             throw cancelled
         } catch (_: Exception) {
             MvpSyncPassResult.Retry
+        }
+    }
+}
+
+class CompletionNotificationDispatcher(
+    private val notificationsAllowed: () -> Boolean,
+    private val loadNotifications: suspend (ownerId: String, petId: String) ->
+        List<LocalCompletionNotification>,
+    private val emitter: LocalNotificationEmitter,
+    private val markNotified: suspend (ownerId: String, LocalCompletionNotification) -> Unit,
+) {
+    suspend fun dispatch(ownerId: String, petId: String) {
+        if (!notificationsAllowed()) return
+        loadNotifications(ownerId, petId).forEach { notification ->
+            if (emitter.emit(notification)) markNotified(ownerId, notification)
         }
     }
 }

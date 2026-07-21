@@ -391,6 +391,12 @@ internal interface GigagochiDao {
     @Query("UPDATE scheduled_stories SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND storyId = :storyId AND notifiedAtEpochMillis IS NULL")
     suspend fun markScheduledStoryNotified(ownerId: String, storyId: String, notifiedAt: Long): Int
 
+    @Query("SELECT * FROM event_history_views WHERE ownerId = :ownerId AND petId = :petId")
+    fun observeEventHistoryView(ownerId: String, petId: String): Flow<EventHistoryViewEntity?>
+
+    @Query("INSERT INTO event_history_views(ownerId, petId, lastViewedAtEpochMillis) VALUES(:ownerId, :petId, :viewedAt) ON CONFLICT(ownerId, petId) DO UPDATE SET lastViewedAtEpochMillis = MAX(lastViewedAtEpochMillis, :viewedAt)")
+    suspend fun markEventHistoryViewed(ownerId: String, petId: String, viewedAt: Long)
+
     @Query("UPDATE scheduled_stories SET choiceRequestKey = :requestKey, pendingChoice = :choice WHERE ownerId = :ownerId AND storyId = :storyId AND selectedChoice IS NULL AND choiceRequestKey IS NULL")
     suspend fun claimScheduledStoryChoice(
         ownerId: String,
@@ -461,5 +467,8 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM proactive_notifications WHERE ownerId = :ownerId")
     suspend fun deleteOwnerProactiveNotifications(ownerId: String): Int
+
+    @Query("DELETE FROM event_history_views WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerEventHistoryViews(ownerId: String): Int
 
 }
