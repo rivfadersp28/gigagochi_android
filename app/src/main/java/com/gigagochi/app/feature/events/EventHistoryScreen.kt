@@ -19,8 +19,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
@@ -78,6 +80,7 @@ import kotlin.math.abs
 
 private val EventCardShape = RoundedCornerShape(20.dp)
 private val HelpButtonShape = RoundedCornerShape(24.dp)
+private val EventButtonTiltCompensation = 2.dp
 
 @Composable
 fun EventHistoryScreen(
@@ -215,7 +218,10 @@ private fun TravelVideoEventCard(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var sharing by remember(asset.requestKey) { mutableStateOf(false) }
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = asset.imageUrl,
             videoUrl = asset.videoUrl,
@@ -271,7 +277,10 @@ private fun UnansweredEventCard(
     mediaUrlPolicy: StaticMediaUrlPolicy,
     onHelp: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = item.story.imageUrl,
             videoUrl = item.story.videoUrl,
@@ -305,7 +314,10 @@ private fun AnsweredEventCard(
     mediaUrlPolicy: StaticMediaUrlPolicy,
 ) {
     val result = item.story.result ?: return
-    Column(horizontalAlignment = Alignment.Start) {
+    Column(
+        horizontalAlignment = Alignment.Start,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         EventMedia(
             posterUrl = item.story.resultImageUrl ?: item.story.imageUrl,
             videoUrl = item.story.resultVideoUrl ?: item.story.videoUrl,
@@ -315,16 +327,22 @@ private fun AnsweredEventCard(
             description = "Итог события: ${item.story.title}",
         )
         Spacer(Modifier.height(20.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        Column(
+            horizontalAlignment = Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(13.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             EventResultText(result.text)
             EventResultText(result.consequence)
             EventResultText(result.reaction, muted = true)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.semantics {
-                    contentDescription = "Получено ${result.experienceGained} монет"
-                },
+                modifier = Modifier
+                    .align(Alignment.Start)
+                    .semantics {
+                        contentDescription = "Получено ${result.experienceGained} монет"
+                    },
             ) {
                 Image(
                     painter = painterResource(R.drawable.xp_coin),
@@ -404,6 +422,7 @@ private fun TiltedEventButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
+            .offset(x = EventButtonTiltCompensation)
             .requiredWidth(width)
             .requiredHeight(58.203.dp)
             .graphicsLayer {
