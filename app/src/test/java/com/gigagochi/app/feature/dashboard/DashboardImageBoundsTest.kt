@@ -33,4 +33,13 @@ class DashboardImageBoundsTest {
         assertTrue(actionTop + 58.203.dp + 16.dp <= visibleReferenceBottom)
         assertTrue(dashboardFeedRowTop(actionTop) + 148.dp + 16.dp <= visibleReferenceBottom)
     }
+
+    @Test
+    fun characterMessageUsesAFixedBottomBoundary() {
+        val anchor = 663.dp
+        val containerTop = characterMessageContainerTop(anchor)
+
+        assertEquals(586.dp, containerTop)
+        assertEquals(anchor + CharacterMessageFixedBottomOffset, containerTop + 132.dp)
+    }
 }

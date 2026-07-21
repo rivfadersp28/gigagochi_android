@@ -2114,10 +2114,10 @@ private fun BoxScope.CharacterDialogueText(
         }
     }
     Box(
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.BottomCenter,
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .offset(y = top - CharacterMessageOverflowExpansion / 2)
+            .offset(y = characterMessageContainerTop(top))
             .requiredSize(356.dp, CharacterMessageMaxHeight)
             .graphicsLayer {
                 alpha = entranceFraction
@@ -2143,7 +2143,9 @@ private fun BoxScope.CharacterDialogueText(
 
 private const val CharacterMessageEnterDurationMillis = 300f
 private val CharacterMessageMaxHeight = 132.dp
-private val CharacterMessageOverflowExpansion = 44.dp
+internal val CharacterMessageFixedBottomOffset = 55.dp
+internal fun characterMessageContainerTop(anchor: Dp): Dp =
+    anchor + CharacterMessageFixedBottomOffset - CharacterMessageMaxHeight
 private const val CharacterMessageUnitDurationMillis = 700f
 private const val CharacterMessageUnitStaggerMillis = 24f
 private const val CharacterMessageMaxAnimatedUnits = 80
