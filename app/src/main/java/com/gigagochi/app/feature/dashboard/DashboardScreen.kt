@@ -665,18 +665,6 @@ fun DashboardScreen(
                     .offset(x = 67.dp, y = 219.dp)
                     .pointerInput(Unit) { detectTapGestures(onTap = { onPetTap() }) },
             )
-            Text(
-                text = "Уровень: ${state.stageLabel}",
-                color = Color.White,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = OpenRundeFontFamily,
-                letterSpacing = (-0.15).sp,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 80.dp)
-                    .graphicsLayer { scaleX = 1.044f },
-            )
             ExperiencePill(
                 experience = state.experience,
                 hazeState = hazeState,
@@ -716,6 +704,7 @@ fun DashboardScreen(
                 GlassAction("Нарядить", ActionKind.Outfit, hazeState, onOutfit)
             }
         }
+        DashboardLevelAppBar(state.stageLabel)
     }
 }
 
@@ -1057,23 +1046,12 @@ private fun DashboardInlineScreen(
                     .padding(start = 16.dp, top = 16.dp),
             )
         }
+        DashboardLevelAppBar(state.pet.stageLabel)
     }
 }
 
 @Composable
 private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: HazeState) {
-    Text(
-        text = "Уровень: ${pet.stageLabel}",
-        color = Color.White,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Bold,
-        fontFamily = OpenRundeFontFamily,
-        letterSpacing = (-0.15).sp,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .padding(top = 80.dp)
-            .graphicsLayer { scaleX = 1.044f },
-    )
     ExperiencePill(
         experience = pet.experience,
         hazeState = hazeState,
@@ -1086,6 +1064,32 @@ private fun BoxScope.DashboardStatusChrome(pet: PetDashboardState, hazeState: Ha
         StatusRing(pet.hunger, StatusKind.Hunger)
         StatusRing(pet.happiness, StatusKind.Mood)
         StatusRing(pet.energy, StatusKind.Energy)
+    }
+}
+
+@Composable
+private fun BoxScope.DashboardLevelAppBar(stageLabel: String) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(
+                    WindowInsetsSides.Top + WindowInsetsSides.Horizontal,
+                ),
+            )
+            .padding(top = 16.dp)
+            .requiredSize(220.dp, 48.dp),
+    ) {
+        Text(
+            text = "Уровень: $stageLabel",
+            color = Color.White,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = OpenRundeFontFamily,
+            letterSpacing = (-0.15).sp,
+            modifier = Modifier.graphicsLayer { scaleX = 1.044f },
+        )
     }
 }
 

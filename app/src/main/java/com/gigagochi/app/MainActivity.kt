@@ -1,6 +1,7 @@
 package com.gigagochi.app
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -19,6 +20,11 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
@@ -43,7 +49,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -246,11 +251,17 @@ internal fun appRouteForAccountStartup(destination: AccountStartupDestination): 
 class MainActivity : ComponentActivity() {
     private val incomingIntentRevision = MutableStateFlow(0)
 
-    private fun enterImmersiveMode() {
+    private fun configureSystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = android.graphics.Color.rgb(189, 187, 179)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
         WindowCompat.getInsetsController(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.statusBars())
+            show(WindowInsetsCompat.Type.navigationBars())
+            isAppearanceLightNavigationBars = true
         }
     }
 
@@ -263,7 +274,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        enterImmersiveMode()
+        configureSystemBars()
         setContent {
             GigagochiTheme {
                 val latestIntentRevision by incomingIntentRevision.collectAsState()
@@ -904,7 +915,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Box(Modifier.fillMaxSize().background(Color.Black)) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFFBDBBB3))
+                        .windowInsetsPadding(
+                            WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
+                        )
+                        .background(Color.Black),
+                ) {
                     val reducedMotion = rememberTravelReducedMotionPreference()
                     AnimatedContent(
                         targetState = isDashboardStackRoute(route),
@@ -1083,7 +1102,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) enterImmersiveMode()
+        if (hasFocus) configureSystemBars()
     }
 }
 
