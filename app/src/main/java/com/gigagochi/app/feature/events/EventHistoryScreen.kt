@@ -80,6 +80,7 @@ import kotlin.math.abs
 private val EventCardShape = RoundedCornerShape(20.dp)
 private val HelpButtonShape = RoundedCornerShape(24.dp)
 internal val EventScreenHorizontalPadding = 20.dp
+internal val EventCardSpacing = 86.dp
 
 @Composable
 fun EventHistoryScreen(
@@ -184,7 +185,7 @@ fun EventHistoryScreen(
                         )
                     }
                 }
-                Spacer(Modifier.height(43.dp))
+                Spacer(Modifier.height(EventCardSpacing))
             }
         }
 

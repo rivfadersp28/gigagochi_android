@@ -26,6 +26,7 @@ class EventHistoryScreenTest {
 
     @Test
     fun nativeBackIsVisibleAndHelpButtonMatchesPaperLeftLane() {
+        assertEquals(86.dp, EventCardSpacing)
         var backCalls = 0
         composeRule.setContent {
             GigagochiTheme {
