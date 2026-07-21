@@ -247,6 +247,8 @@ internal data class AppliedOutfitReceiptEntity(
     val petId: String,
     val requestKey: String,
     val assetSetId: String,
+    @ColumnInfo(defaultValue = "''")
+    val displayItem: String,
     val appliedAtEpochMillis: Long,
     val notifiedAtEpochMillis: Long? = null,
 )

@@ -266,6 +266,13 @@ internal interface GigagochiDao {
     @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId ORDER BY completedAtEpochMillis")
     suspend fun getTravelVideoAssets(ownerId: String, petId: String): List<TravelVideoAssetEntity>
 
+    @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId ORDER BY completedAtEpochMillis DESC LIMIT :limit")
+    suspend fun getRecentTravelVideoAssets(
+        ownerId: String,
+        petId: String,
+        limit: Int,
+    ): List<TravelVideoAssetEntity>
+
     @Query("SELECT * FROM travel_video_assets WHERE ownerId = :ownerId AND petId = :petId ORDER BY completedAtEpochMillis DESC")
     fun observeTravelVideoAssets(ownerId: String, petId: String): Flow<List<TravelVideoAssetEntity>>
 
@@ -307,6 +314,13 @@ internal interface GigagochiDao {
 
     @Query("SELECT * FROM applied_outfit_receipts WHERE ownerId = :ownerId AND requestKey = :requestKey")
     suspend fun getAppliedOutfitReceipt(ownerId: String, requestKey: String): AppliedOutfitReceiptEntity?
+
+    @Query("SELECT * FROM applied_outfit_receipts WHERE ownerId = :ownerId AND petId = :petId ORDER BY appliedAtEpochMillis DESC LIMIT :limit")
+    suspend fun getRecentAppliedOutfitReceipts(
+        ownerId: String,
+        petId: String,
+        limit: Int,
+    ): List<AppliedOutfitReceiptEntity>
 
     @Query("SELECT * FROM applied_outfit_receipts WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL")
     suspend fun getUnnotifiedAppliedOutfitReceipts(ownerId: String, petId: String): List<AppliedOutfitReceiptEntity>

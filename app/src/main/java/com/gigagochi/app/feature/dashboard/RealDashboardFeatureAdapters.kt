@@ -57,7 +57,14 @@ class RealDashboardChatAdapter(
         }
         repository.rememberDeterministicFacts(ownerId, pet.petId, deterministic.facts, now)
         val memory = repository.memoryState(ownerId, pet.petId)
-        val memoryContext = buildChatMemoryContext(memory, priorHistory, request.message, now)
+        val characterExperiences = repository.recentCharacterExperiences(ownerId, pet.petId)
+        val memoryContext = buildChatMemoryContext(
+            memory,
+            priorHistory,
+            request.message,
+            now,
+            characterExperiences,
+        )
         val userMessage = newChatMessage("user", request.message, now)
         return when (
             val result = api.chat(
