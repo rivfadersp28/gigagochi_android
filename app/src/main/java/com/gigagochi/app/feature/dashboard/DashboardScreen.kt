@@ -1144,6 +1144,9 @@ private fun BoxScope.DashboardActions(
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Chat) {
             GlassAction("Поболтать", ActionKind.Chat, 192.dp, hazeState, onChat)
         }
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Feed) {
+            GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
+        }
         if (firstSessionAction == null) {
             GlassAction(
                 "События",
@@ -1154,8 +1157,8 @@ private fun BoxScope.DashboardActions(
                 badgeCount = unansweredEventCount,
             )
         }
-        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Feed) {
-            GlassAction("Покормить", ActionKind.Feed, 198.dp, hazeState, onFeed)
+        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
+            GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
         }
         if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Travel) {
             GlassAction(
@@ -1170,9 +1173,6 @@ private fun BoxScope.DashboardActions(
                 onTravel,
                 showGlyph = firstSessionAction != FirstSessionMainAction.Travel,
             )
-        }
-        if (firstSessionAction == null || firstSessionAction == FirstSessionMainAction.Outfit) {
-            GlassAction("Нарядить", ActionKind.Outfit, 180.dp, hazeState, onOutfit)
         }
     }
 }
