@@ -55,11 +55,11 @@ class EventHistoryScreenTest {
             .top
         assertTrue("title top=$titleTop back bottom=$backBottom", titleTop - backBottom >= 18f)
 
-        val mediaLeft = composeRule.onNodeWithContentDescription("Видео события: Шорох у старого дерева")
+        val mediaBounds = composeRule.onNodeWithContentDescription("Видео события: Шорох у старого дерева")
             .assertIsDisplayed()
             .fetchSemanticsNode()
             .boundsInRoot
-            .left
+        val mediaLeft = mediaBounds.left
         val helpLeft = composeRule.onNodeWithContentDescription("Помочь")
             .assertIsDisplayed()
             .fetchSemanticsNode()
@@ -70,7 +70,20 @@ class EventHistoryScreenTest {
             .fetchSemanticsNode()
             .boundsInRoot
             .left
-        assertTrue("help left=$helpLeft media left=$mediaLeft", abs(helpLeft - mediaLeft) <= 1.5f)
+        val expectedLeft = with(composeRule.density) { EventScreenHorizontalPadding.toPx() }
+        val screenRight = composeRule.onNodeWithContentDescription("История событий")
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .right
+        assertTrue("media left=$mediaLeft expected=$expectedLeft", abs(mediaLeft - expectedLeft) <= 1f)
+        assertTrue(
+            "media right=${mediaBounds.right} expected=${screenRight - expectedLeft}",
+            abs(mediaBounds.right - (screenRight - expectedLeft)) <= 1f,
+        )
+        assertTrue(
+            "help left=$helpLeft media left=$mediaLeft",
+            abs(helpLeft - mediaLeft) <= 3f * composeRule.density.density,
+        )
         assertTrue(
             "story text left=$storyTextLeft media left=$mediaLeft",
             abs(storyTextLeft - mediaLeft) <= 1f,

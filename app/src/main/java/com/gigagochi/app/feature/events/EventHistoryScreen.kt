@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.requiredSize
@@ -80,7 +79,7 @@ import kotlin.math.abs
 
 private val EventCardShape = RoundedCornerShape(20.dp)
 private val HelpButtonShape = RoundedCornerShape(24.dp)
-private val EventButtonTiltCompensation = 2.dp
+internal val EventScreenHorizontalPadding = 20.dp
 
 @Composable
 fun EventHistoryScreen(
@@ -123,10 +122,10 @@ fun EventHistoryScreen(
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(
-                start = 25.dp,
+                start = EventScreenHorizontalPadding,
                 top = safeTop + ContextualAppBarEdgePadding +
                     ContextualNavigationMinimumTouchTarget + ContextualAppBarContentGap,
-                end = 21.dp,
+                end = EventScreenHorizontalPadding,
                 bottom = 34.dp,
             ),
             modifier = Modifier
@@ -230,7 +229,7 @@ private fun TravelVideoEventCard(
             mediaUrlPolicy = mediaUrlPolicy,
             description = "Видео путешествия: ${travelEventCaption(asset)}",
             modifier = Modifier
-                .requiredWidth(353.dp)
+                .fillMaxWidth()
                 .aspectRatio(9f / 16f),
         )
         Spacer(Modifier.height(20.dp))
@@ -243,7 +242,7 @@ private fun TravelVideoEventCard(
             lineHeight = 23.9.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.requiredWidth(356.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(20.dp))
         TiltedEventButton(
@@ -299,7 +298,7 @@ private fun UnansweredEventCard(
             lineHeight = 23.9.sp,
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.requiredWidth(356.dp),
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(20.dp))
         HelpButton(onClick = onHelp)
@@ -370,7 +369,7 @@ private fun EventMedia(
     reducedMotion: Boolean,
     mediaUrlPolicy: StaticMediaUrlPolicy,
     description: String,
-    modifier: Modifier = Modifier.requiredSize(353.dp, 355.dp),
+    modifier: Modifier = Modifier.fillMaxWidth().height(355.dp),
 ) {
     LoopingStoryMedia(
         fallbackPoster = R.drawable.event_media_placeholder,
@@ -395,7 +394,7 @@ private fun EventResultText(text: String, muted: Boolean = false) {
         fontSize = 20.sp,
         fontWeight = FontWeight.Bold,
         lineHeight = 24.sp,
-        modifier = Modifier.requiredWidth(356.dp),
+        modifier = Modifier.fillMaxWidth(),
     )
 }
 
@@ -422,7 +421,6 @@ private fun TiltedEventButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .offset(x = EventButtonTiltCompensation)
             .requiredWidth(width)
             .requiredHeight(58.203.dp)
             .graphicsLayer {
