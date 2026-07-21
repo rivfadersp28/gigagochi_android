@@ -31,7 +31,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PetMemoryStateEntity::class,
         ProactiveNotificationEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -65,10 +65,16 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration3To4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `applied_outfit_receipts` ADD COLUMN `displayItem` TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
             DatabaseName,
-        ).addMigrations(Migration1To2, Migration2To3).build()
+        ).addMigrations(Migration1To2, Migration2To3, Migration3To4).build()
     }
 }

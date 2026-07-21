@@ -255,6 +255,37 @@ class PetLocalRepository(
         )
     }
 
+    suspend fun recentCharacterExperiences(
+        ownerId: String,
+        petId: String,
+        limitPerKind: Int = 2,
+    ): List<LocalCharacterExperience> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        val limit = limitPerKind.coerceIn(1, 5)
+        val travels = dao.getRecentTravelVideoAssets(ownerId, petId, limit).map { asset ->
+            val subject = asset.title?.takeIf(String::isNotBlank) ?: asset.prompt
+            val scenario = asset.scenario?.takeIf(String::isNotBlank)?.let { " Сюжет: $it" }.orEmpty()
+            LocalCharacterExperience(
+                id = "character-travel:${asset.requestKey}",
+                kind = "character_travel",
+                text = "Недавнее путешествие персонажа: $subject.$scenario".memoryText(),
+                occurredAtEpochMillis = asset.completedAtEpochMillis,
+            )
+        }
+        val outfits = dao.getRecentAppliedOutfitReceipts(ownerId, petId, limit)
+            .filter { it.displayItem.isNotBlank() }
+            .map { receipt ->
+                LocalCharacterExperience(
+                    id = "character-outfit:${receipt.requestKey}",
+                    kind = "character_outfit",
+                    text = "Недавнее переодевание персонажа: ${receipt.displayItem}.".memoryText(),
+                    occurredAtEpochMillis = receipt.appliedAtEpochMillis,
+                )
+            }
+        return (travels + outfits).sortedByDescending(LocalCharacterExperience::occurredAtEpochMillis)
+    }
+
     suspend fun rememberDeterministicFacts(
         ownerId: String,
         petId: String,
@@ -1252,6 +1283,7 @@ class PetLocalRepository(
                         petId,
                         requestKey,
                         outcome.assetSetId,
+                        outcome.displayItem,
                         outcome.completedAtEpochMillis,
                     ),
                 ) == -1L
@@ -2076,6 +2108,10 @@ private fun JsonObject.instant(key: String): Long? = text(key)?.let { value ->
 
 private fun localDateKey(epochMillis: Long): String =
     Instant.ofEpochMilli(epochMillis).toString().take(10)
+
+private fun String.memoryText(): String = trim()
+    .replace(Regex("\\s+"), " ")
+    .take(500)
 
 private fun PetMoodImageEntity.toModel() = PetMoodImage(stage, mood, url)
 private fun OutfitMoodImageEntity.toModel() = PetMoodImage(stage, mood, url)

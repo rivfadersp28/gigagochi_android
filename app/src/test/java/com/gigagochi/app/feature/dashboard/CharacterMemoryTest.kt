@@ -1,6 +1,7 @@
 package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.database.LocalChatMessage
+import com.gigagochi.app.core.database.LocalCharacterExperience
 import com.gigagochi.app.core.database.LocalPetMemoryState
 import com.gigagochi.app.core.database.LocalUserMemory
 import java.time.LocalDate
@@ -42,6 +43,36 @@ class CharacterMemoryTest {
         )
 
         assertEquals(listOf("name-memory"), context.relevantMemories.map { it.id })
+    }
+
+    @Test
+    fun recentCharacterExperiencesAreAlwaysIncludedInChatMemory() {
+        val experiences = listOf(
+            LocalCharacterExperience(
+                id = "character-travel:travel-1",
+                kind = "character_travel",
+                text = "Недавнее путешествие персонажа: Ночной рынок.",
+                occurredAtEpochMillis = now - 2_000,
+            ),
+            LocalCharacterExperience(
+                id = "character-outfit:outfit-1",
+                kind = "character_outfit",
+                text = "Недавнее переодевание персонажа: плащ.",
+                occurredAtEpochMillis = now - 1_000,
+            ),
+        )
+
+        val context = buildChatMemoryContext(
+            LocalPetMemoryState(),
+            emptyList(),
+            "Как дела?",
+            now,
+            experiences,
+        )
+
+        assertEquals(experiences.map { it.id }, context.relevantMemories.map { it.id })
+        assertTrue(context.relevantMemories.all { it.memoryClass == "episode" })
+        assertTrue(context.relevantMemories.all { it.occurredAt != null })
     }
 
     @Test

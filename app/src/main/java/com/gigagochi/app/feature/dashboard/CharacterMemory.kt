@@ -2,6 +2,7 @@ package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.database.DeterministicMemoryFact
 import com.gigagochi.app.core.database.LocalChatMessage
+import com.gigagochi.app.core.database.LocalCharacterExperience
 import com.gigagochi.app.core.database.LocalPetMemoryState
 import com.gigagochi.app.core.database.LocalUserMemory
 import com.gigagochi.app.core.network.ChatHistoryItemDto
@@ -155,6 +156,7 @@ fun buildChatMemoryContext(
     history: List<LocalChatMessage>,
     message: String,
     nowEpochMillis: Long,
+    characterExperiences: List<LocalCharacterExperience> = emptyList(),
 ): MemoryContextDto {
     val query = tokens(message)
     val explicitRecall = RecallQuestion.containsMatchIn(message)
@@ -185,7 +187,8 @@ fun buildChatMemoryContext(
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
-        relevantMemories = selected.map(LocalUserMemory::toContextDto),
+        relevantMemories = selected.map(LocalUserMemory::toContextDto) +
+            characterExperiences.map(LocalCharacterExperience::toContextDto),
         episodes = episodes,
     )
 }
@@ -195,6 +198,7 @@ fun buildDailyProactiveContext(
     history: List<LocalChatMessage>,
     nowEpochMillis: Long,
     zoneId: ZoneId = ZoneId.systemDefault(),
+    characterExperiences: List<LocalCharacterExperience> = emptyList(),
 ): MemoryContextDto? {
     val today = LocalDate.ofInstant(Instant.ofEpochMilli(nowEpochMillis), zoneId)
     val lastDay = memory.lastProactiveAtEpochMillis?.let {
@@ -222,7 +226,8 @@ fun buildDailyProactiveContext(
             userProfile = memory.userProfile,
             relevantMemories = (knownUserName + due)
                 .distinctBy(LocalUserMemory::id)
-                .map(LocalUserMemory::toContextDto),
+                .map(LocalUserMemory::toContextDto) +
+                characterExperiences.map(LocalCharacterExperience::toContextDto),
             proactiveCandidate = ProactiveCandidateDto(due.map { it.id }, reason = reason),
         )
     }
@@ -240,7 +245,8 @@ fun buildDailyProactiveContext(
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
-        relevantMemories = knownUserName.map(LocalUserMemory::toContextDto),
+        relevantMemories = knownUserName.map(LocalUserMemory::toContextDto) +
+            characterExperiences.map(LocalCharacterExperience::toContextDto),
         episodes = listOf(episode),
         proactiveCandidate = ProactiveCandidateDto(
             episodeIds = listOf(episode.id),
@@ -360,6 +366,15 @@ private fun LocalUserMemory.toContextDto() = MemoryContextItemDto(
     occurredAt = occurredAtEpochMillis?.let { Instant.ofEpochMilli(it).toString() },
     lastMentionedAt = lastMentionedAtEpochMillis?.let { Instant.ofEpochMilli(it).toString() },
     dueAt = dueAtEpochMillis?.let { Instant.ofEpochMilli(it).toString() },
+)
+
+private fun LocalCharacterExperience.toContextDto() = MemoryContextItemDto(
+    id = id,
+    kind = kind,
+    text = text,
+    memoryClass = "episode",
+    recordedAt = Instant.ofEpochMilli(occurredAtEpochMillis).toString(),
+    occurredAt = Instant.ofEpochMilli(occurredAtEpochMillis).toString(),
 )
 
 private fun LocalPetMemoryState.activeUserNameMemories(nowEpochMillis: Long): List<LocalUserMemory> =

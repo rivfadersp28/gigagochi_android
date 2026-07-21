@@ -51,6 +51,13 @@ data class LocalPetMemoryState(
     val learnings: List<LocalMemoryLearning> = emptyList(),
 )
 
+data class LocalCharacterExperience(
+    val id: String,
+    val kind: String,
+    val text: String,
+    val occurredAtEpochMillis: Long,
+)
+
 data class DeterministicMemoryFact(
     val kind: String,
     val text: String,

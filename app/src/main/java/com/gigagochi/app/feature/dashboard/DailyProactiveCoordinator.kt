@@ -21,7 +21,13 @@ class DailyProactiveCoordinator(
     ): Boolean {
         val memory = repository.memoryState(ownerId, pet.petId)
         val history = repository.recentChatMessages(ownerId, pet.petId, 200)
-        val context = buildDailyProactiveContext(memory, history, nowEpochMillis) ?: return false
+        val characterExperiences = repository.recentCharacterExperiences(ownerId, pet.petId)
+        val context = buildDailyProactiveContext(
+            memory,
+            history,
+            nowEpochMillis,
+            characterExperiences = characterExperiences,
+        ) ?: return false
         return when (
             val response = api.proactive(
                 ProactiveRequestDto(
