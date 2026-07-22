@@ -151,7 +151,7 @@ fun canonicalOutfitDisplayItem(prompt: String): String {
 fun outfitQueuedReply(displayItem: String): String {
     val normalized = displayItem.trim()
     val titled = normalized.withCapitalizedSentenceStarts().ifBlank { "Наряд" }
-    return "$titled? Интересно. Я получу заказ примерно через 10 минут"
+    return "$titled? Интересно, давай я позову тебя, когда переоденусь."
 }
 
 fun travelQueuedReply(destination: String): String {

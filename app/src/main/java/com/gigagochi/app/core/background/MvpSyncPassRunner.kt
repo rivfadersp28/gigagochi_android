@@ -8,6 +8,7 @@ import com.gigagochi.app.core.network.FeatureFailureKind
 import kotlinx.coroutines.CancellationException
 
 enum class MvpSyncPassResult { Success, Retry }
+enum class CompletionNotificationDispatchResult { Complete, PermissionBlocked, Retry }
 
 fun interface LocalNotificationEmitter {
     fun emit(notification: LocalCompletionNotification): Boolean
@@ -31,13 +32,16 @@ class MvpSyncPassRunner(
             if (failure?.kind == FeatureFailureKind.SessionInvalid) {
                 return MvpSyncPassResult.Success
             }
-            CompletionNotificationDispatcher(
+            val notificationResult = CompletionNotificationDispatcher(
                 notificationsAllowed,
                 loadNotifications,
                 emitter,
                 markNotified,
             ).dispatch(session.accountId, pet.petId)
-            if (failure?.kind in RetryableSyncFailures) {
+            if (
+                failure?.kind in RetryableSyncFailures ||
+                notificationResult == CompletionNotificationDispatchResult.Retry
+            ) {
                 MvpSyncPassResult.Retry
             } else {
                 MvpSyncPassResult.Success
@@ -57,10 +61,20 @@ class CompletionNotificationDispatcher(
     private val emitter: LocalNotificationEmitter,
     private val markNotified: suspend (ownerId: String, LocalCompletionNotification) -> Unit,
 ) {
-    suspend fun dispatch(ownerId: String, petId: String) {
-        if (!notificationsAllowed()) return
-        loadNotifications(ownerId, petId).forEach { notification ->
+    suspend fun dispatch(
+        ownerId: String,
+        petId: String,
+    ): CompletionNotificationDispatchResult {
+        val pending = loadNotifications(ownerId, petId)
+        if (pending.isEmpty()) return CompletionNotificationDispatchResult.Complete
+        if (!notificationsAllowed()) return CompletionNotificationDispatchResult.PermissionBlocked
+        pending.forEach { notification ->
             if (emitter.emit(notification)) markNotified(ownerId, notification)
+        }
+        return if (loadNotifications(ownerId, petId).isEmpty()) {
+            CompletionNotificationDispatchResult.Complete
+        } else {
+            CompletionNotificationDispatchResult.Retry
         }
     }
 }

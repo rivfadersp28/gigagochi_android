@@ -1,7 +1,7 @@
 package com.gigagochi.app.feature.create
 
-import com.gigagochi.app.core.background.LocalNotificationEmitter
 import com.gigagochi.app.core.database.InMemoryFeatureStore
+import com.gigagochi.app.core.database.LocalCompletionNotification
 import com.gigagochi.app.core.database.LocalPendingCreateGeneration
 import com.gigagochi.app.core.database.OwnedPetSnapshot
 import com.gigagochi.app.core.database.PendingBackendState
@@ -23,14 +23,16 @@ class DurableCreateRecoveryCoordinatorTest {
     @Test
     fun runningForegroundResultCreatesPetNotifiesOnceAndKeepsPending() = runBlocking {
         val store = RecoveryStore()
-        val emitted = mutableListOf<String>()
 
-        val result = coordinator(store, runningEnvelope(), emitted).recoverOnce()
+        val result = coordinator(store, runningEnvelope()).recoverOnce()
 
         assertEquals(DurableCreateRecoveryResult.Retry, result)
         assertNotNull(store.snapshot)
+        assertEquals(InitialPetStatValue, store.snapshot?.pet?.hunger)
+        assertEquals(InitialPetStatValue, store.snapshot?.pet?.happiness)
+        assertEquals(InitialPetStatValue, store.snapshot?.pet?.energy)
         assertEquals(PendingBackendState.ForegroundReady, store.creates.single().backendState)
-        assertEquals(listOf(Key), emitted)
+        assertEquals(listOf(Key), store.notifications.map { it.stableKey })
     }
 
     @Test
@@ -42,81 +44,75 @@ class DurableCreateRecoveryCoordinatorTest {
                 1L,
             )
         }
-        val emitted = mutableListOf<String>()
 
-        val result = coordinator(store, succeededEnvelope(), emitted).recoverOnce()
+        val result = coordinator(store, succeededEnvelope()).recoverOnce()
 
         assertEquals(DurableCreateRecoveryResult.Complete, result)
         assertTrue(store.creates.isEmpty())
-        assertEquals(emptyList<String>(), emitted)
+        assertEquals(emptyList<LocalCompletionNotification>(), store.notifications)
         assertEquals(FullHappyVideo, store.snapshot?.pet?.generatedMedia?.happyVideoUrl)
     }
 
     @Test
-    fun unavailableNotificationsDoNotBlockCompletedCreate() = runBlocking {
-        val store = RecoveryStore()
+    fun unavailableOutboxKeepsCompletedCreateRetryable() = runBlocking {
+        val store = RecoveryStore(enqueueSucceeds = false)
         val api = api(succeededEnvelope())
         val result = DurableCreateRecoveryCoordinator(
             OwnerId,
             store,
             store,
             api,
-            LocalNotificationEmitter { false },
+            store,
         ).recoverOnce()
 
-        assertEquals(DurableCreateRecoveryResult.Complete, result)
+        assertEquals(DurableCreateRecoveryResult.Retry, result)
         assertNotNull(store.snapshot)
-        assertTrue(store.creates.isEmpty())
+        assertTrue(store.creates.isNotEmpty())
     }
 
     @Test
     fun terminalFailureEmitsCreateFailureNotification() = runBlocking {
         val store = RecoveryStore()
-        val notifications = mutableListOf<com.gigagochi.app.core.database.LocalCompletionNotification>()
         val result = DurableCreateRecoveryCoordinator(
             OwnerId,
             store,
             store,
             api(envelope(GenerationJobStatusDto.Failed, GenerationJobPhaseDto.Completed, asset(false))),
-            LocalNotificationEmitter {
-                notifications += it
-                true
-            },
+            store,
         ).recoverOnce()
 
         assertEquals(DurableCreateRecoveryResult.Terminal, result)
         assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
-        assertEquals("Не получилось создать персонажа, попробуй еще раз", notifications.single().body)
+        assertEquals(
+            "Не получилось создать персонажа, попробуй еще раз",
+            store.notifications.single().body,
+        )
     }
 
     @Test
-    fun unavailableFailureNotificationStillStopsTerminalPolling() = runBlocking {
-        val store = RecoveryStore()
+    fun unavailableFailureOutboxKeepsTerminalCreateRetryable() = runBlocking {
+        val store = RecoveryStore(enqueueSucceeds = false)
         val result = DurableCreateRecoveryCoordinator(
             OwnerId,
             store,
             store,
             api(envelope(GenerationJobStatusDto.Failed, GenerationJobPhaseDto.Completed, asset(false))),
-            LocalNotificationEmitter { false },
+            store,
         ).recoverOnce()
 
-        assertEquals(DurableCreateRecoveryResult.Terminal, result)
+        assertEquals(DurableCreateRecoveryResult.Retry, result)
         assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
     }
 
     private fun coordinator(
         store: RecoveryStore,
         envelope: GenerationEnvelopeDto,
-        emitted: MutableList<String>,
     ) = DurableCreateRecoveryCoordinator(
         OwnerId,
         store,
         store,
         api(envelope),
-        LocalNotificationEmitter {
-            emitted += it.stableKey
-            true
-        },
+        store,
         nowEpochMillis = { 99L },
     )
 
@@ -126,6 +122,7 @@ class DurableCreateRecoveryCoordinatorTest {
 
     private class RecoveryStore(
         state: PendingBackendState = PendingBackendState.Attached,
+        private val enqueueSucceeds: Boolean = true,
     ) : InMemoryFeatureStore() {
         var snapshot: OwnedPetSnapshot? = null
 
@@ -143,6 +140,18 @@ class DurableCreateRecoveryCoordinatorTest {
             this.snapshot = snapshot
             return true
         }
+
+        override suspend fun enqueueNotification(
+            ownerId: String,
+            petId: String,
+            notification: LocalCompletionNotification,
+            createdAtEpochMillis: Long,
+        ): Boolean = enqueueSucceeds && super.enqueueNotification(
+            ownerId,
+            petId,
+            notification,
+            createdAtEpochMillis,
+        )
 
         override suspend fun deletePendingCreate(ownerId: String, requestKey: String): Boolean =
             creates.removeAll { it.ownerId == ownerId && it.requestKey == requestKey }

@@ -19,7 +19,7 @@ class CreateBackgroundMediaCoordinator(
     private val maxPollAttempts: Int = 600,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
     private val onMediaReady: suspend (PetDashboardState) -> Unit = {},
-    private val onGenerationFailed: (requestKey: String) -> Unit = {},
+    private val onGenerationFailed: suspend (petId: String, requestKey: String) -> Unit = { _, _ -> },
 ) {
     suspend fun recover(petId: String) {
         repeat(maxPollAttempts) { attempt ->
@@ -52,7 +52,7 @@ class CreateBackgroundMediaCoordinator(
                                 PendingBackendState.Failed,
                                 "BACKGROUND_GENERATION_FAILED",
                             )
-                            onGenerationFailed(pending.requestKey)
+                            onGenerationFailed(pending.petId, pending.requestKey)
                             return
                         }
                         GenerationJobStatusDto.Succeeded -> {

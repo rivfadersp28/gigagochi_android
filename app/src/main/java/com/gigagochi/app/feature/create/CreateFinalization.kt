@@ -13,6 +13,8 @@ sealed interface CreateFinalizationResult {
     data object Failure : CreateFinalizationResult
 }
 
+internal const val InitialPetStatValue = 50
+
 class CreateFinalizationCoordinator(
     private val ownerId: String,
     @Suppress("unused")
@@ -43,9 +45,9 @@ class CreateFinalizationCoordinator(
             stageLabel = "Малыш",
             mood = "idle",
             experience = 0,
-            hunger = 100,
-            happiness = 100,
-            energy = 100,
+            hunger = InitialPetStatValue,
+            happiness = InitialPetStatValue,
+            energy = InitialPetStatValue,
             message = "Как тебя зовут?",
             generatedMedia = generated.generatedMedia,
         )
@@ -91,9 +93,9 @@ internal fun createdPetFromPending(
         stageLabel = "Малыш",
         mood = "idle",
         experience = 0,
-        hunger = 100,
-        happiness = 100,
-        energy = 100,
+        hunger = InitialPetStatValue,
+        happiness = InitialPetStatValue,
+        energy = InitialPetStatValue,
         message = "Как тебя зовут?",
         generatedMedia = generated.generatedMedia,
     )

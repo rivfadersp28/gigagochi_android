@@ -189,7 +189,7 @@ class RealDashboardFeatureAdaptersTest {
             store,
             store,
             api,
-            onTravelFailed = failedNotifications::add,
+            onTravelFailed = { _, requestKey -> failedNotifications += requestKey },
         )
         var failed = false
         try {
@@ -221,7 +221,7 @@ class RealDashboardFeatureAdaptersTest {
             store,
             store,
             api,
-            onOutfitFailed = failedNotifications::add,
+            onOutfitFailed = { _, requestKey -> failedNotifications += requestKey },
         )
 
         var failed = false
@@ -344,6 +344,21 @@ class RealDashboardFeatureAdaptersTest {
         assertEquals("APPLY_CONFLICT", store.outfits.single().backendErrorCode)
     }
 
+    @Test
+    fun foregroundReloadsPetWhenBackgroundWorkerWonOutcomeApplyRace() = runBlocking {
+        val store = AlreadyAppliedOutcomeStore()
+
+        val result = DashboardOutcomeApplicationCoordinator(
+            "owner-a", store, store, store,
+        ).applyReady("pet-a")
+
+        assertTrue(result is DashboardOutcomeRecoveryResult.Changed)
+        assertEquals(
+            "asset-new",
+            (result as DashboardOutcomeRecoveryResult.Changed).pet.assetSetId,
+        )
+    }
+
     private fun outfit() = LocalPendingOutfit(
         "owner-a", "pet-a", Key, "local-outfit", null, "В плащ", "asset-a", 1,
     )
@@ -450,6 +465,45 @@ private class ConflictOutcomeStore : InMemoryFeatureStore(), DashboardOutcomeSto
         petId: String,
         requestKey: String,
     ) = OutfitOutcomeApplicationResult.Conflict
+
+    override suspend fun consumeTravelAsset(
+        ownerId: String,
+        petId: String,
+        requestKey: String,
+        consumedAtEpochMillis: Long,
+    ) = TravelAssetConsumptionResult.NotReady
+}
+
+private class AlreadyAppliedOutcomeStore : InMemoryFeatureStore(), DashboardOutcomeStore {
+    private var recoveryLoads = 0
+    private val oldPet = PetDashboardState(
+        "pet-a", "asset-a", "dragon", "Toto", "baby", "Малыш", "idle",
+        500, 100, 100, 100, "hi",
+    )
+    private val newPet = oldPet.copy(assetSetId = "asset-new")
+    private val ready = LocalPendingOutfit(
+        "owner-a", "pet-a", "outfit-race", "local-outfit", "job-outfit",
+        "Футболка Mayhem", "asset-a", 1, backendState = PendingBackendState.Ready,
+    )
+
+    override suspend fun loadOwnerRecovery(ownerId: String): OwnerRecoveryData {
+        recoveryLoads += 1
+        return OwnerRecoveryData(
+            petSnapshots = listOf(
+                OwnedPetSnapshot(ownerId, if (recoveryLoads == 1) oldPet else newPet, recoveryLoads.toLong()),
+            ),
+            pendingCreates = emptyList(),
+            pendingOutfits = if (recoveryLoads == 1) listOf(ready) else emptyList(),
+            pendingTravels = emptyList(),
+            storyReceipts = emptyList(),
+        )
+    }
+
+    override suspend fun applyOutfitOutcome(
+        ownerId: String,
+        petId: String,
+        requestKey: String,
+    ) = OutfitOutcomeApplicationResult.AlreadyApplied(newPet)
 
     override suspend fun consumeTravelAsset(
         ownerId: String,

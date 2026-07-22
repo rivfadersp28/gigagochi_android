@@ -136,7 +136,7 @@ class PetLocalRepository(
     private val database: GigagochiDatabase,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) : OwnerRecoveryStore, PendingBackendStateStore, FeatureMediaOutcomeStore, DashboardOutcomeStore,
-    ScheduledStoryStore {
+    ScheduledStoryStore, NotificationOutboxStore {
     private val dao: GigagochiDao = database.gigagochiDao()
 
     suspend fun appendChatMessages(
@@ -525,6 +525,19 @@ class PetLocalRepository(
                     reply,
                     nowEpochMillis,
                 )
+                check(
+                    enqueueNotificationInTransaction(
+                        ownerId,
+                        petId,
+                        LocalCompletionNotification(
+                            kind = LocalNotificationKind.Proactive,
+                            stableKey = notificationId,
+                            title = "Сообщение от питомца",
+                            body = reply.take(180),
+                        ),
+                        nowEpochMillis,
+                    ),
+                )
             }
             inserted
         }
@@ -804,6 +817,7 @@ class PetLocalRepository(
         val stage = FirstSessionStage.fromStorage(session.stage)
         val nextStage = when {
             stage == FirstSessionStage.AwaitingFirstFood && food == "berry-bowl" -> FirstSessionStage.AwaitingRemedy
+            stage == FirstSessionStage.AwaitingFirstFood && food == "leaf-crunch" -> FirstSessionStage.AwaitingFirstFood
             stage == FirstSessionStage.AwaitingRemedy && food == "leaf-crunch" -> FirstSessionStage.AwaitingTravel
             stage == FirstSessionStage.AwaitingRemedy && food == "berry-bowl" -> FirstSessionStage.AwaitingRemedy
             else -> return@withTransaction FirstSessionMutationResult.WrongStage
@@ -1338,6 +1352,19 @@ class PetLocalRepository(
             ) {
                 return@withTransaction OutfitOutcomeApplicationResult.Conflict
             }
+            check(
+                enqueueNotificationInTransaction(
+                    ownerId,
+                    petId,
+                    LocalCompletionNotification(
+                        LocalNotificationKind.OutfitReady,
+                        requestKey,
+                        "Новый образ готов",
+                        "Загляни к питомцу и посмотри результат.",
+                    ),
+                    outcome.completedAtEpochMillis,
+                ),
+            )
             dao.upsertPet(OwnedPetSnapshot(ownerId, appliedPet, outcome.completedAtEpochMillis).toEntity())
             dao.deleteMoodImages(ownerId, petId)
             if (outcomeImages.isNotEmpty()) {
@@ -1377,6 +1404,20 @@ class PetLocalRepository(
                 return@withTransaction TravelAssetConsumptionResult.Conflict
             }
             check(dao.consumeTravelVideoAsset(ownerId, requestKey, consumedAtEpochMillis) == 1)
+            check(
+                enqueueNotificationInTransaction(
+                    ownerId,
+                    petId,
+                    LocalCompletionNotification(
+                        kind = LocalNotificationKind.TravelReady,
+                        stableKey = requestKey,
+                        title = "Я вернулся из путешествия",
+                        body = "Открой моё новое видео.",
+                        travelRequestKey = requestKey,
+                    ),
+                    consumedAtEpochMillis,
+                ),
+            )
             check(dao.deletePendingTravel(ownerId, requestKey) == 1)
             TravelAssetConsumptionResult.Consumed(
                 asset.copy(consumedAtEpochMillis = consumedAtEpochMillis).toModel(),
@@ -1454,7 +1495,27 @@ class PetLocalRepository(
         return database.withTransaction {
             val current = dao.getScheduledStory(story.ownerId, story.story.storyId)
             if (current == null) {
-                return@withTransaction dao.insertScheduledStory(story.toEntity()) != -1L
+                if (dao.insertScheduledStory(story.toEntity()) == -1L) return@withTransaction false
+                if (story.notifiedAtEpochMillis == null) {
+                    val createdAt = runCatching {
+                        java.time.Instant.parse(story.story.createdAt).toEpochMilli()
+                    }.getOrElse { nowEpochMillis() }
+                    check(
+                        enqueueNotificationInTransaction(
+                            story.ownerId,
+                            story.story.petId,
+                            LocalCompletionNotification(
+                                kind = LocalNotificationKind.ScheduledStory,
+                                stableKey = story.story.storyId,
+                                title = story.story.title,
+                                body = story.story.text.take(180),
+                                storyId = story.story.storyId,
+                            ),
+                            createdAt,
+                        ),
+                    )
+                }
+                return@withTransaction true
             }
             val existing = current.toModel()
             if (existing.story.withoutOutcome() != story.story.withoutOutcome()) {
@@ -1575,52 +1636,55 @@ class PetLocalRepository(
     ): List<LocalCompletionNotification> {
         LocalPersistenceValidation.ownerId(ownerId)
         LocalPersistenceValidation.petId(petId)
+        return dao.getPendingNotificationOutbox(ownerId, petId).map(NotificationOutboxEntity::toModel)
+    }
+
+    suspend fun getUnnotifiedNotifications(ownerId: String): List<LocalCompletionNotification> {
+        LocalPersistenceValidation.ownerId(ownerId)
+        return dao.getPendingNotificationOutbox(ownerId).map(NotificationOutboxEntity::toModel)
+    }
+
+    override suspend fun enqueueNotification(
+        ownerId: String,
+        petId: String,
+        notification: LocalCompletionNotification,
+        createdAtEpochMillis: Long,
+    ): Boolean {
+        LocalPersistenceValidation.notification(ownerId, petId, notification, createdAtEpochMillis)
         return database.withTransaction {
-            buildList {
-                dao.getUnnotifiedScheduledStories(ownerId, petId).forEach {
-                    add(
-                        LocalCompletionNotification(
-                            LocalNotificationKind.ScheduledStory,
-                            it.storyId,
-                            it.title,
-                            it.text.take(180),
-                            it.storyId,
-                        ),
-                    )
-                }
-                dao.getUnnotifiedAppliedOutfitReceipts(ownerId, petId).forEach {
-                    add(
-                        LocalCompletionNotification(
-                            LocalNotificationKind.OutfitReady,
-                            it.requestKey,
-                            "Новый образ готов",
-                            "Загляни к питомцу и посмотри результат.",
-                        ),
-                    )
-                }
-                dao.getUnnotifiedTravelVideoAssets(ownerId, petId).forEach {
-                    add(
-                        LocalCompletionNotification(
-                            kind = LocalNotificationKind.TravelReady,
-                            stableKey = it.requestKey,
-                            title = "Я вернулся из путешествия",
-                            body = "Открой моё новое видео.",
-                            travelRequestKey = it.requestKey,
-                        ),
-                    )
-                }
-                dao.getUnnotifiedProactiveNotifications(ownerId, petId).forEach {
-                    add(
-                        LocalCompletionNotification(
-                            kind = LocalNotificationKind.Proactive,
-                            stableKey = it.notificationId,
-                            title = "Сообщение от питомца",
-                            body = it.reply.take(180),
-                        ),
-                    )
-                }
-            }
+            enqueueNotificationInTransaction(ownerId, petId, notification, createdAtEpochMillis)
         }
+    }
+
+    private suspend fun enqueueNotificationInTransaction(
+        ownerId: String,
+        petId: String,
+        notification: LocalCompletionNotification,
+        createdAtEpochMillis: Long,
+    ): Boolean {
+        LocalPersistenceValidation.notification(ownerId, petId, notification, createdAtEpochMillis)
+        val existing = dao.getNotificationOutbox(
+            ownerId,
+            notification.kind.name,
+            notification.stableKey,
+        )
+        if (existing != null) {
+            return existing.petId == petId && existing.toModel() == notification
+        }
+        return dao.insertNotificationOutbox(
+            NotificationOutboxEntity(
+                ownerId = ownerId,
+                petId = petId,
+                kind = notification.kind.name,
+                stableKey = notification.stableKey,
+                title = notification.title,
+                body = notification.body,
+                storyId = notification.storyId,
+                travelRequestKey = notification.travelRequestKey,
+                createdAtEpochMillis = createdAtEpochMillis,
+                notifiedAtEpochMillis = null,
+            ),
+        ) != -1L
     }
 
     suspend fun markNotificationSent(
@@ -1630,7 +1694,13 @@ class PetLocalRepository(
     ): Boolean {
         LocalPersistenceValidation.ownerId(ownerId)
         require(notifiedAtEpochMillis >= 0)
-        return when (notification.kind) {
+        val outboxMarked = dao.markNotificationOutboxNotified(
+            ownerId,
+            notification.kind.name,
+            notification.stableKey,
+            notifiedAtEpochMillis,
+        ) == 1
+        val legacyMarked = when (notification.kind) {
             LocalNotificationKind.PetReady -> false
             LocalNotificationKind.ScheduledStory -> {
                 LocalPersistenceValidation.storyId(notification.stableKey)
@@ -1663,6 +1733,7 @@ class PetLocalRepository(
                 notifiedAtEpochMillis,
             ) == 1
         }
+        return outboxMarked || legacyMarked
     }
 
     suspend fun deleteOwnerData(ownerId: String) {
@@ -1688,6 +1759,7 @@ class PetLocalRepository(
             dao.deleteOwnerMemoryLearnings(ownerId)
             dao.deleteOwnerPetMemoryStates(ownerId)
             dao.deleteOwnerProactiveNotifications(ownerId)
+            dao.deleteOwnerNotificationOutbox(ownerId)
             dao.deleteOwnerEventHistoryViews(ownerId)
             dao.deleteOwnerPets(ownerId)
         }
@@ -1784,6 +1856,22 @@ object LocalPersistenceValidation {
     fun backendJobId(value: String) = identifier("backendJobId", value, JobIdMax)
     fun receiptKey(value: String) = identifier("receiptKey", value, ReceiptKeyMax)
     fun storyId(value: String) = identifier("storyId", value, StoryIdMax)
+
+    fun notification(
+        ownerId: String,
+        petId: String,
+        value: LocalCompletionNotification,
+        createdAtEpochMillis: Long,
+    ) {
+        ownerId(ownerId)
+        petId(petId)
+        identifier("notification stableKey", value.stableKey, 255)
+        bounded("notification title", value.title, 120)
+        bounded("notification body", value.body, 500)
+        value.storyId?.let(::storyId)
+        value.travelRequestKey?.let(::requestKey)
+        timestamp("notification createdAtEpochMillis", createdAtEpochMillis)
+    }
 
     fun scheduledStory(value: LocalScheduledStory) {
         ownerId(value.ownerId)
@@ -2028,6 +2116,15 @@ private fun ScheduledStory.withoutOutcome() = copy(
     result = null,
     resultImageUrl = null,
     resultVideoUrl = null,
+)
+
+private fun NotificationOutboxEntity.toModel() = LocalCompletionNotification(
+    kind = LocalNotificationKind.valueOf(kind),
+    stableKey = stableKey,
+    title = title,
+    body = body,
+    storyId = storyId,
+    travelRequestKey = travelRequestKey,
 )
 
 private fun LocalScheduledStory.toEntity() = ScheduledStoryEntity(

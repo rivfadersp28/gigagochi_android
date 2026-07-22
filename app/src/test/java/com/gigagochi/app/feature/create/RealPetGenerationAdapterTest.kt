@@ -113,7 +113,7 @@ class RealPetGenerationAdapterTest {
             api,
             pollDelayMillis = 0,
             maxPollAttempts = 1,
-            onGenerationFailed = failures::add,
+            onGenerationFailed = { _, requestKey -> failures += requestKey },
         )
 
         var failed = false

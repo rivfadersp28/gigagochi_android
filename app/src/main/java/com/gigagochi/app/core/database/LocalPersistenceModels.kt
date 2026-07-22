@@ -204,6 +204,15 @@ data class LocalCompletionNotification(
     val travelRequestKey: String? = null,
 )
 
+interface NotificationOutboxStore {
+    suspend fun enqueueNotification(
+        ownerId: String,
+        petId: String,
+        notification: LocalCompletionNotification,
+        createdAtEpochMillis: Long = System.currentTimeMillis(),
+    ): Boolean
+}
+
 data class LocalOutfitMediaOutcome(
     val ownerId: String,
     val petId: String,

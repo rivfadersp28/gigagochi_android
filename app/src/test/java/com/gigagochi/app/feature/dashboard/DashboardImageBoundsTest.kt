@@ -23,7 +23,7 @@ class DashboardImageBoundsTest {
         assertEquals(362.dp, DashboardInputMaxWidth)
         assertEquals(826.dp, dashboardSafeViewportHeight(874.dp, 48.dp))
         assertEquals(762.dp, dashboardActionTop(874.dp, 1f))
-        assertEquals(672.203.dp, dashboardFeedRowTop(762.dp))
+        assertEquals(692.203.dp, dashboardFeedRowTop(762.dp))
 
         val scale = 411f / 402f
         val viewportHeight = 823.dp
@@ -32,7 +32,8 @@ class DashboardImageBoundsTest {
 
         assertTrue(actionTop < 762.dp)
         assertTrue(actionTop + 58.203.dp + 16.dp <= visibleReferenceBottom)
-        assertTrue(dashboardFeedRowTop(actionTop) + 148.dp + 16.dp <= visibleReferenceBottom)
+        // The 94 dp cards are vertically centered inside the 148 dp feed row.
+        assertTrue(dashboardFeedRowTop(actionTop) + 121.dp + 16.dp <= visibleReferenceBottom)
     }
 
     @Test

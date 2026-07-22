@@ -13,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -41,6 +43,27 @@ internal const val PetTapParticleLifetimeFrames = 136f
 internal const val PetTapParticleLifeDecayPerFrame = 1.2f
 internal const val PetTapParticleFriction = .99f
 internal const val PetTapParticleGravity = -.04f
+
+internal val DashboardReferenceSize = Size(402f, 874f)
+internal const val DashboardReferenceAspectRatio = 402f / 874f
+private const val PetSceneAspectRatio = 720f / 1280f
+private const val PetTapRegionLeft = 120f / 720f
+private const val PetTapRegionTop = 180f / 1280f
+private const val PetTapRegionRight = 600f / 720f
+private const val PetTapRegionBottom = 840f / 1280f
+
+internal fun petTapTargetRect(referenceSize: Size = DashboardReferenceSize): Rect {
+    val mediaWidth = referenceSize.height * PetSceneAspectRatio
+    val mediaLeft = (referenceSize.width - mediaWidth) / 2f
+    return Rect(
+        left = mediaLeft + mediaWidth * PetTapRegionLeft,
+        top = referenceSize.height * PetTapRegionTop,
+        right = mediaLeft + mediaWidth * PetTapRegionRight,
+        bottom = referenceSize.height * PetTapRegionBottom,
+    )
+}
+
+internal val DashboardPetTapTarget = petTapTargetRect()
 
 internal data class PetTapHeartParticleSpec(
     val startOffsetX: Float,

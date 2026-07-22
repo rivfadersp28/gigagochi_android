@@ -78,19 +78,31 @@ class CreateSyncWorker(
         val database = GigagochiDatabase.build(applicationContext)
         return try {
             val repository = PetLocalRepository(database)
-            when (
-                DurableCreateRecoveryCoordinator(
-                    session.accountId,
-                    repository,
-                    repository,
-                    api,
-                    AndroidLocalNotificationEmitter(applicationContext),
-                ).recoverOnce()
-            ) {
-                DurableCreateRecoveryResult.Complete,
-                DurableCreateRecoveryResult.Terminal,
-                -> Result.success()
-                DurableCreateRecoveryResult.Retry -> Result.retry()
+            val recoveryResult = DurableCreateRecoveryCoordinator(
+                session.accountId,
+                repository,
+                repository,
+                api,
+                repository,
+            ).recoverOnce()
+            val notificationResult = CompletionNotificationDispatcher(
+                notificationsAllowed = { notificationsAllowed(applicationContext) },
+                loadNotifications = { ownerId, _ ->
+                    repository.getUnnotifiedNotifications(ownerId)
+                },
+                emitter = AndroidLocalNotificationEmitter(applicationContext),
+                markNotified = { ownerId, notification ->
+                    repository.markNotificationSent(
+                        ownerId,
+                        notification,
+                        System.currentTimeMillis(),
+                    )
+                },
+            ).dispatch(session.accountId, "create")
+            when {
+                recoveryResult == DurableCreateRecoveryResult.Retry -> Result.retry()
+                notificationResult != CompletionNotificationDispatchResult.Complete -> Result.retry()
+                else -> Result.success()
             }
         } finally {
             database.close()

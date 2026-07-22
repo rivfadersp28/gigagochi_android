@@ -28,6 +28,9 @@ class CreateFinalizationTest {
         assertTrue(result is CreateFinalizationResult.Success)
         assertEquals(listOf("persist:acct_owner_a:pet-real", "navigate"), events)
         assertEquals("Тото", store.persisted?.pet?.name)
+        assertEquals(InitialPetStatValue, store.persisted?.pet?.hunger)
+        assertEquals(InitialPetStatValue, store.persisted?.pet?.happiness)
+        assertEquals(InitialPetStatValue, store.persisted?.pet?.energy)
         assertEquals(55L, store.persisted?.updatedAtEpochMillis)
     }
 

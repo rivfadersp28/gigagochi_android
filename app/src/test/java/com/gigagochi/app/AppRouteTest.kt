@@ -7,6 +7,7 @@ import com.gigagochi.app.core.model.PetDashboardState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import androidx.lifecycle.Lifecycle
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.compose.ui.graphics.Color
@@ -153,6 +154,14 @@ class AppRouteTest {
         assertEquals(
             ExistingPeriodicWorkPolicy.KEEP,
             com.gigagochi.app.core.background.MvpSyncExistingPolicy,
+        )
+        assertEquals(
+            10L,
+            com.gigagochi.app.core.background.CompletionSyncBackoffSeconds,
+        )
+        assertEquals(
+            ExistingWorkPolicy.KEEP,
+            com.gigagochi.app.core.background.CompletionSyncExistingPolicy,
         )
         assertEquals(
             NetworkType.CONNECTED,

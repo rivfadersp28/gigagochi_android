@@ -1,12 +1,13 @@
 package com.gigagochi.app.core.database
 
 open class InMemoryFeatureStore : TestOwnerRecoveryStore(), PendingBackendStateStore,
-    FeatureMediaOutcomeStore {
+    FeatureMediaOutcomeStore, NotificationOutboxStore {
     val creates = mutableListOf<LocalPendingCreateGeneration>()
     val outfits = mutableListOf<LocalPendingOutfit>()
     val travels = mutableListOf<LocalPendingTravelVideo>()
     val outfitOutcomes = mutableListOf<LocalOutfitMediaOutcome>()
     val travelAssets = mutableListOf<LocalTravelVideoAsset>()
+    val notifications = mutableListOf<LocalCompletionNotification>()
     var createAttachCalls = 0
     var outfitAttachCalls = 0
     var travelAttachCalls = 0
@@ -113,6 +114,20 @@ open class InMemoryFeatureStore : TestOwnerRecoveryStore(), PendingBackendStateS
     override suspend fun saveOutfitMediaOutcome(outcome: LocalOutfitMediaOutcome) {
         outfitOutcomes.removeAll { it.ownerId == outcome.ownerId && it.requestKey == outcome.requestKey }
         outfitOutcomes += outcome
+    }
+
+    override suspend fun enqueueNotification(
+        ownerId: String,
+        petId: String,
+        notification: LocalCompletionNotification,
+        createdAtEpochMillis: Long,
+    ): Boolean {
+        val existing = notifications.singleOrNull {
+            it.kind == notification.kind && it.stableKey == notification.stableKey
+        }
+        if (existing != null) return existing == notification
+        notifications += notification
+        return true
     }
 
     private fun <T> update(

@@ -9,6 +9,37 @@ import org.junit.Test
 
 class PetTapReactionTest {
     @Test
+    fun tapTargetMatchesWebMediaRegionInReferenceFrame() {
+        val target = petTapTargetRect()
+
+        assertEquals(37.125f, target.left, .0001f)
+        assertEquals(122.90625f, target.top, .0001f)
+        assertEquals(364.875f, target.right, .0001f)
+        assertEquals(573.5625f, target.bottom, .0001f)
+        assertEquals(327.75f, target.width, .0001f)
+        assertEquals(450.65625f, target.height, .0001f)
+    }
+
+    @Test
+    fun shaderCenterUsesVideoViewportInsteadOfPhysicalDisplay() {
+        val center = normalizedPetTapShaderCenter(
+            centerX = DashboardReferenceSize.width * 3f * .25f,
+            centerY = DashboardReferenceSize.height * 3f * .75f,
+            width = DashboardReferenceSize.width * 3f,
+            height = DashboardReferenceSize.height * 3f,
+        )
+
+        requireNotNull(center)
+        assertEquals(.25f, center.x, .0001f)
+        assertEquals(.25f, center.y, .0001f)
+        assertEquals(
+            DashboardReferenceSize.width / DashboardReferenceSize.height,
+            DashboardReferenceAspectRatio,
+            .0001f,
+        )
+    }
+
+    @Test
     fun nativeParticlesMatchMobileWebTimingAndBounds() {
         val particles = petTapHeartParticles(burstId = 7)
 
