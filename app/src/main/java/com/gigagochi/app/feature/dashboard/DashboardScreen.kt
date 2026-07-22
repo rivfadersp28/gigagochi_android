@@ -95,6 +95,7 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -772,9 +773,44 @@ private fun DashboardInlineScreen(
         FirstSessionStage.AwaitingCompletionMessage,
         FirstSessionStage.Completed,
     )
+    val tapAdvanceReply = state.chatReply ?: state.feedReply ?: state.transientReply
+        ?: state.firstSessionIdleReply.takeIf { state.mode == DashboardMode.Idle }
+    val tapAdvanceModifier = if (
+        tapAdvanceReply?.hasNextPortion == true && !debugState.freezesReplyAdvance
+    ) {
+        Modifier.pointerInput(tapAdvanceReply.requestKey, tapAdvanceReply.portionIndex) {
+            awaitPointerEventScope {
+                var downPosition: Offset? = null
+                var movedBeyondTap = false
+                while (true) {
+                    val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull()
+                        ?: continue
+                    if (!change.previousPressed && change.pressed) {
+                        downPosition = change.position
+                        movedBeyondTap = false
+                    } else if (downPosition != null && change.pressed) {
+                        val distance = (change.position - downPosition).getDistance()
+                        if (distance > viewConfiguration.touchSlop) {
+                            movedBeyondTap = true
+                        }
+                    } else if (downPosition != null && change.previousPressed && !change.pressed) {
+                        if (!movedBeyondTap) {
+                            onEvent(DashboardEvent.AdvanceReply(tapAdvanceReply.requestKey))
+                        }
+                        downPosition = null
+                    }
+                }
+            }
+        }
+    } else {
+        Modifier
+    }
 
     Box(
-        modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)),
+        modifier = modifier
+            .fillMaxSize()
+            .then(tapAdvanceModifier)
+            .background(Color(0xFFBDBBB3)),
         contentAlignment = Alignment.TopCenter,
     ) {
         BoxWithReferenceFrame(
@@ -1023,7 +1059,7 @@ private fun DashboardInlineScreen(
                 busy = when {
                     isOutfit -> state.activeOutfit != null
                     isTravel -> state.activeTravel != null
-                    else -> state.activeChat != null || isFirstSessionReplyPending(state)
+                    else -> state.activeChat != null
                 },
                 hazeState = hazeState,
                 requestIme = requestImeOverride
@@ -2170,7 +2206,7 @@ private fun BoxScope.CharacterDialogueText(
             lineHeight = 22.sp,
             maxLines = 6,
             softWrap = true,
-            overflow = TextOverflow.Clip,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.requiredWidth(356.dp),
         )
     }

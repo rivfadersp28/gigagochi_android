@@ -169,6 +169,42 @@ class DashboardContractTest {
     }
 
     @Test
+    fun replyUsesSixSecondPacingAndEllipsisOnlyBeforeFinalPortion() {
+        val reply = DashboardReply(
+            requestKey = "reply-1",
+            text = "Первая часть. Вторая часть.",
+            explicitPortions = listOf("Первая часть.", "Вторая часть."),
+        )
+
+        assertEquals(6_000L, DashboardReplyAutoAdvanceMillis)
+        assertEquals(6_000L, OnboardingBlockAutoAdvanceMillis)
+        assertEquals("Первая часть.…", reply.visibleText)
+        assertEquals("Вторая часть.", reply.copy(portionIndex = 1).visibleText)
+    }
+
+    @Test
+    fun chatCanBeSubmittedAgainWhilePreviousReplyIsVisible() {
+        val state = DashboardUiState(
+            pet = pet(),
+            firstSession = LocalFirstSession(
+                ownerId = "owner-a",
+                petId = "pet-instance-17",
+                stage = FirstSessionStage.AwaitingChatFollowup,
+                updatedAtEpochMillis = 2,
+            ),
+            mode = DashboardMode.Chat,
+            chatDraft = "Ещё сообщение",
+            chatReply = DashboardReply("chat-1", "Первый ответ"),
+        )
+
+        val submitted = reduceDashboard(state, DashboardEvent.SubmitChat("chat-2"))
+
+        assertEquals("chat-2", submitted.activeChat?.requestKey)
+        assertEquals("Ещё сообщение", submitted.activeChat?.message)
+        assertEquals("", submitted.chatDraft)
+    }
+
+    @Test
     fun feedAppliesStatFirstClampsCyclesAudioAndKeepsEffectOnFailure() {
         var state = reduceDashboard(DashboardUiState(pet(hunger = 90, energy = 80)), DashboardEvent.OpenFeed)
         state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.BerryBowl, "feed-1"))
@@ -448,10 +484,7 @@ class DashboardContractTest {
                 finished.pet,
             ),
         )
-        assertEquals(
-            "Как тебя зовут?",
-            dashboardIdleMessage(onboardingCompleted),
-        )
+        assertNull(dashboardIdleMessage(onboardingCompleted))
     }
 
     @Test

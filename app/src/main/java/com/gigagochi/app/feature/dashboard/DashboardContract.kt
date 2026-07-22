@@ -2,6 +2,7 @@ package com.gigagochi.app.feature.dashboard
 
 import com.gigagochi.app.core.designsystem.ContextualNavigationAction
 import com.gigagochi.app.core.model.PetDashboardState
+import com.gigagochi.app.core.database.FirstSessionStage
 import com.gigagochi.app.core.database.LocalFirstSession
 import com.gigagochi.app.feature.onboarding.FirstSessionMainAction
 import com.gigagochi.app.feature.onboarding.firstSessionDashboardMessage
@@ -11,8 +12,8 @@ import kotlin.math.max
 
 const val DashboardPromptMaxLength = 1_000
 const val DashboardMinimumThinkingMillis = 1_000L
-const val DashboardReplyAutoAdvanceMillis = 3_000L
-const val OnboardingBlockAutoAdvanceMillis = 5_500L
+const val DashboardReplyAutoAdvanceMillis = 6_000L
+const val OnboardingBlockAutoAdvanceMillis = 6_000L
 const val PetTapThanksVisibleMillis = 5_000L
 const val OutfitExperienceCost = 200
 const val OutfitExperienceCharge = 0
@@ -116,7 +117,10 @@ data class DashboardReply(
         get() = explicitPortions?.map(String::withCapitalizedSentenceStarts)
             ?: splitDashboardReplyPortions(text.withCapitalizedSentenceStarts())
     val visibleText: String
-        get() = portions.getOrNull(portionIndex) ?: text
+        get() {
+            val portion = portions.getOrNull(portionIndex) ?: text
+            return if (hasNextPortion && !portion.endsWith('…')) "$portion…" else portion
+        }
     val hasNextPortion: Boolean
         get() = portionIndex < portions.lastIndex
 }
@@ -318,8 +322,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         if (
             state.mode != DashboardMode.Chat ||
             message.isEmpty() ||
-            state.activeChat != null ||
-            (state.firstSession != null && state.chatReply != null)
+            state.activeChat != null
         ) {
             state
         } else {
@@ -670,7 +673,8 @@ fun dashboardIdleMessage(state: DashboardUiState): String? =
         ?: state.firstSessionIdleReply?.visibleText
         ?: state.settledFirstSessionReply?.visibleText
         ?: state.pet.message.takeUnless {
-            firstSessionMainAction(state.firstSession) != null
+            firstSessionMainAction(state.firstSession) != null ||
+                state.firstSession?.stage == FirstSessionStage.Completed
         }
 
 fun hydrateExternalFirstSession(

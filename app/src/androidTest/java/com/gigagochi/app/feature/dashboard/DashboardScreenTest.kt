@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -228,6 +229,10 @@ class DashboardScreenTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithContentDescription("Сообщение персонажу").assertIsDisplayed()
+            .assertIsEnabled()
+            .performClick()
+            .performTextInput("Ещё сообщение")
+        composeRule.onNodeWithText("Ещё сообщение").assertIsDisplayed()
         composeRule.onNodeWithText("А чем ты любишь заниматься?")
             .assertIsDisplayed()
     }
@@ -299,7 +304,7 @@ class DashboardScreenTest {
 
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Помочь летучей мыши").assertDoesNotExist()
-        composeRule.onNodeWithText(portions.first()).assertIsDisplayed()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 0)).assertIsDisplayed()
         composeRule.mainClock.advanceTimeBy(
             checkNotNull(firstSessionIdleReply(pet, session)).autoAdvanceDelayMillis + 100,
         )
@@ -343,20 +348,53 @@ class DashboardScreenTest {
         }
 
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(portions.first()).assertIsDisplayed()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 0)).assertIsDisplayed()
         composeRule.mainClock.advanceTimeBy(DashboardReplyAutoAdvanceMillis + 100)
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(portions[1]).assertIsDisplayed()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 1)).assertIsDisplayed()
 
         composeRule.runOnIdle { externalPet = pet.copy(experience = 200) }
         composeRule.waitForIdle()
-        composeRule.onNodeWithText(portions[1]).assertIsDisplayed()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 1)).assertIsDisplayed()
 
         composeRule.mainClock.advanceTimeBy(DashboardReplyAutoAdvanceMillis + 100)
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.waitForIdle()
         composeRule.onNodeWithText(portions.last()).assertIsDisplayed()
+    }
+
+    @Test
+    fun tappingScreenAdvancesLongReplyWithoutWaiting() {
+        composeRule.mainClock.autoAdvance = false
+        val pet = testPet(hunger = 65)
+        val session = LocalFirstSession(
+            "owner-a",
+            pet.petId,
+            FirstSessionStage.AwaitingCompletionMessage,
+            updatedAtEpochMillis = 1,
+        )
+        val portions = firstSessionDashboardMessagePortions(pet, session)
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = pet,
+                    initialFirstSession = session,
+                    requestImeOverride = false,
+                    reducedMotionOverride = true,
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 0))
+            .assertIsDisplayed()
+            .performTouchInput { click() }
+        composeRule.mainClock.advanceTimeByFrame()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithText(displayedReplyPortion(portions, 1)).assertIsDisplayed()
     }
 
     @Test
@@ -446,6 +484,28 @@ class DashboardScreenTest {
         composeRule.onNodeWithContentDescription("Experience: 0").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Поболтать").performClick()
         composeRule.runOnIdle { check(chatClicks == 1) }
+    }
+
+    @Test
+    fun completedOnboardingDoesNotShowInitialNameQuestion() {
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = testPet(hunger = 100).copy(message = "Как тебя зовут?"),
+                    initialFirstSession = LocalFirstSession(
+                        "owner-a",
+                        "debug-test-pet",
+                        FirstSessionStage.Completed,
+                        updatedAtEpochMillis = 2,
+                    ),
+                    requestImeOverride = false,
+                    reducedMotionOverride = true,
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Как тебя зовут?").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Поболтать").assertIsDisplayed()
     }
 
     @Test
@@ -680,3 +740,6 @@ class DashboardScreenTest {
             .assertIsDisplayed()
     }
 }
+
+private fun displayedReplyPortion(portions: List<String>, index: Int): String =
+    if (index < portions.lastIndex) "${portions[index]}…" else portions[index]
