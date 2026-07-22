@@ -134,6 +134,16 @@ data class LocalPendingCreateGeneration(
     val backendErrorCode: String? = null,
 )
 
+data class LocalPendingChat(
+    val ownerId: String,
+    val petId: String,
+    val requestKey: String,
+    val message: String,
+    val createdAtEpochMillis: Long,
+    val responseText: String? = null,
+    val completedAtEpochMillis: Long? = null,
+)
+
 data class LocalPendingOutfit(
     val ownerId: String,
     val petId: String,

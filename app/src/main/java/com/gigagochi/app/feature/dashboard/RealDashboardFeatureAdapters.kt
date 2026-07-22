@@ -4,6 +4,7 @@ import com.gigagochi.app.core.database.BackendJobAttachmentResult
 import com.gigagochi.app.core.database.FeatureMediaOutcomeStore
 import com.gigagochi.app.core.database.LocalOutfitMediaOutcome
 import com.gigagochi.app.core.database.LocalPendingOutfit
+import com.gigagochi.app.core.database.LocalPendingChat
 import com.gigagochi.app.core.database.LocalPendingTravelVideo
 import com.gigagochi.app.core.database.PetLocalRepository
 import com.gigagochi.app.core.database.LocalTravelVideoAsset
@@ -47,6 +48,23 @@ class RealDashboardChatAdapter(
 ) : DashboardChatAdapter {
     override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult {
         val now = System.currentTimeMillis()
+        if (!repository.savePendingChat(
+                LocalPendingChat(
+                    ownerId = ownerId,
+                    petId = pet.petId,
+                    requestKey = request.requestKey,
+                    message = request.message,
+                    createdAtEpochMillis = now,
+                ),
+            )
+        ) {
+            throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Storage))
+        }
+        repository.getPendingChat(ownerId, request.requestKey)?.responseText?.let { response ->
+            val appliedPet = repository.getPetSnapshot(ownerId, pet.petId)?.pet
+                ?: throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Storage))
+            return DashboardChatResult(response, appliedPet)
+        }
         val priorHistory = repository.recentChatMessages(ownerId, pet.petId, 200)
         val complimentHistory = repository.complimentHistory(ownerId, pet.petId)
         val deterministic = extractDeterministicMemory(request.message, now)
@@ -89,7 +107,10 @@ class RealDashboardChatAdapter(
         ) {
             is FeatureApiResult.Success -> {
                 val reply = result.value.reply.takeIf { it.isNotBlank() }
-                    ?: throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
+                    ?: run {
+                        repository.deletePendingChat(ownerId, request.requestKey)
+                        throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
+                    }
                 val assistantMessage = newChatMessage("pet", reply, System.currentTimeMillis())
                 val appliedPet = repository.applyChatResponse(
                     ownerId = ownerId,
@@ -165,7 +186,10 @@ class RealDashboardChatAdapter(
                 }
                 DashboardChatResult(reply, appliedPet)
             }
-            is FeatureApiResult.Failure -> throw FeatureAdapterException(result.failure)
+            is FeatureApiResult.Failure -> {
+                repository.deletePendingChat(ownerId, request.requestKey)
+                throw FeatureAdapterException(result.failure)
+            }
         }
     }
 }

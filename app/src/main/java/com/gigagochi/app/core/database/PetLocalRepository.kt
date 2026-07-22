@@ -37,6 +37,7 @@ data class OwnerRecoveryData(
     val outfitOutcomes: List<LocalOutfitMediaOutcome> = emptyList(),
     val travelVideoAssets: List<LocalTravelVideoAsset> = emptyList(),
     val firstSessions: List<LocalFirstSession> = emptyList(),
+    val pendingChats: List<LocalPendingChat> = emptyList(),
 )
 
 interface FirstSessionStore {
@@ -223,9 +224,44 @@ class PetLocalRepository(
                     ) == 1)
                 }
             }
+            messages.lastOrNull { it.role == "pet" }?.text?.let { responseText ->
+                dao.completePendingChat(
+                    ownerId,
+                    requestKey,
+                    responseText.take(8_000),
+                    appliedAtEpochMillis,
+                )
+            }
             requireNotNull(dao.getPet(ownerId, petId))
                 .toModel(dao.getMoodImages(ownerId, petId)).pet
         }
+    }
+
+    suspend fun savePendingChat(pending: LocalPendingChat): Boolean {
+        LocalPersistenceValidation.pendingChat(pending)
+        return database.withTransaction {
+            if (dao.getAppliedChatResponse(pending.ownerId, pending.requestKey) != null) {
+                return@withTransaction true
+            }
+            val existing = dao.getPendingChat(pending.ownerId, pending.requestKey)
+            if (existing != null) {
+                return@withTransaction existing.petId == pending.petId &&
+                    existing.message == pending.message
+            }
+            dao.insertPendingChat(pending.toEntity()) != -1L
+        }
+    }
+
+    suspend fun deletePendingChat(ownerId: String, requestKey: String): Boolean {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.requestKey(requestKey)
+        return dao.deletePendingChat(ownerId, requestKey) == 1
+    }
+
+    suspend fun getPendingChat(ownerId: String, requestKey: String): LocalPendingChat? {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.requestKey(requestKey)
+        return dao.getPendingChat(ownerId, requestKey)?.toModel()
     }
 
     suspend fun recentChatMessages(
@@ -1645,6 +1681,7 @@ class PetLocalRepository(
             dao.deleteOwnerFirstSessionActionReceipts(ownerId)
             dao.deleteOwnerFirstSessions(ownerId)
             dao.deleteOwnerChatMessages(ownerId)
+            dao.deleteOwnerPendingChats(ownerId)
             dao.deleteOwnerCompliments(ownerId)
             dao.deleteOwnerAppliedChatResponses(ownerId)
             dao.deleteOwnerUserMemories(ownerId)
@@ -1682,6 +1719,7 @@ class PetLocalRepository(
                     dao.getTravelVideoAssets(ownerId, entity.petId).map(TravelVideoAssetEntity::toModel)
                 },
                 firstSessions = dao.getFirstSessions(ownerId).map(FirstSessionEntity::toModel),
+                pendingChats = dao.getPendingChats(ownerId).map(PendingChatEntity::toModel),
             )
         }
     }
@@ -1831,6 +1869,18 @@ object LocalPersistenceValidation {
         optionalBounded("favoriteItem", value.favoriteItem, CreateAnswerMax)
         require(value.currentStep in 1..5) { "currentStep must be in 1..5" }
         timestamp("updatedAtEpochMillis", value.updatedAtEpochMillis)
+    }
+
+    fun pendingChat(value: LocalPendingChat) {
+        ownerId(value.ownerId)
+        petId(value.petId)
+        requestKey(value.requestKey)
+        bounded("chat message", value.message, 1_000)
+        require(value.message.isNotBlank())
+        timestamp("createdAtEpochMillis", value.createdAtEpochMillis)
+        value.responseText?.let { bounded("chat response", it, 8_000) }
+        value.completedAtEpochMillis?.let { timestamp("completedAtEpochMillis", it) }
+        require((value.responseText == null) == (value.completedAtEpochMillis == null))
     }
 
     fun pendingOutfit(value: LocalPendingOutfit) {
@@ -2126,6 +2176,26 @@ private fun LocalChatMessage.toEntity(ownerId: String, petId: String) = ChatMess
     role,
     text.take(8_000),
     createdAtEpochMillis,
+)
+
+private fun LocalPendingChat.toEntity() = PendingChatEntity(
+    ownerId = ownerId,
+    petId = petId,
+    requestKey = requestKey,
+    message = message,
+    createdAtEpochMillis = createdAtEpochMillis,
+    responseText = responseText,
+    completedAtEpochMillis = completedAtEpochMillis,
+)
+
+private fun PendingChatEntity.toModel() = LocalPendingChat(
+    ownerId = ownerId,
+    petId = petId,
+    requestKey = requestKey,
+    message = message,
+    createdAtEpochMillis = createdAtEpochMillis,
+    responseText = responseText,
+    completedAtEpochMillis = completedAtEpochMillis,
 )
 
 private fun ChatMessageEntity.toModel() = LocalChatMessage(

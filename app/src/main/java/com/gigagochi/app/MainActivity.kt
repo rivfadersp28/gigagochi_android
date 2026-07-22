@@ -260,17 +260,12 @@ internal fun appRouteForAccountStartup(destination: AccountStartupDestination): 
         AccountStartupDestination.Failure -> AppRoute.LocalDataError
     }
 
-internal fun usesDarkNavigationBarIcons(route: AppRoute?): Boolean = route == AppRoute.Dashboard
-
-internal fun navigationBarBackground(route: AppRoute?): Color =
-    if (route == AppRoute.Dashboard) Color(0xFFBDBBB3) else Color.Black
+internal val NavigationBarBackground = Color.Black
 
 class MainActivity : ComponentActivity() {
     private val incomingIntentRevision = MutableStateFlow(0)
-    private var darkNavigationBarIcons = false
 
-    private fun configureSystemBars(darkNavigationBarIcons: Boolean = this.darkNavigationBarIcons) {
-        this.darkNavigationBarIcons = darkNavigationBarIcons
+    private fun configureSystemBars() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         @Suppress("DEPRECATION")
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
@@ -280,7 +275,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.getInsetsController(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.statusBars())
             show(WindowInsetsCompat.Type.navigationBars())
-            isAppearanceLightNavigationBars = darkNavigationBarIcons
+            isAppearanceLightNavigationBars = false
         }
     }
 
@@ -336,9 +331,6 @@ class MainActivity : ComponentActivity() {
                 var focusedTravelRequestKey by remember { mutableStateOf<String?>(null) }
                 var route by remember {
                     mutableStateOf(explicitRouteValue?.let(::appRouteFromValue))
-                }
-                LaunchedEffect(route) {
-                    configureSystemBars(usesDarkNavigationBarIcons(route))
                 }
                 val isExplicitDebugRoute = explicitRouteValue != null
                 val usesRealFeatureAdapters = featureAdapterMode(explicitRouteValue) ==
@@ -745,6 +737,12 @@ class MainActivity : ComponentActivity() {
                             },
                             initialPendingOutfit = recovery?.pendingOutfit?.toUi(),
                             initialPendingTravel = recovery?.pendingTravel?.toUi(),
+                            initialPendingChat = recovery?.pendingChat?.let {
+                                com.gigagochi.app.feature.dashboard.PendingChatRequest(
+                                    it.requestKey,
+                                    it.message,
+                                )
+                            },
                             initialFirstSession = recovery?.firstSession,
                             firstSessionOwnerId = session.accountId,
                             firstSessionStore = repository,
@@ -799,6 +797,9 @@ class MainActivity : ComponentActivity() {
                                 } else {
                                     false
                                 }
+                            },
+                            onChatReplyPresented = { requestKey ->
+                                repository.deletePendingChat(session.accountId, requestKey)
                             },
                         )
                     }
@@ -1045,7 +1046,7 @@ class MainActivity : ComponentActivity() {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(navigationBarBackground(route))
+                        .background(NavigationBarBackground)
                         .windowInsetsPadding(
                             WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
                         )

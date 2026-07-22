@@ -39,6 +39,7 @@ import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
 import com.gigagochi.app.feature.onboarding.firstSessionDashboardMessagePortions
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import org.junit.Rule
 import org.junit.Test
@@ -203,7 +204,7 @@ class DashboardScreenTest {
             ) = FirstSessionMutationResult.Applied(nextSession, pet)
         }
         composeRule.setContent {
-            var externalSession by mutableStateOf(initial)
+            var externalSession by remember { mutableStateOf(initial) }
             GigagochiTheme {
                 DashboardRoute(
                     initialPet = pet,
@@ -255,7 +256,7 @@ class DashboardScreenTest {
             ) = FirstSessionMutationResult.Applied(nextSession, authoritativePet)
         }
         composeRule.setContent {
-            var externalSession by mutableStateOf(initial)
+            var externalSession by remember { mutableStateOf(initial) }
             GigagochiTheme {
                 DashboardRoute(
                     initialPet = pet,

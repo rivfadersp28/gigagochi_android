@@ -57,6 +57,26 @@ internal data class ChatMessageEntity(
 )
 
 @Entity(
+    tableName = "pending_chats",
+    primaryKeys = ["ownerId", "requestKey"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "createdAtEpochMillis"],
+            name = "index_pending_chat_owner_pet_created",
+        ),
+    ],
+)
+internal data class PendingChatEntity(
+    val ownerId: String,
+    val petId: String,
+    val requestKey: String,
+    val message: String,
+    val createdAtEpochMillis: Long,
+    val responseText: String?,
+    val completedAtEpochMillis: Long?,
+)
+
+@Entity(
     tableName = "compliment_ledger",
     primaryKeys = ["ownerId", "petId", "normalizedKey"],
     indices = [

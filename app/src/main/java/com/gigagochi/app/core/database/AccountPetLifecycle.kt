@@ -13,6 +13,7 @@ sealed interface AccountStartupDestination {
         val pendingTravel: LocalPendingTravelVideo?,
         val storyReceipts: List<InteractiveStoryReceipt>,
         val firstSession: LocalFirstSession? = null,
+        val pendingChat: LocalPendingChat? = null,
     ) : AccountStartupDestination
     data object Failure : AccountStartupDestination
 }
@@ -50,6 +51,9 @@ class AccountPetLifecycle(
                 firstSession = recovery.firstSessions.singleOrNull {
                     it.petId == snapshot.pet.petId
                 },
+                pendingChat = recovery.pendingChats
+                    .filter { it.petId == snapshot.pet.petId }
+                    .maxByOrNull { it.createdAtEpochMillis },
             )
         } ?: AccountStartupDestination.Create(
             pending = recovery.pendingCreates.maxByOrNull { it.updatedAtEpochMillis },

@@ -54,17 +54,13 @@ class DurableCreateRecoveryCoordinator(
                 PendingBackendState.Failed,
                 "GENERATION_FAILED",
             )
-            return if (notificationEmitter.emit(
-                    manualGenerationFailedNotification(
-                        ManualGenerationKind.Create,
-                        pending.requestKey,
-                    ),
-                )
-            ) {
-                DurableCreateRecoveryResult.Terminal
-            } else {
-                DurableCreateRecoveryResult.Retry
-            }
+            notificationEmitter.emit(
+                manualGenerationFailedNotification(
+                    ManualGenerationKind.Create,
+                    pending.requestKey,
+                ),
+            )
+            return DurableCreateRecoveryResult.Terminal
         }
         val result = envelope.job.result ?: return DurableCreateRecoveryResult.Retry
         val media = api.media(result) ?: return protocolFailure(pending.requestKey)
@@ -100,9 +96,7 @@ class DurableCreateRecoveryCoordinator(
         if (!saved) return DurableCreateRecoveryResult.Retry
 
         if (pending.backendState != PendingBackendState.ForegroundReady) {
-            if (!notificationEmitter.emit(petReadyNotification(pending.requestKey))) {
-                return DurableCreateRecoveryResult.Retry
-            }
+            notificationEmitter.emit(petReadyNotification(pending.requestKey))
             if (!stateStore.updateCreateBackendState(
                     ownerId,
                     pending.requestKey,

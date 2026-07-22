@@ -53,7 +53,7 @@ class DurableCreateRecoveryCoordinatorTest {
     }
 
     @Test
-    fun unavailableNotificationsKeepDurablePendingForRetry() = runBlocking {
+    fun unavailableNotificationsDoNotBlockCompletedCreate() = runBlocking {
         val store = RecoveryStore()
         val api = api(succeededEnvelope())
         val result = DurableCreateRecoveryCoordinator(
@@ -64,9 +64,9 @@ class DurableCreateRecoveryCoordinatorTest {
             LocalNotificationEmitter { false },
         ).recoverOnce()
 
-        assertEquals(DurableCreateRecoveryResult.Retry, result)
+        assertEquals(DurableCreateRecoveryResult.Complete, result)
         assertNotNull(store.snapshot)
-        assertEquals(PendingBackendState.Attached, store.creates.single().backendState)
+        assertTrue(store.creates.isEmpty())
     }
 
     @Test
@@ -87,6 +87,21 @@ class DurableCreateRecoveryCoordinatorTest {
         assertEquals(DurableCreateRecoveryResult.Terminal, result)
         assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
         assertEquals("Не получилось создать персонажа, попробуй еще раз", notifications.single().body)
+    }
+
+    @Test
+    fun unavailableFailureNotificationStillStopsTerminalPolling() = runBlocking {
+        val store = RecoveryStore()
+        val result = DurableCreateRecoveryCoordinator(
+            OwnerId,
+            store,
+            store,
+            api(envelope(GenerationJobStatusDto.Failed, GenerationJobPhaseDto.Completed, asset(false))),
+            LocalNotificationEmitter { false },
+        ).recoverOnce()
+
+        assertEquals(DurableCreateRecoveryResult.Terminal, result)
+        assertEquals(PendingBackendState.Failed, store.creates.single().backendState)
     }
 
     private fun coordinator(

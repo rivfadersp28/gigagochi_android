@@ -24,6 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FirstSessionEntity::class,
         FirstSessionActionReceiptEntity::class,
         ChatMessageEntity::class,
+        PendingChatEntity::class,
         ComplimentLedgerEntity::class,
         AppliedChatResponseEntity::class,
         UserMemoryEntity::class,
@@ -32,7 +33,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ProactiveNotificationEntity::class,
         EventHistoryViewEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -94,6 +95,17 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration6To7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `pending_chats` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `requestKey` TEXT NOT NULL, `message` TEXT NOT NULL, `createdAtEpochMillis` INTEGER NOT NULL, `responseText` TEXT, `completedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `requestKey`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_pending_chat_owner_pet_created` ON `pending_chats` (`ownerId`, `petId`, `createdAtEpochMillis`)",
+                )
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
@@ -104,6 +116,7 @@ abstract class GigagochiDatabase : RoomDatabase() {
             Migration3To4,
             Migration4To5,
             Migration5To6,
+            Migration6To7,
         ).build()
     }
 }

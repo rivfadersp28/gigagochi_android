@@ -228,12 +228,14 @@ fun DashboardRoute(
     initialPet: PetDashboardState = DemoPet,
     initialPendingOutfit: PendingOutfitGeneration? = null,
     initialPendingTravel: PendingTravelGeneration? = null,
+    initialPendingChat: PendingChatRequest? = null,
     initialFirstSession: LocalFirstSession? = null,
     firstSessionOwnerId: String? = null,
     firstSessionStore: FirstSessionStore? = null,
     onFirstSessionTravel: () -> Unit = {},
     onFirstSessionChanged: (LocalFirstSession) -> Unit = {},
     onPetChanged: suspend (PetDashboardState) -> Boolean = { true },
+    onChatReplyPresented: suspend (String) -> Unit = {},
     chatAdapter: DashboardChatAdapter = remember { FakeDashboardChatAdapter() },
     ambientAdapter: DashboardAmbientAdapter = remember { UnavailableDashboardAmbientAdapter() },
     feedAdapter: DashboardFeedAdapter = remember { FakeDashboardFeedAdapter() },
@@ -254,6 +256,8 @@ fun DashboardRoute(
         mutableStateOf(
             if (debugState == DashboardDebugState.Idle) {
                 base.copy(
+                    mode = if (initialPendingChat != null) DashboardMode.Chat else base.mode,
+                    activeChat = initialPendingChat,
                     firstSession = initialFirstSession,
                     firstSessionIdleReply = initialFirstSession?.let {
                         firstSessionIdleReply(base.pet, it)
@@ -326,6 +330,12 @@ fun DashboardRoute(
         if (state.pet != lastPersistedPet) {
             if (persistenceCoordinator.persist(state.pet)) lastPersistedPet = state.pet
         }
+    }
+
+    LaunchedEffect(state.chatReply?.requestKey) {
+        val requestKey = state.chatReply?.requestKey ?: return@LaunchedEffect
+        withFrameNanos { }
+        onChatReplyPresented(requestKey)
     }
 
     BackHandler(enabled = state.mode != DashboardMode.Idle) { closeMode() }

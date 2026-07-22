@@ -9,12 +9,17 @@ import com.gigagochi.app.core.model.PetMoodImage
 import com.gigagochi.app.core.model.ScheduledStory
 import com.gigagochi.app.core.model.ScheduledStoryResult
 import com.gigagochi.app.feature.dashboard.DashboardDurableOperations
+import com.gigagochi.app.feature.dashboard.PendingChatRequest
+import com.gigagochi.app.feature.dashboard.RealDashboardChatAdapter
 import com.gigagochi.app.feature.dashboard.DashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.DurableOutfitResult
 import com.gigagochi.app.feature.dashboard.PendingOutfitGeneration
 import com.gigagochi.app.feature.dashboard.PendingOutfitRequest
 import com.gigagochi.app.feature.dashboard.UnavailableDashboardTravelAdapter
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -146,6 +151,106 @@ class PetLocalRepositoryTest {
         assertEquals(
             listOf("смелый и добрый", "самый внимательный хранитель"),
             repository.complimentHistory(OwnerId, PetId),
+        )
+    }
+
+    @Test
+    fun pendingChatSurvivesResponseUntilUiAcknowledgesPresentation() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        val pending = LocalPendingChat(
+            ownerId = OwnerId,
+            petId = PetId,
+            requestKey = "chat-durable",
+            message = "Ты меня слышишь?",
+            createdAtEpochMillis = 20,
+        )
+
+        assertTrue(repository.savePendingChat(pending))
+        assertTrue(repository.savePendingChat(pending.copy(createdAtEpochMillis = 99)))
+        val startup = AccountPetLifecycle(repository).startup(OwnerId)
+            as AccountStartupDestination.Dashboard
+        assertEquals(pending, startup.pendingChat)
+
+        repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            pending.requestKey,
+            listOf(
+                LocalChatMessage("user-durable", "user", pending.message, 20),
+                LocalChatMessage("pet-durable", "pet", "Слышу.", 21),
+            ),
+            happinessDelta = 0,
+            complimentKey = null,
+            appliedAtEpochMillis = 22,
+        )
+
+        val completedStartup = AccountPetLifecycle(repository).startup(OwnerId)
+            as AccountStartupDestination.Dashboard
+        assertEquals(pending.requestKey, completedStartup.pendingChat?.requestKey)
+        assertEquals(
+            listOf("Ты меня слышишь?", "Слышу."),
+            repository.recentChatMessages(OwnerId, PetId).map(LocalChatMessage::text),
+        )
+        assertTrue(repository.deletePendingChat(OwnerId, pending.requestKey))
+        assertNull(
+            (AccountPetLifecycle(repository).startup(OwnerId) as AccountStartupDestination.Dashboard)
+                .pendingChat,
+        )
+    }
+
+    @Test
+    fun cancelledChatCallIsRecoveredWithTheSameRequestKey() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        val request = PendingChatRequest("chat-cancelled", "Ты меня слышишь?")
+        val enteredApi = CompletableDeferred<Unit>()
+        val cancelledApi = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto):
+                com.gigagochi.app.core.network.FeatureApiResult<com.gigagochi.app.core.network.ChatResponseDto> {
+                enteredApi.complete(Unit)
+                CompletableDeferred<Unit>().await()
+                error("unreachable")
+            }
+        }
+        val firstAttempt = launch {
+            RealDashboardChatAdapter(cancelledApi, OwnerId, repository, this)
+                .reply(request, requireNotNull(repository.getPetSnapshot(OwnerId, PetId)).pet)
+        }
+        enteredApi.await()
+        firstAttempt.cancelAndJoin()
+
+        val restored = AccountPetLifecycle(repository).startup(OwnerId)
+            as AccountStartupDestination.Dashboard
+        assertEquals(request.requestKey, restored.pendingChat?.requestKey)
+        assertEquals(request.message, restored.pendingChat?.message)
+
+        var recoveredRequestKey: String? = null
+        val successfulApi = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto):
+                com.gigagochi.app.core.network.FeatureApiResult<com.gigagochi.app.core.network.ChatResponseDto> {
+                recoveredRequestKey = request.requestKey
+                return com.gigagochi.app.core.network.FeatureApiResult.Success(
+                    com.gigagochi.app.core.network.ChatResponseDto("Слышу."),
+                )
+            }
+        }
+        val result = RealDashboardChatAdapter(successfulApi, OwnerId, repository, this)
+            .reply(request, restored.pet)
+
+        assertEquals(request.requestKey, recoveredRequestKey)
+        assertEquals("Слышу.", result.reply)
+        assertEquals("Слышу.", repository.getPendingChat(OwnerId, request.requestKey)?.responseText)
+        val offlineRecoveryApi = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto):
+                com.gigagochi.app.core.network.FeatureApiResult<com.gigagochi.app.core.network.ChatResponseDto> =
+                error("completed pending must not hit the network")
+        }
+        val offlineResult = RealDashboardChatAdapter(offlineRecoveryApi, OwnerId, repository, this)
+            .reply(request, restored.pet)
+        assertEquals("Слышу.", offlineResult.reply)
+        assertEquals(
+            request.requestKey,
+            (AccountPetLifecycle(repository).startup(OwnerId) as AccountStartupDestination.Dashboard)
+                .pendingChat?.requestKey,
         )
     }
 

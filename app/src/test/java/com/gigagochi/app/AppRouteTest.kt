@@ -13,22 +13,8 @@ import androidx.compose.ui.graphics.Color
 
 class AppRouteTest {
     @Test
-    fun navigationBarMatchesTheVisibleRouteInsteadOfTheDashboardBehindIt() {
-        assertEquals(Color(0xFFBDBBB3), navigationBarBackground(AppRoute.Dashboard))
-        assertEquals(true, usesDarkNavigationBarIcons(AppRoute.Dashboard))
-
-        listOf(
-            null,
-            AppRoute.Create,
-            AppRoute.Events,
-            AppRoute.Travel,
-            AppRoute.Story,
-            AppRoute.ConnectionError,
-            AppRoute.LocalDataError,
-        ).forEach { route ->
-            assertEquals(Color.Black, navigationBarBackground(route))
-            assertEquals(false, usesDarkNavigationBarIcons(route))
-        }
+    fun navigationBarUsesStableDarkProtectionBehindEveryScreen() {
+        assertEquals(Color.Black, NavigationBarBackground)
     }
 
     @Test
