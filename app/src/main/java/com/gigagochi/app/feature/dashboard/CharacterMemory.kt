@@ -19,6 +19,7 @@ import java.util.UUID
 
 private const val DayMillis = 86_400_000L
 private const val EpisodeCooldownMillis = 14L * DayMillis
+private const val MaxRelevantMemories = 5
 private val UnsafeMemory = Regex(
     "ignore previous|system prompt|developer message|api[_-]?key|bearer|token|парол|секрет|ключ|промпт|инструкц",
     RegexOption.IGNORE_CASE,
@@ -187,8 +188,7 @@ fun buildChatMemoryContext(
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
-        relevantMemories = selected.map(LocalUserMemory::toContextDto) +
-            characterExperiences.map(LocalCharacterExperience::toContextDto),
+        relevantMemories = mergeRelevantMemories(selected, characterExperiences),
         episodes = episodes,
     )
 }
@@ -224,10 +224,10 @@ fun buildDailyProactiveContext(
         return MemoryContextDto(
             summary = memory.summary,
             userProfile = memory.userProfile,
-            relevantMemories = (knownUserName + due)
-                .distinctBy(LocalUserMemory::id)
-                .map(LocalUserMemory::toContextDto) +
-                characterExperiences.map(LocalCharacterExperience::toContextDto),
+            relevantMemories = mergeRelevantMemories(
+                (knownUserName + due).distinctBy(LocalUserMemory::id),
+                characterExperiences,
+            ),
             proactiveCandidate = ProactiveCandidateDto(due.map { it.id }, reason = reason),
         )
     }
@@ -245,8 +245,7 @@ fun buildDailyProactiveContext(
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
-        relevantMemories = knownUserName.map(LocalUserMemory::toContextDto) +
-            characterExperiences.map(LocalCharacterExperience::toContextDto),
+        relevantMemories = mergeRelevantMemories(knownUserName, characterExperiences),
         episodes = listOf(episode),
         proactiveCandidate = ProactiveCandidateDto(
             episodeIds = listOf(episode.id),
@@ -268,13 +267,24 @@ fun buildAmbientMemoryContext(
                 .thenByDescending { it.importance }
                 .thenByDescending { it.updatedAtEpochMillis },
         )
-        .map(LocalUserMemory::toContextDto)
-    val experiences = characterExperiences.asSequence().map(LocalCharacterExperience::toContextDto)
+        .toList()
     return MemoryContextDto(
         summary = memory.summary,
         userProfile = memory.userProfile,
-        relevantMemories = (activeMemories + experiences).take(5).toList(),
+        relevantMemories = mergeRelevantMemories(activeMemories, characterExperiences),
     )
+}
+
+private fun mergeRelevantMemories(
+    memories: List<LocalUserMemory>,
+    characterExperiences: List<LocalCharacterExperience>,
+): List<MemoryContextItemDto> {
+    val experiences = characterExperiences
+        .take(MaxRelevantMemories)
+        .map(LocalCharacterExperience::toContextDto)
+    return memories
+        .take(MaxRelevantMemories - experiences.size)
+        .map(LocalUserMemory::toContextDto) + experiences
 }
 
 internal fun sanitizeProactiveReply(
@@ -394,7 +404,7 @@ private fun LocalCharacterExperience.toContextDto() = MemoryContextItemDto(
     id = id,
     kind = kind,
     text = text,
-    memoryClass = "episode",
+    memoryClass = memoryClass,
     recordedAt = Instant.ofEpochMilli(occurredAtEpochMillis).toString(),
     occurredAt = Instant.ofEpochMilli(occurredAtEpochMillis).toString(),
 )

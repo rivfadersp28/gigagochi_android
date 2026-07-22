@@ -76,6 +76,50 @@ class CharacterMemoryTest {
     }
 
     @Test
+    fun currentCharacterStatesKeepReservedMemorySlots() {
+        val userMemories = (1..5).map { index ->
+            memory(
+                id = "tea-$index",
+                kind = "preference",
+                text = "Пользователь любит чай номер $index.",
+                key = "tea-$index",
+            )
+        }
+        val currentStates = listOf(
+            LocalCharacterExperience(
+                id = "character-travel-pending:travel-1",
+                kind = "character_travel",
+                text = "Персонаж отправился в путешествие и ещё не вернулся.",
+                occurredAtEpochMillis = now - 2_000,
+                memoryClass = "fact",
+            ),
+            LocalCharacterExperience(
+                id = "character-outfit-pending:outfit-1",
+                kind = "character_outfit",
+                text = "Персонаж ждёт новый наряд и ещё не переоделся.",
+                occurredAtEpochMillis = now - 1_000,
+                memoryClass = "fact",
+            ),
+        )
+
+        val context = buildChatMemoryContext(
+            LocalPetMemoryState(memories = userMemories),
+            emptyList(),
+            "Какой чай ты помнишь?",
+            now,
+            currentStates,
+        )
+
+        assertEquals(5, context.relevantMemories.size)
+        assertTrue(context.relevantMemories.map { it.id }.containsAll(currentStates.map { it.id }))
+        assertTrue(
+            context.relevantMemories
+                .filter { it.id in currentStates.map(LocalCharacterExperience::id) }
+                .all { it.memoryClass == "fact" },
+        )
+    }
+
+    @Test
     fun tomorrowDeadlineBecomesDueProactiveQuestionOnNextDay() {
         val changes = extractDeterministicMemory("У меня завтра экзамен по физике", now, zone)
         val deadline = changes.facts.single()

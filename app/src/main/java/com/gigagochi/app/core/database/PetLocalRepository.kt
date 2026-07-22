@@ -300,26 +300,109 @@ class PetLocalRepository(
         LocalPersistenceValidation.ownerId(ownerId)
         LocalPersistenceValidation.petId(petId)
         val limit = limitPerKind.coerceIn(1, 5)
-        val travels = dao.getRecentTravelVideoAssets(ownerId, petId, limit).map { asset ->
+        val completedTravelAssets = dao.getRecentTravelVideoAssets(ownerId, petId, limit)
+        val completedTravelKeys = completedTravelAssets.mapTo(mutableSetOf()) { it.requestKey }
+        val completedTravels = completedTravelAssets.map { asset ->
             val subject = asset.title?.takeIf(String::isNotBlank) ?: asset.prompt
             val scenario = asset.scenario?.takeIf(String::isNotBlank)?.let { " Сюжет: $it" }.orEmpty()
             LocalCharacterExperience(
                 id = "character-travel:${asset.requestKey}",
                 kind = "character_travel",
-                text = "Недавнее путешествие персонажа: $subject.$scenario".memoryText(),
+                text = (
+                    "Завершённое путешествие персонажа: он уже вернулся. " +
+                        "Направление или название: «$subject».$scenario"
+                    ).memoryText(),
                 occurredAtEpochMillis = asset.completedAtEpochMillis,
             )
         }
-        val outfits = dao.getRecentAppliedOutfitReceipts(ownerId, petId, limit)
+        val pendingTravels = dao.getPendingTravels(ownerId)
+            .asSequence()
+            .filter { pending ->
+                pending.petId == petId &&
+                    pending.requestKey !in completedTravelKeys &&
+                    pending.backendState !in setOf(PendingBackendState.Ready, PendingBackendState.Failed)
+            }
+            .sortedByDescending { it.acceptedAtEpochMillis }
+            .map { pending ->
+                LocalCharacterExperience(
+                    id = "character-travel-pending:${pending.requestKey}",
+                    kind = "character_travel",
+                    text = (
+                        "Текущее путешествие персонажа: он только отправился в путешествие " +
+                            "и ещё не вернулся. Направление или замысел: «${pending.prompt}»."
+                        ).memoryText(),
+                    occurredAtEpochMillis = pending.acceptedAtEpochMillis,
+                    memoryClass = "fact",
+                )
+            }
+            .toList()
+        val travels = (completedTravels + pendingTravels)
+            .sortedByDescending(LocalCharacterExperience::occurredAtEpochMillis)
+            .take(limit)
+
+        val appliedOutfitReceipts = dao.getRecentAppliedOutfitReceipts(ownerId, petId, limit)
             .filter { it.displayItem.isNotBlank() }
+        val readyOutfitOutcomes = dao.getOutfitMediaOutcomes(ownerId, petId)
+            .filter { it.displayItem.isNotBlank() }
+        val completedOutfitKeys = (appliedOutfitReceipts.map { it.requestKey } +
+            readyOutfitOutcomes.map { it.requestKey }).toSet()
+        val appliedOutfits = appliedOutfitReceipts
             .map { receipt ->
                 LocalCharacterExperience(
                     id = "character-outfit:${receipt.requestKey}",
                     kind = "character_outfit",
-                    text = "Недавнее переодевание персонажа: ${receipt.displayItem}.".memoryText(),
+                    text = (
+                        "Завершённое переодевание персонажа: он уже переоделся. " +
+                            "Новый наряд: «${receipt.displayItem}»."
+                        ).memoryText(),
                     occurredAtEpochMillis = receipt.appliedAtEpochMillis,
                 )
             }
+        val readyOutfits = readyOutfitOutcomes
+            .asSequence()
+            .map { outcome ->
+                LocalCharacterExperience(
+                    id = "character-outfit:${outcome.requestKey}",
+                    kind = "character_outfit",
+                    text = (
+                        "Завершённое переодевание персонажа: он уже переоделся. " +
+                            "Новый наряд: «${outcome.displayItem}»."
+                        ).memoryText(),
+                    occurredAtEpochMillis = outcome.completedAtEpochMillis,
+                )
+            }
+            .toList()
+        val completedOutfits = (appliedOutfits + readyOutfits)
+            .sortedByDescending(LocalCharacterExperience::occurredAtEpochMillis)
+            .distinctBy(LocalCharacterExperience::id)
+            .take(limit)
+        val pendingOutfits = dao.getPendingOutfits(ownerId)
+            .asSequence()
+            .filter { pending ->
+                pending.petId == petId &&
+                    pending.requestKey !in completedOutfitKeys &&
+                    pending.backendState !in setOf(PendingBackendState.Ready, PendingBackendState.Failed)
+            }
+            .sortedByDescending { it.acceptedAtEpochMillis }
+            .map { pending ->
+                val requestedItem = pending.preparedDisplayItem
+                    ?.takeIf(String::isNotBlank)
+                    ?: pending.prompt
+                LocalCharacterExperience(
+                    id = "character-outfit-pending:${pending.requestKey}",
+                    kind = "character_outfit",
+                    text = (
+                        "Текущее переодевание персонажа: он ждёт доставку нового наряда " +
+                            "и ещё не переоделся. Запрошенный наряд: «$requestedItem»."
+                        ).memoryText(),
+                    occurredAtEpochMillis = pending.acceptedAtEpochMillis,
+                    memoryClass = "fact",
+                )
+            }
+            .toList()
+        val outfits = (completedOutfits + pendingOutfits)
+            .sortedByDescending(LocalCharacterExperience::occurredAtEpochMillis)
+            .take(limit)
         return (travels + outfits).sortedByDescending(LocalCharacterExperience::occurredAtEpochMillis)
     }
 

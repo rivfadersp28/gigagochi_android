@@ -56,6 +56,7 @@ data class LocalCharacterExperience(
     val kind: String,
     val text: String,
     val occurredAtEpochMillis: Long,
+    val memoryClass: String = "episode",
 )
 
 data class DeterministicMemoryFact(

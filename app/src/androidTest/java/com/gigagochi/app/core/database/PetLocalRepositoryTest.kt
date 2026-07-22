@@ -810,11 +810,22 @@ class PetLocalRepositoryTest {
         )
         val pending = outfit()
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(pending))
+        val pendingOutfitExperience = repository.recentCharacterExperiences(OwnerId, PetId).single()
+        assertEquals("character_outfit", pendingOutfitExperience.kind)
+        assertEquals("fact", pendingOutfitExperience.memoryClass)
+        assertTrue(pendingOutfitExperience.id.startsWith("character-outfit-pending:"))
+        assertTrue(pendingOutfitExperience.text.contains("ещё не переоделся"))
+        assertTrue(pendingOutfitExperience.text.contains("футболку Metallica"))
         repository.attachOutfitBackendJob(OwnerId, pending.requestKey, "job-ready")
         repository.updateOutfitBackendState(OwnerId, pending.requestKey, PendingBackendState.Ready)
         repository.saveOutfitMediaOutcome(
             outcome(pending.requestKey, "job-ready", mediaImages("applied")),
         )
+        val readyOutfitExperience = repository.recentCharacterExperiences(OwnerId, PetId).single()
+        assertEquals("character-outfit:${pending.requestKey}", readyOutfitExperience.id)
+        assertEquals("episode", readyOutfitExperience.memoryClass)
+        assertTrue(readyOutfitExperience.text.contains("уже переоделся"))
+        assertTrue(readyOutfitExperience.text.contains("плащ"))
 
         assertEquals(
             OutfitOutcomeApplicationResult.NotReady,
@@ -852,6 +863,12 @@ class PetLocalRepositoryTest {
         repository.replacePetSnapshot(snapshot())
         val pending = travel()
         repository.savePendingTravel(pending)
+        val pendingTravelExperience = repository.recentCharacterExperiences(OwnerId, PetId).single()
+        assertEquals("character_travel", pendingTravelExperience.kind)
+        assertEquals("fact", pendingTravelExperience.memoryClass)
+        assertTrue(pendingTravelExperience.id.startsWith("character-travel-pending:"))
+        assertTrue(pendingTravelExperience.text.contains("ещё не вернулся"))
+        assertTrue(pendingTravelExperience.text.contains("ночной рынок"))
         repository.attachTravelBackendJob(OwnerId, pending.requestKey, "travel-job")
         repository.updateTravelBackendState(OwnerId, pending.requestKey, PendingBackendState.Ready)
         repository.saveTravelVideoAsset(
@@ -868,6 +885,11 @@ class PetLocalRepositoryTest {
                 20,
             ),
         )
+        val readyTravelExperience = repository.recentCharacterExperiences(OwnerId, PetId).single()
+        assertEquals("character-travel:${pending.requestKey}", readyTravelExperience.id)
+        assertEquals("episode", readyTravelExperience.memoryClass)
+        assertTrue(readyTravelExperience.text.contains("уже вернулся"))
+        assertTrue(readyTravelExperience.text.contains("Ночной рынок"))
 
         assertEquals(
             TravelAssetConsumptionResult.NotReady,
