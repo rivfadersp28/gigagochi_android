@@ -59,8 +59,8 @@ import com.gigagochi.app.core.auth.LocalSessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.LocalSessionBootstrapOutcome
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.androidSessionRepository
+import com.gigagochi.app.core.background.CompletionSyncScheduler
 import com.gigagochi.app.core.background.MvpSyncScheduler
-import com.gigagochi.app.core.background.StorySyncScheduler
 import com.gigagochi.app.core.background.CreateSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
@@ -509,6 +509,28 @@ class MainActivity : ComponentActivity() {
                         null -> route = AppRoute.LocalDataError
                     }
                 }
+
+                suspend fun enqueueAndDispatchNotification(
+                    ownerId: String,
+                    petId: String,
+                    notification: com.gigagochi.app.core.database.LocalCompletionNotification,
+                ): Boolean {
+                    val repository = petRepository ?: return false
+                    if (!repository.enqueueNotification(ownerId, petId, notification)) return false
+                    CompletionNotificationDispatcher(
+                        notificationsAllowed = { notificationsAllowed(applicationContext) },
+                        loadNotifications = repository::getUnnotifiedNotifications,
+                        emitter = AndroidLocalNotificationEmitter(applicationContext),
+                        markNotified = { notificationOwnerId, pendingNotification ->
+                            repository.markNotificationSent(
+                                notificationOwnerId,
+                                pendingNotification,
+                                System.currentTimeMillis(),
+                            )
+                        },
+                    ).dispatch(ownerId, petId)
+                    return true
+                }
                 LaunchedEffect(latestIntentRevision) {
                     if (latestIntentRevision == 0) return@LaunchedEffect
                     pendingStoryDeepLink = intent.getStringExtra("gigagochi.storyId")
@@ -602,15 +624,18 @@ class MainActivity : ComponentActivity() {
                                 api,
                                 onJobAttached = {
                                     recoverySignal.request()
+                                    CompletionSyncScheduler.enqueue(applicationContext)
                                     scope.launch { routeLocalSession(session) }
                                 },
-                                onOutfitFailed = { requestKey ->
-                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                onOutfitFailed = { petId, requestKey ->
+                                    enqueueAndDispatchNotification(
+                                        session.accountId,
+                                        petId,
                                         manualGenerationFailedNotification(
-                                            ManualGenerationKind.Outfit,
-                                            requestKey,
+                                            ManualGenerationKind.Outfit, requestKey,
                                         ),
                                     )
+                                    CompletionSyncScheduler.enqueue(applicationContext)
                                 },
                             )
                         }
@@ -621,14 +646,19 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 repository,
                                 api,
-                                onJobAttached = recoverySignal::request,
-                                onTravelFailed = { requestKey ->
-                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                onJobAttached = {
+                                    recoverySignal.request()
+                                    CompletionSyncScheduler.enqueue(applicationContext)
+                                },
+                                onTravelFailed = { petId, requestKey ->
+                                    enqueueAndDispatchNotification(
+                                        session.accountId,
+                                        petId,
                                         manualGenerationFailedNotification(
-                                            ManualGenerationKind.Travel,
-                                            requestKey,
+                                            ManualGenerationKind.Travel, requestKey,
                                         ),
                                     )
+                                    CompletionSyncScheduler.enqueue(applicationContext)
                                 },
                             )
                         }
@@ -660,6 +690,7 @@ class MainActivity : ComponentActivity() {
                                 outcomeApplication = outcomeApplication,
                                 onOutcomeApplied = {
                                     routeLocalSession(session)
+                                    dashboardRecoveryRevision += 1
                                     completionNotifications.dispatch(
                                         session.accountId,
                                         requireNotNull(activePet.value).petId,
@@ -681,13 +712,15 @@ class MainActivity : ComponentActivity() {
                                 repository,
                                 api,
                                 onMediaReady = { pet -> activePet.value = pet },
-                                onGenerationFailed = { requestKey ->
-                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                onGenerationFailed = { petId, requestKey ->
+                                    enqueueAndDispatchNotification(
+                                        session.accountId,
+                                        petId,
                                         manualGenerationFailedNotification(
-                                            ManualGenerationKind.Create,
-                                            requestKey,
+                                            ManualGenerationKind.Create, requestKey,
                                         ),
                                     )
+                                    CreateSyncScheduler.enqueue(applicationContext)
                                 },
                             )
                         }
@@ -706,7 +739,7 @@ class MainActivity : ComponentActivity() {
                                     scheduledStoryCoordinator.checkDue(requireNotNull(activePet.value)) ==
                                     com.gigagochi.app.feature.travel.ScheduledStoryDueResult.Pending
                                 ) {
-                                    StorySyncScheduler.enqueue(applicationContext)
+                                    CompletionSyncScheduler.enqueue(applicationContext)
                                 }
                                 completionNotifications.dispatch(
                                     session.accountId,
@@ -968,13 +1001,15 @@ class MainActivity : ComponentActivity() {
                                                 onJobAttached = {
                                                     CreateSyncScheduler.enqueue(applicationContext)
                                                 },
-                                                onGenerationFailed = { requestKey ->
-                                                    AndroidLocalNotificationEmitter(applicationContext).emit(
+                                                onGenerationFailed = { petId, requestKey ->
+                                                    enqueueAndDispatchNotification(
+                                                        session.accountId,
+                                                        petId,
                                                         manualGenerationFailedNotification(
-                                                            ManualGenerationKind.Create,
-                                                            requestKey,
+                                                            ManualGenerationKind.Create, requestKey,
                                                         ),
                                                     )
+                                                    CreateSyncScheduler.enqueue(applicationContext)
                                                 },
                                             )
                                         }
@@ -1005,9 +1040,18 @@ class MainActivity : ComponentActivity() {
                                     { true }
                                 } else {
                                     { pending ->
-                                        AndroidLocalNotificationEmitter(applicationContext).emit(
-                                            petReadyNotification(pending.requestKey),
-                                        )
+                                        val session = inMemorySession.value
+                                        if (session == null) {
+                                            false
+                                        } else {
+                                            val enqueued = enqueueAndDispatchNotification(
+                                                session.accountId,
+                                                pending.petId,
+                                                petReadyNotification(pending.requestKey),
+                                            )
+                                            CreateSyncScheduler.enqueue(applicationContext)
+                                            enqueued
+                                        }
                                     }
                                 },
                                 onPetPersisted = { activePet.value = it },

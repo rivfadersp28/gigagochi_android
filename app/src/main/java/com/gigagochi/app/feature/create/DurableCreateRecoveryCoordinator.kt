@@ -1,9 +1,9 @@
 package com.gigagochi.app.feature.create
 
-import com.gigagochi.app.core.background.LocalNotificationEmitter
 import com.gigagochi.app.core.background.ManualGenerationKind
 import com.gigagochi.app.core.background.manualGenerationFailedNotification
 import com.gigagochi.app.core.background.petReadyNotification
+import com.gigagochi.app.core.database.NotificationOutboxStore
 import com.gigagochi.app.core.database.OwnerRecoveryStore
 import com.gigagochi.app.core.database.OwnedPetSnapshot
 import com.gigagochi.app.core.database.PendingBackendState
@@ -20,7 +20,7 @@ class DurableCreateRecoveryCoordinator(
     private val store: OwnerRecoveryStore,
     private val stateStore: PendingBackendStateStore,
     private val api: AndroidFeatureService,
-    private val notificationEmitter: LocalNotificationEmitter,
+    private val notificationStore: NotificationOutboxStore,
     private val nowEpochMillis: () -> Long = System::currentTimeMillis,
 ) {
     suspend fun recoverOnce(): DurableCreateRecoveryResult {
@@ -29,6 +29,22 @@ class DurableCreateRecoveryCoordinator(
             .filter { it.backendJobId != null }
             .maxByOrNull { it.updatedAtEpochMillis }
             ?: return DurableCreateRecoveryResult.Complete
+        if (pending.backendState == PendingBackendState.Failed) {
+            return if (notificationStore.enqueueNotification(
+                    ownerId,
+                    pending.petId,
+                    manualGenerationFailedNotification(
+                        ManualGenerationKind.Create,
+                        pending.requestKey,
+                    ),
+                    nowEpochMillis(),
+                )
+            ) {
+                DurableCreateRecoveryResult.Terminal
+            } else {
+                DurableCreateRecoveryResult.Retry
+            }
+        }
         val backendJobId = requireNotNull(pending.backendJobId)
         val envelope = when (val polled = api.pollCreate(backendJobId)) {
             is FeatureApiResult.Failure -> return if (polled.failure.kind in RetryableFailures) {
@@ -54,13 +70,16 @@ class DurableCreateRecoveryCoordinator(
                 PendingBackendState.Failed,
                 "GENERATION_FAILED",
             )
-            notificationEmitter.emit(
-                manualGenerationFailedNotification(
-                    ManualGenerationKind.Create,
-                    pending.requestKey,
-                ),
-            )
-            return DurableCreateRecoveryResult.Terminal
+            return if (notificationStore.enqueueNotification(
+                    ownerId,
+                    pending.petId,
+                    manualGenerationFailedNotification(
+                        ManualGenerationKind.Create,
+                        pending.requestKey,
+                    ),
+                    nowEpochMillis(),
+                )
+            ) DurableCreateRecoveryResult.Terminal else DurableCreateRecoveryResult.Retry
         }
         val result = envelope.job.result ?: return DurableCreateRecoveryResult.Retry
         val media = api.media(result) ?: return protocolFailure(pending.requestKey)
@@ -96,7 +115,13 @@ class DurableCreateRecoveryCoordinator(
         if (!saved) return DurableCreateRecoveryResult.Retry
 
         if (pending.backendState != PendingBackendState.ForegroundReady) {
-            notificationEmitter.emit(petReadyNotification(pending.requestKey))
+            if (!notificationStore.enqueueNotification(
+                    ownerId,
+                    pending.petId,
+                    petReadyNotification(pending.requestKey),
+                    nowEpochMillis(),
+                )
+            ) return DurableCreateRecoveryResult.Retry
             if (!stateStore.updateCreateBackendState(
                     ownerId,
                     pending.requestKey,

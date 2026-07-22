@@ -80,6 +80,46 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun notificationOutboxDurablyDeduplicatesEveryNotificationKind() = runBlocking {
+        val notifications = LocalNotificationKind.entries.mapIndexed { index, kind ->
+            LocalCompletionNotification(
+                kind = kind,
+                stableKey = "notification-$index",
+                title = "Заголовок $index",
+                body = "Сообщение $index",
+                storyId = "story-$index".takeIf { kind == LocalNotificationKind.ScheduledStory },
+                travelRequestKey = "travel-$index".takeIf {
+                    kind == LocalNotificationKind.TravelReady
+                },
+            )
+        }
+        notifications.forEachIndexed { index, notification ->
+            assertTrue(
+                repository.enqueueNotification(
+                    OwnerId,
+                    PetId,
+                    notification,
+                    index.toLong(),
+                ),
+            )
+            assertTrue(
+                repository.enqueueNotification(
+                    OwnerId,
+                    PetId,
+                    notification,
+                    (index + 100).toLong(),
+                ),
+            )
+        }
+
+        assertEquals(notifications, repository.getUnnotifiedNotifications(OwnerId, PetId))
+        notifications.forEachIndexed { index, notification ->
+            assertTrue(repository.markNotificationSent(OwnerId, notification, 1_000L + index))
+        }
+        assertTrue(repository.getUnnotifiedNotifications(OwnerId, PetId).isEmpty())
+    }
+
+    @Test
     fun decayPersistsIndependentStatClocksAndResetsOnlyChangedStat() = runBlocking {
         val startedAt = 1_000_000L
         var now = startedAt + PetStatFullDecayMillis / 2
@@ -403,8 +443,12 @@ class PetLocalRepositoryTest {
             FirstSessionStage.AwaitingFirstFood, "chat-2", nowEpochMillis = 22,
         ) is FirstSessionMutationResult.Applied)
         assertTrue(repository.applyFirstSessionFood(
-            OwnerId, PetId, "leaf-crunch", "wrong-food", 23,
-        ) is FirstSessionMutationResult.WrongStage)
+            OwnerId, PetId, "leaf-crunch", "leaf-before-berry", 23,
+        ) is FirstSessionMutationResult.Applied)
+        assertEquals(
+            FirstSessionStage.AwaitingFirstFood,
+            repository.getFirstSession(OwnerId, PetId)?.stage,
+        )
         assertTrue(repository.applyFirstSessionFood(
             OwnerId, PetId, "berry-bowl", "berry-1", 24,
         ) is FirstSessionMutationResult.Applied)

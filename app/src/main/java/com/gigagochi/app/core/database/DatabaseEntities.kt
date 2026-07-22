@@ -198,6 +198,29 @@ internal data class ProactiveNotificationEntity(
 )
 
 @Entity(
+    tableName = "notification_outbox",
+    primaryKeys = ["ownerId", "kind", "stableKey"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "notifiedAtEpochMillis", "createdAtEpochMillis"],
+            name = "index_notification_outbox_owner_pet_pending",
+        ),
+    ],
+)
+internal data class NotificationOutboxEntity(
+    val ownerId: String,
+    val petId: String,
+    val kind: String,
+    val stableKey: String,
+    val title: String,
+    val body: String,
+    val storyId: String?,
+    val travelRequestKey: String?,
+    val createdAtEpochMillis: Long,
+    val notifiedAtEpochMillis: Long?,
+)
+
+@Entity(
     tableName = "first_sessions",
     primaryKeys = ["ownerId", "petId"],
     indices = [Index(value = ["ownerId", "stage"], name = "index_first_session_owner_stage")],

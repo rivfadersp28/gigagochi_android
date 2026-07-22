@@ -22,6 +22,10 @@ import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.database.AccountPetLifecycle
 import com.gigagochi.app.core.database.AccountStartupDestination
 import com.gigagochi.app.core.database.GigagochiDatabase
+import com.gigagochi.app.core.database.LocalPendingOutfit
+import com.gigagochi.app.core.database.LocalPendingTravelVideo
+import com.gigagochi.app.core.database.OwnerRecoveryData
+import com.gigagochi.app.core.database.PendingBackendState
 import com.gigagochi.app.core.database.PetLocalRepository
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.Session
@@ -44,10 +48,10 @@ import java.util.concurrent.TimeUnit
 const val MvpSyncIntervalMinutes = 15L
 internal const val MvpWorkerMaxPollAttempts = 1
 internal const val MvpSyncUniqueWorkName = "gigagochi-mvp-sync"
-internal const val StorySyncUniqueWorkName = "gigagochi-story-sync"
-internal const val StorySyncBackoffSeconds = 10L
+internal const val CompletionSyncUniqueWorkName = "gigagochi-story-sync"
+internal const val CompletionSyncBackoffSeconds = 10L
 internal val MvpSyncExistingPolicy = ExistingPeriodicWorkPolicy.KEEP
-internal val StorySyncExistingPolicy = ExistingWorkPolicy.KEEP
+internal val CompletionSyncExistingPolicy = ExistingWorkPolicy.KEEP
 internal val MvpSyncNetworkConstraint = NetworkType.CONNECTED
 
 object MvpSyncScheduler {
@@ -68,7 +72,7 @@ object MvpSyncScheduler {
     }
 }
 
-object StorySyncScheduler {
+object CompletionSyncScheduler {
     fun enqueue(context: Context) {
         val request = OneTimeWorkRequestBuilder<GigagochiSyncWorker>()
             .setConstraints(
@@ -78,13 +82,13 @@ object StorySyncScheduler {
             )
             .setBackoffCriteria(
                 BackoffPolicy.LINEAR,
-                StorySyncBackoffSeconds,
+                CompletionSyncBackoffSeconds,
                 TimeUnit.SECONDS,
             )
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
-            StorySyncUniqueWorkName,
-            StorySyncExistingPolicy,
+            CompletionSyncUniqueWorkName,
+            CompletionSyncExistingPolicy,
             request,
         )
     }
@@ -183,11 +187,12 @@ class GigagochiSyncWorker(
             repository,
             repository,
             api,
-            onOutfitFailed = { requestKey ->
-                AndroidLocalNotificationEmitter(applicationContext).emit(
+            onOutfitFailed = { petId, requestKey ->
+                repository.enqueueNotification(
+                    session.accountId,
+                    petId,
                     manualGenerationFailedNotification(
-                        ManualGenerationKind.Outfit,
-                        requestKey,
+                        ManualGenerationKind.Outfit, requestKey,
                     ),
                 )
             },
@@ -198,11 +203,12 @@ class GigagochiSyncWorker(
             repository,
             repository,
             api,
-            onTravelFailed = { requestKey ->
-                AndroidLocalNotificationEmitter(applicationContext).emit(
+            onTravelFailed = { petId, requestKey ->
+                repository.enqueueNotification(
+                    session.accountId,
+                    petId,
                     manualGenerationFailedNotification(
-                        ManualGenerationKind.Travel,
-                        requestKey,
+                        ManualGenerationKind.Travel, requestKey,
                     ),
                 )
             },
@@ -223,6 +229,59 @@ class GigagochiSyncWorker(
             ),
         ).recoverForeground(pet.petId)
         DailyProactiveCoordinator(session.accountId, repository, api).generateIfDue(pet)
-        return storyFailure
+        val recovery = repository.loadOwnerRecovery(session.accountId)
+        recovery.pendingOutfits.filter {
+            it.petId == pet.petId && it.backendState == PendingBackendState.Failed &&
+                it.backendErrorCode == "GENERATION_FAILED"
+        }.forEach {
+            check(
+                repository.enqueueNotification(
+                    session.accountId,
+                    pet.petId,
+                    manualGenerationFailedNotification(ManualGenerationKind.Outfit, it.requestKey),
+                ),
+            )
+        }
+        recovery.pendingTravels.filter {
+            it.petId == pet.petId && it.backendState == PendingBackendState.Failed &&
+                it.backendErrorCode == "GENERATION_FAILED"
+        }.forEach {
+            check(
+                repository.enqueueNotification(
+                    session.accountId,
+                    pet.petId,
+                    manualGenerationFailedNotification(ManualGenerationKind.Travel, it.requestKey),
+                ),
+            )
+        }
+        val manualCompletionPending = recovery.hasPendingManualCompletion(pet.petId)
+        return when {
+            storyFailure?.kind == FeatureFailureKind.SessionInvalid -> storyFailure
+            manualCompletionPending -> FeatureFailure(
+                FeatureFailureKind.InProgress,
+                "MANUAL_GENERATION_PENDING",
+            )
+            else -> storyFailure
+        }
     }
 }
+
+internal fun OwnerRecoveryData.hasPendingManualCompletion(petId: String): Boolean =
+    pendingOutfits.any { it.petId == petId && it.awaitsBackgroundCompletion() } ||
+        pendingTravels.any { it.petId == petId && it.awaitsBackgroundCompletion() }
+
+private fun LocalPendingOutfit.awaitsBackgroundCompletion(): Boolean =
+    awaitsBackgroundCompletion(backendJobId, backendState)
+
+private fun LocalPendingTravelVideo.awaitsBackgroundCompletion(): Boolean =
+    awaitsBackgroundCompletion(backendJobId, backendState)
+
+private fun awaitsBackgroundCompletion(
+    backendJobId: String?,
+    backendState: PendingBackendState,
+): Boolean = backendState == PendingBackendState.Ready ||
+    (backendJobId != null && backendState != PendingBackendState.Failed) ||
+    (backendJobId == null && backendState in setOf(
+        PendingBackendState.Pending,
+        PendingBackendState.Retryable,
+    ))

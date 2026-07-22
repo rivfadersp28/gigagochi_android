@@ -21,6 +21,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -97,9 +99,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.ContentScale
@@ -128,6 +132,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -166,6 +171,7 @@ import com.gigagochi.app.feature.onboarding.FirstSessionAfterNameFallback
 import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
 import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedyPortions
 import com.gigagochi.app.feature.onboarding.FirstSessionMainAction
+import com.gigagochi.app.feature.onboarding.FirstSessionSensitiveTopicFallback
 import com.gigagochi.app.feature.onboarding.firstSessionMainAction
 import com.gigagochi.app.feature.onboarding.firstSessionReactionReply
 import dev.chrisbanes.haze.HazeState
@@ -201,6 +207,7 @@ private val PreferredDashboardActionTop = 762.dp
 private val DashboardActionHeight = 58.203.dp
 private val DashboardActionBottomMargin = 16.dp
 private val DashboardFeedRowHeight = 148.dp
+private val DashboardFeedCardsVerticalOffset = 20.dp
 private val OnboardingActionMaxWidth = 346.dp
 internal val DashboardExperienceTop = 92.dp
 internal val DashboardInputHorizontalPadding = 20.dp
@@ -407,6 +414,9 @@ fun DashboardRoute(
                                 FirstSessionAfterNameFallback
                             } else FirstSessionAfterChatFallback,
                             durablePet.name,
+                            unsafeReplyFallback = if (
+                                session.stage == FirstSessionStage.AwaitingChatFollowup
+                            ) FirstSessionSensitiveTopicFallback else FirstSessionAfterNameFallback,
                         )
                         val prompt = if (session.stage == FirstSessionStage.AwaitingChat) {
                             FirstSessionAfterName
@@ -460,18 +470,21 @@ fun DashboardRoute(
                     else (mutation as FirstSessionMutationResult.AlreadyApplied).pet
                 dispatch(DashboardEvent.FirstSessionSynced(durableSession, durablePet))
                 val reply = when {
-                    session.stage == FirstSessionStage.AwaitingFirstFood -> FirstSessionAfterFirstFood
-                    request.food == DashboardFood.LeafCrunch -> FirstSessionAfterRemedy
+                    durableSession.stage == FirstSessionStage.AwaitingTravel &&
+                        request.food == DashboardFood.LeafCrunch -> FirstSessionAfterRemedy
+                    session.stage == FirstSessionStage.AwaitingFirstFood &&
+                        request.food == DashboardFood.BerryBowl -> FirstSessionAfterFirstFood
+                    request.food == DashboardFood.LeafCrunch -> LeafReply
                     else -> BerryReply
                 }
                 dispatch(
                     DashboardEvent.FeedSucceeded(
                         requestKey = request.requestKey,
                         reply = reply,
-                        explicitPortions = if (request.food == DashboardFood.LeafCrunch) {
+                        explicitPortions = if (reply == FirstSessionAfterRemedy) {
                             FirstSessionAfterRemedyPortions
                         } else null,
-                        autoAdvanceDelayMillis = if (request.food == DashboardFood.LeafCrunch) {
+                        autoAdvanceDelayMillis = if (reply == FirstSessionAfterRemedy) {
                             OnboardingBlockAutoAdvanceMillis
                         } else DashboardReplyAutoAdvanceMillis,
                     ),
@@ -491,17 +504,18 @@ fun DashboardRoute(
         }
     }
 
-    LaunchedEffect(state.feedToken.food, state.feedToken.phase) {
+    LaunchedEffect(state.feedToken.food, state.feedToken.phase, state.feedPulseId) {
         if (debugState.freezesMotion) return@LaunchedEffect
         val food = state.feedToken.food ?: return@LaunchedEffect
+        val pulseId = state.feedPulseId
         when (state.feedToken.phase) {
             FoodTokenPhase.Consuming -> {
                 delay(180)
-                dispatch(DashboardEvent.FoodConsumeFinished(food))
+                dispatch(DashboardEvent.FoodConsumeFinished(food, pulseId))
             }
             FoodTokenPhase.Reappearing -> {
                 delay(220)
-                dispatch(DashboardEvent.FoodReappearFinished(food))
+                dispatch(DashboardEvent.FoodReappearFinished(food, pulseId))
             }
             else -> Unit
         }
@@ -673,6 +687,7 @@ fun DashboardScreen(
 ) {
     val hazeState = rememberHazeState()
     val actionScrollState = rememberDashboardActionScrollState()
+    val petTapTarget = DashboardPetTapTarget
     Box(modifier = modifier.fillMaxSize().background(Color(0xFFBDBBB3)), contentAlignment = Alignment.TopCenter) {
         BoxWithReferenceFrame {
             val actionTop = LocalDashboardActionTop.current
@@ -696,10 +711,12 @@ fun DashboardScreen(
             }
             Box(
                 modifier = Modifier
-                    .requiredWidth(268.dp)
-                    .requiredHeight(491.dp)
-                    .offset(x = 67.dp, y = 219.dp)
-                    .pointerInput(Unit) { detectTapGestures(onTap = { onPetTap() }) },
+                    .requiredWidth(petTapTarget.width.dp)
+                    .requiredHeight(petTapTarget.height.dp)
+                    .offset(x = petTapTarget.left.dp, y = petTapTarget.top.dp)
+                    .pointerInput(Unit) {
+                        detectPetTapGestures { onPetTap() }
+                    },
             )
             ExperiencePill(
                 experience = state.experience,
@@ -882,8 +899,8 @@ private fun DashboardInlineScreen(
             if (state.mode == DashboardMode.Idle) {
                 fun triggerPetTap(localPoint: Offset) {
                     val center = Offset(
-                        x = with(density) { 37.dp.toPx() } + localPoint.x,
-                        y = with(density) { 219.dp.toPx() } + localPoint.y,
+                        x = with(density) { DashboardPetTapTarget.left.dp.toPx() } + localPoint.x,
+                        y = with(density) { DashboardPetTapTarget.top.dp.toPx() } + localPoint.y,
                     )
                     nextPetTapReactionId += 1
                     petTapReaction = PetTapReaction(nextPetTapReactionId, center)
@@ -905,11 +922,14 @@ private fun DashboardInlineScreen(
                 }
                 Box(
                     modifier = Modifier
-                        .requiredWidth(328.dp)
-                        .requiredHeight(491.dp)
-                        .offset(x = 37.dp, y = 219.dp)
+                        .requiredWidth(DashboardPetTapTarget.width.dp)
+                        .requiredHeight(DashboardPetTapTarget.height.dp)
+                        .offset(
+                            x = DashboardPetTapTarget.left.dp,
+                            y = DashboardPetTapTarget.top.dp,
+                        )
                         .pointerInput(state.pet.petId) {
-                            detectTapGestures(onPress = { triggerPetTap(it) })
+                            detectPetTapGestures(::triggerPetTap)
                         }
                         .semantics {
                             role = Role.Button
@@ -917,8 +937,12 @@ private fun DashboardInlineScreen(
                             onClick {
                                 triggerPetTap(
                                     Offset(
-                                        x = with(density) { 164.dp.toPx() },
-                                        y = with(density) { 245.5.dp.toPx() },
+                                        x = with(density) {
+                                            (DashboardPetTapTarget.width / 2f).dp.toPx()
+                                        },
+                                        y = with(density) {
+                                            (DashboardPetTapTarget.height / 2f).dp.toPx()
+                                        },
                                     ),
                                 )
                                 true
@@ -1619,14 +1643,10 @@ private fun FeedFoodToken(
     val isActiveToken = state.feedToken.food == food
     val motion = if (isActiveToken) state.feedToken else FoodTokenMotion()
     val latestMotion by rememberUpdatedState(motion)
-    val enabled = state.activeFeed == null && motion.phase == FoodTokenPhase.Idle &&
-        !isFirstSessionReplyPending(state) &&
-        !(state.firstSession?.stage == FirstSessionStage.AwaitingFirstFood &&
-            food != DashboardFood.BerryBowl)
     val scale = remember(food) { Animatable(1f) }
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
-    LaunchedEffect(motion.phase, freezeMotion) {
+    LaunchedEffect(motion.phase, freezeMotion, state.feedPulseId) {
         when (motion.phase) {
             FoodTokenPhase.Consuming -> if (freezeMotion) scale.snapTo(.52f) else {
                 scale.snapTo(1f)
@@ -1641,10 +1661,8 @@ private fun FeedFoodToken(
     }
 
     fun activateByTap() {
-        if (state.activeFeed == null) {
-            buttonPressFeedback()
-            onEvent(DashboardEvent.TapFood(food, nextRequestKey("feed")))
-        }
+        buttonPressFeedback()
+        onEvent(DashboardEvent.TapFood(food, nextRequestKey("feed")))
     }
 
     Box(
@@ -1658,7 +1676,6 @@ private fun FeedFoodToken(
                 rotationZ = rotation
                 scaleX = scale.value
                 scaleY = scale.value
-                alpha = if (!enabled && !isActiveToken) .58f else 1f
             }
             .onGloballyPositioned { coordinates = it }
             .shadow(
@@ -1677,11 +1694,10 @@ private fun FeedFoodToken(
                     style = Stroke(1.dp.toPx()),
                 )
             }
-            .pointerInput(food, enabled) {
-                detectTapGestures(onTap = { if (enabled) activateByTap() })
+            .pointerInput(food) {
+                detectTapGestures(onTap = { activateByTap() })
             }
-            .pointerInput(food, state.activeFeed != null) {
-                if (state.activeFeed != null) return@pointerInput
+            .pointerInput(food) {
                 detectDragGestures(
                     onDragStart = { onEvent(DashboardEvent.StartFoodDrag(food)) },
                     onDragCancel = { onEvent(DashboardEvent.CancelFoodDrag(food)) },
@@ -1767,7 +1783,10 @@ private fun BoxWithReferenceFrame(
     content: @Composable BoxScope.() -> Unit,
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
+        val scale = max(
+            maxWidth.value / DashboardReferenceSize.width,
+            maxHeight.value / DashboardReferenceSize.height,
+        )
         val navigationBarBottom = WindowInsets.navigationBars
             .asPaddingValues()
             .calculateBottomPadding()
@@ -1779,7 +1798,10 @@ private fun BoxWithReferenceFrame(
             Box(
                 modifier = Modifier
                     .wrapContentSize(Alignment.TopCenter, unbounded = true)
-                    .requiredSize(402.dp, 874.dp)
+                    .requiredSize(
+                        DashboardReferenceSize.width.dp,
+                        DashboardReferenceSize.height.dp,
+                    )
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
@@ -1791,6 +1813,34 @@ private fun BoxWithReferenceFrame(
                     .clip(RoundedCornerShape(0.dp)),
                 content = content,
             )
+        }
+    }
+}
+
+private suspend fun PointerInputScope.detectPetTapGestures(
+    onTap: (Offset) -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown()
+        val pointerId = down.id
+        val downPosition = down.position
+        down.consume()
+
+        while (true) {
+            val event = awaitPointerEvent(PointerEventPass.Main)
+            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+            val movedBeyondTap =
+                (change.position - downPosition).getDistance() > viewConfiguration.touchSlop
+            val movedOutside = change.position.x < 0f || change.position.x >= size.width ||
+                change.position.y < 0f || change.position.y >= size.height
+            val becameMultiTouch = event.changes.count { it.pressed } > 1
+
+            if (change.isConsumed || movedBeyondTap || movedOutside || becameMultiTouch) break
+            if (!change.pressed) {
+                change.consume()
+                onTap(downPosition)
+                break
+            }
         }
     }
 }
@@ -1808,7 +1858,7 @@ internal fun dashboardActionTop(viewportHeight: Dp, scale: Float): Dp {
 }
 
 internal fun dashboardFeedRowTop(actionTop: Dp): Dp =
-    actionTop + DashboardActionHeight - DashboardFeedRowHeight
+    actionTop + DashboardActionHeight - DashboardFeedRowHeight + DashboardFeedCardsVerticalOffset
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -1856,6 +1906,7 @@ private fun DashboardVideo(
     var showPoster by remember(projection, reducedMotion, retryToken) {
         mutableStateOf(true)
     }
+    var videoViewportSize by remember { mutableStateOf(IntSize.Zero) }
     val petTapVideoEffect = remember(projection, retryToken) { PetTapVideoEffect() }
     val player = remember(context, videoUrl, retryToken, petTapVideoEffect) {
         if (videoUrl == null) return@remember null
@@ -1872,11 +1923,10 @@ private fun DashboardVideo(
         builder.build().apply {
             volume = 0f
             repeatMode = Player.REPEAT_MODE_ONE
-            val displayMetrics = context.resources.displayMetrics
             setVideoEffects(
                 listOf(
                     Presentation.createForAspectRatio(
-                        displayMetrics.widthPixels.toFloat() / displayMetrics.heightPixels,
+                        DashboardReferenceAspectRatio,
                         Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
                     ),
                     petTapVideoEffect,
@@ -1891,8 +1941,9 @@ private fun DashboardVideo(
     LaunchedEffect(player, lifecycleStarted, active) {
         player?.playWhenReady = lifecycleStarted && active
     }
-    LaunchedEffect(petTapReaction?.id, petTapVideoEffect, reducedMotion) {
+    LaunchedEffect(petTapReaction?.id, petTapVideoEffect, reducedMotion, videoViewportSize) {
         val reaction = petTapReaction ?: return@LaunchedEffect
+        if (videoViewportSize == IntSize.Zero) return@LaunchedEffect
         val durationMillis = if (reducedMotion) {
             PetTapReducedBulgeDurationMillis.toLong()
         } else {
@@ -1906,8 +1957,8 @@ private fun DashboardVideo(
                 petTapVideoEffect.update(
                     centerX = reaction.center.x,
                     centerY = reaction.center.y,
-                    width = context.resources.displayMetrics.widthPixels.toFloat(),
-                    height = context.resources.displayMetrics.heightPixels.toFloat(),
+                    width = videoViewportSize.width.toFloat(),
+                    height = videoViewportSize.height.toFloat(),
                     strength = petTapBulgeStrength(elapsedMillis, reducedMotion),
                 )
             } while (
@@ -1948,7 +1999,7 @@ private fun DashboardVideo(
         }
     }
 
-    Box(modifier) {
+    Box(modifier.onSizeChanged { videoViewportSize = it }) {
         if (player != null) {
             AndroidView(
                 factory = { viewContext ->

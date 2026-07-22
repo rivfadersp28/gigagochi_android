@@ -4,6 +4,7 @@ package com.gigagochi.app.feature.dashboard
 
 import android.content.Context
 import android.opengl.GLES20
+import androidx.compose.ui.geometry.Offset
 import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.util.GlProgram
 import androidx.media3.common.util.GlUtil
@@ -17,10 +18,10 @@ internal class PetTapVideoEffect : GlEffect {
     private var uniforms = Uniforms()
 
     fun update(centerX: Float, centerY: Float, width: Float, height: Float, strength: Float) {
-        if (width <= 0f || height <= 0f) return
+        val center = normalizedPetTapShaderCenter(centerX, centerY, width, height) ?: return
         uniforms = Uniforms(
-            centerX = (centerX / width).coerceIn(0f, 1f),
-            centerY = (1f - centerY / height).coerceIn(0f, 1f),
+            centerX = center.x,
+            centerY = center.y,
             strength = strength.coerceIn(0f, PetTapBulgeStrength),
         )
     }
@@ -85,6 +86,19 @@ internal class PetTapVideoEffect : GlEffect {
             }
         }
     }
+}
+
+internal fun normalizedPetTapShaderCenter(
+    centerX: Float,
+    centerY: Float,
+    width: Float,
+    height: Float,
+): Offset? {
+    if (width <= 0f || height <= 0f) return null
+    return Offset(
+        x = (centerX / width).coerceIn(0f, 1f),
+        y = (1f - centerY / height).coerceIn(0f, 1f),
+    )
 }
 
 private const val VertexShader = """

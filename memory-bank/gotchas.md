@@ -80,9 +80,10 @@
   и cover-scale; иначе на физическом устройстве они визуально обрезаются и попадают в системную touch zone.
 - Pet-ready notification uses the Telegram copy and a request-key-stable notification ID. After a
   backend job is attached, a unique one-shot WorkManager request keeps polling across ordinary process
-  death and marks `ForegroundReady` only after `notify()` succeeds; denied permission therefore keeps
-  the durable pending for retry. Android force-stop still suppresses all app work until the user opens
-  the app again. Android 13+ notification permission must be requested on Create, not first on Dashboard.
+  death and durably enqueues the notification before marking `ForegroundReady`. Permission denial or
+  a failed `notify()` therefore leaves the outbox row pending without keeping completed media state
+  hostage. Android force-stop still suppresses all app work until the user opens the app again. Android
+  13+ notification permission must be requested on Create, not first on Dashboard.
 - Splitter реплик целится в 4 строки через консервативную оценку ширины glyph в em, чтобы pure reducer не зависел от Compose/Android font measurement. Compose и контейнер допускают аварийные 6 строк. При изменении SB Sans, размера 20sp или ширины 356dp одновременно калибруй `DashboardReplyLineWidthEm`, иначе шестистрочный предел снова может скрыть хвост реплики.
 - Dashboard reveal синхронизирован с прежним web `PetCharacterMessage`: 300/700/24 ms и те же cubic-bezier. Loader нельзя заменять generic dots — его source of truth остаются три `thinking_frame_*` drawable, переключаемые каждые 200 ms.
 - Не ключуй `pointerInput` нестабильной callback-лямбдой у анимируемой Compose-кнопки: собственная
@@ -110,9 +111,18 @@
   и следующий сценарный вопрос передавай как explicit semantic portions; общий length-splitter склеивает
   их и может оставить фразу про голод обрезанным хвостом следующего блока.
 - `partycles` измеряет heart `lifetime` в simulation frames, уменьшая life на 1.2 при 60 fps; это не миллисекунды. Mobile web оптимизирует 16/170/42 до 9 частиц, 136 frames и 33px, поэтому native burst длится около 1.889s. Media3 `GlEffect` обновляет динамический shader на decoded video frames, а `setVideoEffects` без явного `Presentation` crop меняет aspect/letterbox; native tap использует smoothstep envelope 250 мс при постоянном cover-crop, без snapshot и смены геометрии.
+- Pet tap хранит центр в локальных px reference-плоскости `402×874`; shader обязан нормализовать его
+  по измеренному viewport `DashboardVideo`, а `Presentation` — использовать aspect reference-плоскости.
+  `Resources.displayMetrics` находится в другой системе координат после cover-scale и даёт
+  device-dependent сдвиг относительно Compose-сердечек. Реакцию нельзя запускать на `onPress`:
+  только завершённый одиночный жест внутри touch-slop считается tap.
 - WorkManager periodic interval 15 minutes is only a legal minimum, not a delivery deadline: OS
   batching, Doze and network constraints may delay it. A due-story response with `pending=true`
-  must enqueue/retain the unique one-shot retry instead of waiting for the next periodic window.
+  or an attached Outfit/Travel job must enqueue/retain the unique one-shot retry instead of waiting
+  for the next periodic window. A one-pass poll that still sees manual generation in progress must
+  return `Result.retry()`, not success, or ready notifications accumulate until the next periodic run.
+  All production notification producers write the Room outbox before attempting `notify()`; only the
+  debug push test may bypass it. When permission is granted but posting fails, keep the one-shot retrying.
   This remains a local best-effort notification, not FCM/push. Never replace the one-pass
   `recoverForeground(maxPollAttempts=1)` with `watch()` or long polling inside the worker.
 - `AnimatedContent` продолжает компоновать уходящий route до конца exit-анимации. Нельзя очищать

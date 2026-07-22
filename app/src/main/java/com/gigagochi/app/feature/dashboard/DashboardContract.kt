@@ -32,7 +32,7 @@ const val PetTapsPerHappinessReward = 5
 const val PetTapHappinessReward = 15
 val PetTapThanksReplies = listOf("Приятно!", "Щекотно!", "Мне нравится!")
 const val DeterministicOutfitReply =
-    "Футболка Metallica? Интересно. Я получу заказ примерно через 10 минут"
+    "Футболка Metallica? Интересно, давай я позову тебя, когда переоденусь."
 const val DeterministicTravelReply =
     "На ночной рынок духов? Надеюсь, со мной всё будет в порядке. Пришлю видео, когда вернусь"
 
@@ -202,8 +202,8 @@ sealed interface DashboardEvent {
         val isInsideSceneWithTolerance: Boolean,
     ) : DashboardEvent
     data class TapFood(val food: DashboardFood, val requestKey: String) : DashboardEvent
-    data class FoodConsumeFinished(val food: DashboardFood) : DashboardEvent
-    data class FoodReappearFinished(val food: DashboardFood) : DashboardEvent
+    data class FoodConsumeFinished(val food: DashboardFood, val pulseId: Int) : DashboardEvent
+    data class FoodReappearFinished(val food: DashboardFood, val pulseId: Int) : DashboardEvent
     data class FeedSucceeded(
         val requestKey: String,
         val reply: String,
@@ -419,7 +419,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
     }
 
     is DashboardEvent.StartFoodDrag -> if (
-        state.mode == DashboardMode.Feed && state.activeFeed == null
+        state.mode == DashboardMode.Feed
     ) {
         state.copy(feedToken = FoodTokenMotion(event.food, FoodTokenPhase.Dragging))
     } else {
@@ -449,7 +449,9 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
     is DashboardEvent.TapFood -> activateFood(state, event.food, event.requestKey)
 
     is DashboardEvent.FoodConsumeFinished -> if (
-        state.feedToken.food == event.food && state.feedToken.phase == FoodTokenPhase.Consuming
+        state.feedToken.food == event.food &&
+        state.feedToken.phase == FoodTokenPhase.Consuming &&
+        state.feedPulseId == event.pulseId
     ) {
         state.copy(
             feedToken = FoodTokenMotion(event.food, FoodTokenPhase.Reappearing),
@@ -459,7 +461,9 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
     }
 
     is DashboardEvent.FoodReappearFinished -> if (
-        state.feedToken.food == event.food && state.feedToken.phase == FoodTokenPhase.Reappearing
+        state.feedToken.food == event.food &&
+        state.feedToken.phase == FoodTokenPhase.Reappearing &&
+        state.feedPulseId == event.pulseId
     ) {
         state.copy(feedToken = FoodTokenMotion())
     } else {
@@ -748,18 +752,8 @@ private fun activateFood(
     food: DashboardFood,
     requestKey: String,
 ): DashboardUiState {
-    if (
-        state.mode != DashboardMode.Feed ||
-        state.activeFeed != null ||
-        (state.firstSession != null && state.feedReply != null)
-    ) return state
+    if (state.mode != DashboardMode.Feed) return state
     val firstSessionStage = state.firstSession?.stage
-    if (firstSessionStage == com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood &&
-        food != DashboardFood.BerryBowl
-    ) return state
-    if (firstSessionStage == com.gigagochi.app.core.database.FirstSessionStage.AwaitingRemedy &&
-        food !in setOf(DashboardFood.BerryBowl, DashboardFood.LeafCrunch)
-    ) return state
     val nextPet = if (firstSessionStage in setOf(
             com.gigagochi.app.core.database.FirstSessionStage.AwaitingFirstFood,
             com.gigagochi.app.core.database.FirstSessionStage.AwaitingRemedy,
@@ -770,13 +764,22 @@ private fun activateFood(
         DashboardFood.BerryBowl -> state.pet.copy(hunger = (state.pet.hunger + 25).coerceAtMost(100))
         DashboardFood.LeafCrunch -> state.pet.copy(energy = (state.pet.energy + 25).coerceAtMost(100))
     }
+    val draggedToken = state.feedToken.takeIf {
+        it.food == food && it.phase == FoodTokenPhase.Dragging
+    }
     val soundIndex = state.nextFeedAudioIndex
     return state.copy(
         pet = nextPet,
         feedError = null,
         feedReply = null,
+        settledFirstSessionReply = null,
         activeFeed = PendingFeedRequest(requestKey, food, soundIndex),
-        feedToken = state.feedToken.copy(food = food, phase = FoodTokenPhase.Consuming),
+        feedToken = FoodTokenMotion(
+            food = food,
+            phase = FoodTokenPhase.Consuming,
+            offsetX = draggedToken?.offsetX ?: 0f,
+            offsetY = draggedToken?.offsetY ?: 0f,
+        ),
         feedPulseId = state.feedPulseId + 1,
         nextFeedAudioIndex = (soundIndex + 1) % 3,
     )

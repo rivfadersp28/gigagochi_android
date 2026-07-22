@@ -31,7 +31,7 @@
 - `core/auth` создаёт и хранит случайный canonical UUID v4 установки локально. `POST /api/auth/guest` возвращает стабильный opaque `accountId` и короткоживущую technical session без Google, имени, email или другого PII; backend хранит только SHA‑256 UUID subject. Guest endpoint используется только при отсутствии/инвалидации сохранённой session.
 - Technical session хранится через Android Keystore AES‑GCM envelope v2; SharedPreferences содержат только version/IV/ciphertext. Access/refresh нужны исключительно как защита платных `/api/android` моделей и не являются пользовательской авторизацией. HTTP boundary допускает HTTPS, debug HTTP только loopback, не следует redirect, ограничивает response 64 KiB и строго проверяет UUID/session JSON.
 - `core/network` содержит session-protected Android feature client и typed `/api/android` DTO. Feature transport запрещает redirect/cache, ограничивает body, строго проверяет UTF-8/JSON/enum/timestamps/job IDs/media origin и redacts secrets. Refresh single-flight защищён Mutex только вокруг encrypted session re-read/refresh/persist; feature network request выполняется вне lock, а доказанный 401 повторяет тот же serialized request максимум один раз.
-- `core/database` Room 2.8.4 использует schema v4 и явные migrations 1→2→3→4 без destructive fallback. Помимо owner-scoped pet/pending/media/receipts он хранит chat history, отдельный per-pet compliment ledger, applied-chat receipts, user memories, pending learnings, memory state и proactive notification queue. Во всех primary/index keys первым scope является стабильный anonymous `accountId`; Android Backup отключён, поэтому удаление приложения удаляет прогресс, а переноса между устройствами нет.
+- `core/database` Room 2.8.4 использует schema v8 и явные migrations 1→…→8 без destructive fallback. Помимо owner-scoped pet/pending/media/receipts он хранит chat history, отдельный per-pet compliment ledger, applied-chat receipts, user memories, pending learnings, memory state и единую notification outbox. Во всех primary/index keys первым scope является стабильный anonymous `accountId`; Android Backup отключён, поэтому удаление приложения удаляет прогресс, а переноса между устройствами нет.
 - Android chat повторяет Telegram memory pipeline без Character Bible: до reply выполняются deterministic fact extraction/forget, relevance recall, добавление последних travel/outfit-эпизодов персонажа и передача последних 12 сообщений; после reply асинхронно запускаются LLM extraction и периодическая consolidation. WorkManager выбирает неупомянутые due-факты или недавний эпизод не чаще раза в локальные сутки, получает proactive reply через session-protected Android endpoint и атомарно кладёт его в durable local notification queue.
 - `PetLocalRepository` — единственная публичная write boundary: валидирует bounds, атомарно списывает ровно 200 XP вместе с Outfit pending и атомарно применяет clamped Story deltas вместе с receipt. Повторные request/receipt keys не списывают и не начисляют повторно; backend job attach допускает только `null → id` или тот же id.
 - Replay Outfit после atomic apply блокируется applied receipt до повторного debit/insert. Replay Travel после durable ready/consumption блокируется сохранённым owner+pet+request asset в `DashboardDurableOperations`, поэтому завершённый request не создаёт новый pending и не вызывает provider повторно.
@@ -51,12 +51,15 @@
   route state and return to Dashboard use Room-authoritative experience, so restart cannot double XP.
 - Background delivery uses the unique periodic WorkManager `CoroutineWorker` (`KEEP`, connected
   network, 15-minute periodic minimum) enqueued after production Dashboard startup. When the due
-  endpoint reports that story generation is pending, foreground startup also enqueues a unique
-  one-shot run with linear retry; a periodic run retries itself until the story becomes ready. One pass
+  endpoint reports that story generation is pending, or an Outfit/Travel backend job is attached,
+  the app also enqueues the same unique one-shot run with linear retry. A one-shot/periodic pass keeps
+  retrying while any safe manual generation remains unresolved. One pass
   bootstraps the anonymous Keystore session, checks due story once, performs exactly one pending
-  Outfit/Travel recovery poll/apply, then emits one-channel local notifications. Room v1 dedupe is
-  three nullable `notifiedAt` fields on existing completed rows; stable Android notification IDs
-  replace a prior post if the process dies before the durable mark. Create media recovery после
+  Outfit/Travel recovery poll/apply, then drains one-channel local notifications. Every production
+  kind (`PetReady`, story, outfit, travel, generation failure, proactive) is inserted idempotently into
+  the owner+pet Room notification outbox before delivery; stable Android notification IDs replace a
+  prior post if the process dies before the durable mark. Migration 7→8 backfills unnotified legacy
+  story/outfit/travel/proactive rows. Create media recovery после
   foreground-ready выполняется на Dashboard при lifecycle STARTED, но не через WorkManager.
   Scheduled-story delivery is still a best-effort local notification, not server FCM. Event
   chronology has no backend list/backfill endpoint: it remains durable across normal app restarts,

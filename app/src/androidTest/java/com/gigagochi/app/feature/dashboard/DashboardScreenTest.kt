@@ -38,9 +38,11 @@ import com.gigagochi.app.core.database.FirstSessionMutationResult
 import com.gigagochi.app.feature.onboarding.FirstSessionAfterRemedy
 import com.gigagochi.app.feature.onboarding.firstSessionDashboardMessagePortions
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Rule
 import org.junit.Test
 import org.junit.Assert.assertEquals
@@ -655,6 +657,36 @@ class DashboardScreenTest {
     }
 
     @Test
+    fun draggingAcrossPetDoesNotCountAsTap() {
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = testPet(hunger = 100).copy(happiness = 0),
+                    reducedMotionOverride = true,
+                )
+            }
+        }
+
+        val pet = composeRule.onNodeWithContentDescription("Погладить Листик")
+        repeat(PetTapsPerHappinessReward) {
+            pet.performTouchInput {
+                down(center)
+                moveTo(percentOffset(.9f, .5f), delayMillis = 120L)
+                up()
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithContentDescription("Mood: 0 из 100").assertIsDisplayed()
+
+        repeat(PetTapsPerHappinessReward) {
+            pet.performTouchInput { click() }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription("Mood: 15 из 100").assertIsDisplayed()
+    }
+
+    @Test
     fun feedDragConsumesAndShowsDeterministicReply() {
         composeRule.setContent {
             GigagochiTheme {
@@ -670,6 +702,42 @@ class DashboardScreenTest {
         composeRule.mainClock.advanceTimeByFrame()
         composeRule.waitForIdle()
         composeRule.onNodeWithText(BerryReply).assertIsDisplayed()
+    }
+
+    @Test
+    fun consecutiveFoodSelectionsOnlyShowLatestUninterruptedReply() {
+        val berryGate = CompletableDeferred<Unit>()
+        composeRule.setContent {
+            GigagochiTheme {
+                DashboardRoute(
+                    feedAdapter = object : DashboardFeedAdapter {
+                        override suspend fun reply(
+                            request: PendingFeedRequest,
+                            pet: PetDashboardState,
+                        ): String = when (request.food) {
+                            DashboardFood.BerryBowl -> {
+                                berryGate.await()
+                                BerryReply
+                            }
+                            DashboardFood.LeafCrunch -> LeafReply
+                        }
+                    },
+                    reducedMotionOverride = true,
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Покормить").performClick()
+        composeRule.onNodeWithContentDescription("Ягодная миска").performClick()
+        composeRule.onNodeWithContentDescription("Хрустящий лист").assertIsEnabled().performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(LeafReply).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(LeafReply).assertIsDisplayed()
+        composeRule.onNodeWithText(BerryReply).assertDoesNotExist()
+
+        composeRule.onNodeWithContentDescription("Ягодная миска").assertIsEnabled().performClick()
+        composeRule.onNodeWithText(LeafReply).assertDoesNotExist()
     }
 
     @Test
@@ -715,6 +783,56 @@ class DashboardScreenTest {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("Футболка Metallica?", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun recoveredOutfitDropsQueuedReplyAndRequestsFreshAmbientReply() {
+        lateinit var completeRecovery: () -> Unit
+        val ambientReply = "Сегодня отличный день для нового образа"
+        composeRule.setContent {
+            var recoveryRevision by remember { mutableIntStateOf(0) }
+            var pendingOutfit by remember {
+                mutableStateOf<PendingOutfitGeneration?>(
+                    PendingOutfitGeneration(
+                        petId = "debug-test-pet",
+                        requestKey = "outfit-mayhem",
+                        prompt = "футболка Mayhem",
+                        displayItem = "футболка Mayhem",
+                        localJobId = "local-outfit",
+                        backendJobId = "job-outfit",
+                        createdAtEpochMillis = 1,
+                    ),
+                )
+            }
+            completeRecovery = {
+                pendingOutfit = null
+                recoveryRevision += 1
+            }
+            GigagochiTheme {
+                DashboardRoute(
+                    initialPet = testPet(hunger = 100),
+                    initialPendingOutfit = pendingOutfit,
+                    recoveryRevision = recoveryRevision,
+                    reducedMotionOverride = true,
+                    ambientAdapter = object : DashboardAmbientAdapter {
+                        override suspend fun reply(
+                            requestKey: String,
+                            pet: PetDashboardState,
+                        ) = DashboardAmbientResult(ambientReply, pet.copy(message = ambientReply))
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Футболка Mayhem?", substring = true).assertIsDisplayed()
+        composeRule.runOnIdle { completeRecovery() }
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            composeRule.onAllNodesWithText(ambientReply, substring = true)
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+
+        composeRule.onNodeWithText(ambientReply, substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("Футболка Mayhem?", substring = true).assertDoesNotExist()
     }
 
     @Test

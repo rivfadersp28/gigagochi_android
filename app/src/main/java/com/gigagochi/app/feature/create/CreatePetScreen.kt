@@ -153,7 +153,7 @@ fun CreatePetRoute(
     reducedMotionOverride: Boolean? = null,
     finalizationCoordinator: CreateFinalizationCoordinator? = null,
     pendingCoordinator: CreatePendingCoordinator? = null,
-    onPetReadyInBackground: (PendingPetGeneration) -> Boolean = { true },
+    onPetReadyInBackground: suspend (PendingPetGeneration) -> Boolean = { true },
     onPetPersisted: (PetDashboardState) -> Unit = {},
     onNavigateDashboard: () -> Unit,
 ) {

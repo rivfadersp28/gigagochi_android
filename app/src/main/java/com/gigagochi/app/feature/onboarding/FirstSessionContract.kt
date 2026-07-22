@@ -7,6 +7,8 @@ import com.gigagochi.app.core.model.PetDashboardState
 const val FirstSessionAfterNameFallback = "Приятно познакомиться!"
 const val FirstSessionAfterName = "А чем ты любишь заниматься?"
 const val FirstSessionAfterChatFallback = "Звучит здорово!"
+const val FirstSessionSensitiveTopicFallback =
+    "Я не хочу об этом говорить. Давай лучше обсудим что-нибудь другое."
 const val FirstSessionAfterChat =
     "Слушай, что-то я проголодался. Может, у тебя что-нибудь завалялось?"
 const val FirstSessionAfterFirstFood =
@@ -102,11 +104,27 @@ fun firstSessionDashboardMessagePortions(
 
 private fun String.withoutTerminalPeriod(): String = removeSuffix(".")
 
+private val FirstSessionModelIdentityLeakPattern = Regex(
+    "(?iu)(?:" +
+        "генеративн[\\p{L}]*\\s+(?:языков[\\p{L}]*\\s+)?модел[\\p{L}]*|" +
+        "языков[\\p{L}]*\\s+модел[\\p{L}]*|" +
+        "(?:я|мы)\\s+(?:(?:являюсь|являемся)\\s+)?(?:ии|ai|нейросет[\\p{L}]*|" +
+        "(?:языков[\\p{L}]*\\s+)?модел[\\p{L}]*|виртуальн[\\p{L}]*\\s+ассистент[\\p{L}]*)|" +
+        "(?:я|мы)\\s+не\\s+(?:облада[\\p{L}]*|име[\\p{L}]*)\\s+" +
+        "(?:собственн[\\p{L}]*\\s+)?(?:мнени[\\p{L}]*|чувств[\\p{L}]*)|" +
+        "json\\s*schema|json[- ]?схем[\\p{L}]*|системн[\\p{L}]*\\s+" +
+        "(?:промпт[\\p{L}]*|инструкц[\\p{L}]*)" +
+        ")",
+)
+
 fun firstSessionReactionReply(
     reply: String,
     fallback: String,
     petName: String? = null,
+    unsafeReplyFallback: String = fallback,
 ): String {
+    if (FirstSessionModelIdentityLeakPattern.containsMatchIn(reply)) return unsafeReplyFallback
+
     val normalizedPetName = petName?.trim().orEmpty()
     val petNameMention = normalizedPetName.takeIf(String::isNotEmpty)?.let { name ->
         Regex("(?iu)(?<![\\p{L}\\p{N}_])${Regex.escape(name)}(?![\\p{L}\\p{N}_])")

@@ -36,7 +36,7 @@ class DashboardOutcomeApplicationCoordinator(
         }) {
             when (outcomeStore.applyOutfitOutcome(ownerId, petId, pending.requestKey)) {
                 is OutfitOutcomeApplicationResult.Applied -> changed = true
-                is OutfitOutcomeApplicationResult.AlreadyApplied -> Unit
+                is OutfitOutcomeApplicationResult.AlreadyApplied -> changed = true
                 OutfitOutcomeApplicationResult.NotReady -> Unit
                 OutfitOutcomeApplicationResult.Conflict -> {
                     stateStore?.markOutfitApplyConflict(ownerId, pending.requestKey)
@@ -56,7 +56,7 @@ class DashboardOutcomeApplicationCoordinator(
                 )
             ) {
                 is TravelAssetConsumptionResult.Consumed -> changed = true
-                is TravelAssetConsumptionResult.AlreadyConsumed -> Unit
+                is TravelAssetConsumptionResult.AlreadyConsumed -> changed = true
                 TravelAssetConsumptionResult.NotReady -> Unit
                 TravelAssetConsumptionResult.Conflict -> {
                     stateStore?.markTravelApplyConflict(ownerId, pending.requestKey)

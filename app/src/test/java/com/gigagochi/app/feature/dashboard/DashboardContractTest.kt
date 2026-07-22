@@ -229,14 +229,56 @@ class DashboardContractTest {
         state = reduceDashboard(state, DashboardEvent.FeedFailed("feed-1"))
         assertEquals(100, state.pet.hunger)
         assertEquals(FeedFailureMessage, state.feedError)
-        state = reduceDashboard(state, DashboardEvent.FoodConsumeFinished(DashboardFood.BerryBowl))
+        state = reduceDashboard(
+            state,
+            DashboardEvent.FoodConsumeFinished(DashboardFood.BerryBowl, state.feedPulseId),
+        )
         assertEquals(FoodTokenPhase.Reappearing, state.feedToken.phase)
-        state = reduceDashboard(state, DashboardEvent.FoodReappearFinished(DashboardFood.BerryBowl))
+        state = reduceDashboard(
+            state,
+            DashboardEvent.FoodReappearFinished(DashboardFood.BerryBowl, state.feedPulseId),
+        )
         assertEquals(FoodTokenPhase.Idle, state.feedToken.phase)
 
         state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.LeafCrunch, "feed-2"))
         assertEquals(100, state.pet.energy)
         assertEquals(1, state.activeFeed?.audioIndex)
+    }
+
+    @Test
+    fun latestFoodInterruptsActiveRequestAndVisibleReply() {
+        var state = reduceDashboard(DashboardUiState(pet(hunger = 50, energy = 50)), DashboardEvent.OpenFeed)
+        state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.BerryBowl, "feed-1"))
+        val firstPulseId = state.feedPulseId
+
+        state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.LeafCrunch, "feed-2"))
+        assertEquals("feed-2", state.activeFeed?.requestKey)
+        assertEquals(75, state.pet.hunger)
+        assertEquals(75, state.pet.energy)
+        assertNull(state.feedReply)
+
+        val afterInterruptedReply = reduceDashboard(
+            state,
+            DashboardEvent.FeedSucceeded("feed-1", BerryReply),
+        )
+        assertSame(state, afterInterruptedReply)
+
+        val afterInterruptedMotion = reduceDashboard(
+            state,
+            DashboardEvent.FoodConsumeFinished(DashboardFood.LeafCrunch, firstPulseId),
+        )
+        assertSame(state, afterInterruptedMotion)
+
+        state = reduceDashboard(state, DashboardEvent.FeedSucceeded("feed-2", LeafReply))
+        assertEquals(LeafReply, state.feedReply?.text)
+
+        state = reduceDashboard(state, DashboardEvent.TapFood(DashboardFood.BerryBowl, "feed-3"))
+        assertEquals("feed-3", state.activeFeed?.requestKey)
+        assertNull(state.feedReply)
+
+        state = reduceDashboard(state, DashboardEvent.FeedFailed("feed-3"))
+        assertEquals(FeedFailureMessage, state.feedError)
+        assertNull(state.feedReply)
     }
 
     @Test
@@ -548,7 +590,7 @@ class DashboardContractTest {
     }
 
     @Test
-    fun onboardingFoodWaitsForReplyThenRemedyReturnsToTravelAction() {
+    fun onboardingFoodReplyCanBeInterruptedThenRemedyReturnsToTravelAction() {
         val firstReply = DashboardReply("feed-berry", FirstSessionAfterFirstFood)
         val remedySession = LocalFirstSession(
             "owner-a",
@@ -563,11 +605,12 @@ class DashboardContractTest {
             feedReply = firstReply,
         )
 
-        val blocked = reduceDashboard(
+        val interrupted = reduceDashboard(
             replying,
-            DashboardEvent.TapFood(DashboardFood.LeafCrunch, "too-early"),
+            DashboardEvent.TapFood(DashboardFood.LeafCrunch, "interrupt-reply"),
         )
-        assertNull(blocked.activeFeed)
+        assertEquals("interrupt-reply", interrupted.activeFeed?.requestKey)
+        assertNull(interrupted.feedReply)
 
         val ready = reduceDashboard(
             replying,
@@ -712,7 +755,7 @@ class DashboardContractTest {
             travelQueuedReply("  в столицу сша...  "),
         )
         assertEquals(
-            "Футболка iron maiden? Интересно. Я получу заказ примерно через 10 минут",
+            "Футболка iron maiden? Интересно, давай я позову тебя, когда переоденусь.",
             outfitQueuedReply("футболка iron maiden"),
         )
     }

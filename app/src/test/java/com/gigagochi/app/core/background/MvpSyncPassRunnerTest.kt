@@ -106,17 +106,37 @@ class MvpSyncPassRunnerTest {
     }
 
     @Test
+    fun allowedButFailedNotificationPostKeepsOneShotRetrying() = runBlocking {
+        val result = MvpSyncPassRunner(
+            sessionProvider = { session() },
+            petProvider = { pet() },
+            featureSync = { _, _ -> null },
+            notificationsAllowed = { true },
+            loadNotifications = { _, _ -> listOf(story()) },
+            emitter = LocalNotificationEmitter { false },
+            markNotified = { _, _ -> error("failed post must not be marked") },
+        ).runOnce()
+
+        assertEquals(MvpSyncPassResult.Retry, result)
+    }
+
+    @Test
     fun foregroundDispatcherEmitsAndMarksReadyContent() = runBlocking {
         val row = notification(LocalNotificationKind.TravelReady, "travel-ready")
         val emitted = mutableListOf<LocalCompletionNotification>()
         val marked = mutableListOf<LocalCompletionNotification>()
-        CompletionNotificationDispatcher(
+        var pending = true
+        val result = CompletionNotificationDispatcher(
             notificationsAllowed = { true },
-            loadNotifications = { _, _ -> listOf(row) },
+            loadNotifications = { _, _ -> if (pending) listOf(row) else emptyList() },
             emitter = LocalNotificationEmitter { emitted += it; true },
-            markNotified = { _, notification -> marked += notification },
+            markNotified = { _, notification ->
+                marked += notification
+                pending = false
+            },
         ).dispatch("owner-a", "pet-a")
 
+        assertEquals(CompletionNotificationDispatchResult.Complete, result)
         assertEquals(listOf(row), emitted)
         assertEquals(listOf(row), marked)
     }
@@ -126,12 +146,13 @@ class MvpSyncPassRunnerTest {
         val row = story()
         val emittedIds = mutableListOf<Int>()
         var firstMark = true
+        var pending = true
         val runner = MvpSyncPassRunner(
             sessionProvider = { session() },
             petProvider = { pet() },
             featureSync = { _, _ -> null },
             notificationsAllowed = { true },
-            loadNotifications = { _, _ -> listOf(row) },
+            loadNotifications = { _, _ -> if (pending) listOf(row) else emptyList() },
             emitter = LocalNotificationEmitter {
                 emittedIds += stableNotificationId(it)
                 true
@@ -141,6 +162,7 @@ class MvpSyncPassRunnerTest {
                     firstMark = false
                     error("process died before durable mark")
                 }
+                pending = false
             },
         )
 

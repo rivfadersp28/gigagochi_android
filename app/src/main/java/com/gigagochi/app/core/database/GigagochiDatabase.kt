@@ -31,9 +31,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         MemoryLearningEntity::class,
         PetMemoryStateEntity::class,
         ProactiveNotificationEntity::class,
+        NotificationOutboxEntity::class,
         EventHistoryViewEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -106,6 +107,29 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration7To8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `notification_outbox` (`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, `kind` TEXT NOT NULL, `stableKey` TEXT NOT NULL, `title` TEXT NOT NULL, `body` TEXT NOT NULL, `storyId` TEXT, `travelRequestKey` TEXT, `createdAtEpochMillis` INTEGER NOT NULL, `notifiedAtEpochMillis` INTEGER, PRIMARY KEY(`ownerId`, `kind`, `stableKey`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_notification_outbox_owner_pet_pending` ON `notification_outbox` (`ownerId`, `petId`, `notifiedAtEpochMillis`, `createdAtEpochMillis`)",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `notification_outbox` (`ownerId`, `petId`, `kind`, `stableKey`, `title`, `body`, `storyId`, `travelRequestKey`, `createdAtEpochMillis`, `notifiedAtEpochMillis`) SELECT `ownerId`, `petId`, 'ScheduledStory', `storyId`, `title`, substr(`text`, 1, 180), `storyId`, NULL, 0, NULL FROM `scheduled_stories` WHERE `notifiedAtEpochMillis` IS NULL",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `notification_outbox` (`ownerId`, `petId`, `kind`, `stableKey`, `title`, `body`, `storyId`, `travelRequestKey`, `createdAtEpochMillis`, `notifiedAtEpochMillis`) SELECT `ownerId`, `petId`, 'OutfitReady', `requestKey`, 'Новый образ готов', 'Загляни к питомцу и посмотри результат.', NULL, NULL, `appliedAtEpochMillis`, NULL FROM `applied_outfit_receipts` WHERE `notifiedAtEpochMillis` IS NULL",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `notification_outbox` (`ownerId`, `petId`, `kind`, `stableKey`, `title`, `body`, `storyId`, `travelRequestKey`, `createdAtEpochMillis`, `notifiedAtEpochMillis`) SELECT `ownerId`, `petId`, 'TravelReady', `requestKey`, 'Я вернулся из путешествия', 'Открой моё новое видео.', NULL, `requestKey`, `completedAtEpochMillis`, NULL FROM `travel_video_assets` WHERE `consumedAtEpochMillis` IS NOT NULL AND `notifiedAtEpochMillis` IS NULL",
+                )
+                db.execSQL(
+                    "INSERT OR IGNORE INTO `notification_outbox` (`ownerId`, `petId`, `kind`, `stableKey`, `title`, `body`, `storyId`, `travelRequestKey`, `createdAtEpochMillis`, `notifiedAtEpochMillis`) SELECT `ownerId`, `petId`, 'Proactive', `notificationId`, 'Сообщение от питомца', substr(`reply`, 1, 180), NULL, NULL, `createdAtEpochMillis`, NULL FROM `proactive_notifications` WHERE `notifiedAtEpochMillis` IS NULL",
+                )
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
@@ -117,6 +141,7 @@ abstract class GigagochiDatabase : RoomDatabase() {
             Migration4To5,
             Migration5To6,
             Migration6To7,
+            Migration7To8,
         ).build()
     }
 }

@@ -134,6 +134,33 @@ internal interface GigagochiDao {
         notifiedAt: Long,
     ): Int
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertNotificationOutbox(entity: NotificationOutboxEntity): Long
+
+    @Query("SELECT * FROM notification_outbox WHERE ownerId = :ownerId AND petId = :petId AND notifiedAtEpochMillis IS NULL ORDER BY createdAtEpochMillis")
+    suspend fun getPendingNotificationOutbox(
+        ownerId: String,
+        petId: String,
+    ): List<NotificationOutboxEntity>
+
+    @Query("SELECT * FROM notification_outbox WHERE ownerId = :ownerId AND notifiedAtEpochMillis IS NULL ORDER BY createdAtEpochMillis")
+    suspend fun getPendingNotificationOutbox(ownerId: String): List<NotificationOutboxEntity>
+
+    @Query("SELECT * FROM notification_outbox WHERE ownerId = :ownerId AND kind = :kind AND stableKey = :stableKey")
+    suspend fun getNotificationOutbox(
+        ownerId: String,
+        kind: String,
+        stableKey: String,
+    ): NotificationOutboxEntity?
+
+    @Query("UPDATE notification_outbox SET notifiedAtEpochMillis = :notifiedAt WHERE ownerId = :ownerId AND kind = :kind AND stableKey = :stableKey AND notifiedAtEpochMillis IS NULL")
+    suspend fun markNotificationOutboxNotified(
+        ownerId: String,
+        kind: String,
+        stableKey: String,
+        notifiedAt: Long,
+    ): Int
+
     @Query(
         """
         UPDATE pet_snapshots
@@ -518,6 +545,9 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM proactive_notifications WHERE ownerId = :ownerId")
     suspend fun deleteOwnerProactiveNotifications(ownerId: String): Int
+
+    @Query("DELETE FROM notification_outbox WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerNotificationOutbox(ownerId: String): Int
 
     @Query("DELETE FROM event_history_views WHERE ownerId = :ownerId")
     suspend fun deleteOwnerEventHistoryViews(ownerId: String): Int

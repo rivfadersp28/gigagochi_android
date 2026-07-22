@@ -74,6 +74,24 @@ class FirstSessionContractTest {
             FirstSessionAfterChatFallback,
             "Листик",
         ))
+        assertEquals(FirstSessionSensitiveTopicFallback, firstSessionReactionReply(
+            "Генеративные языковые модели не обладают собственным мнением.",
+            FirstSessionAfterChatFallback,
+            "Листик",
+            FirstSessionSensitiveTopicFallback,
+        ))
+        assertEquals(FirstSessionSensitiveTopicFallback, firstSessionReactionReply(
+            "Я языковая модель и не обладаю собственным мнением.",
+            FirstSessionAfterChatFallback,
+            "Листик",
+            FirstSessionSensitiveTopicFallback,
+        ))
+        assertEquals("Ой, эту тему я обойду. Лучше расскажи про любимую игру!", firstSessionReactionReply(
+            "Ой, эту тему я обойду. Лучше расскажи про любимую игру!",
+            FirstSessionAfterChatFallback,
+            "Листик",
+            FirstSessionSensitiveTopicFallback,
+        ))
     }
 
     @Test
