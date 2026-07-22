@@ -34,6 +34,17 @@ class ScheduledStoryCoordinatorTest {
     }
 
     @Test
+    fun generatingEpisodeRequestsAWorkerRetryWithoutPersistingPlaceholder() = runBlocking {
+        val store = MemoryStoryStore()
+        val api = StoryApi(pending = true)
+
+        val result = ScheduledStoryCoordinator("owner-a", store, api).checkDue(pet())
+
+        assertEquals(ScheduledStoryDueResult.Pending, result)
+        assertTrue(store.rows.isEmpty())
+    }
+
+    @Test
     fun secondChoiceAttemptAdoptsDurableWinnerRequestKeyAndDoesNotDoublePost() = runBlocking {
         val store = MemoryStoryStore().apply {
             saveScheduledStory(LocalScheduledStory("owner-a", StoryApi().story(StoryApi.storyDto())!!))
@@ -115,12 +126,17 @@ class ScheduledStoryCoordinatorTest {
         assertEquals(20, result.storyResult?.experienceGained)
     }
 
-    private class StoryApi : TestAndroidFeatureService() {
+    private class StoryApi(
+        private val pending: Boolean = false,
+    ) : TestAndroidFeatureService() {
         var dueCalls = 0
         val choiceKeys = mutableListOf<String>()
 
         override suspend fun dueStory(request: com.gigagochi.app.core.network.DueStoryRequestDto) =
-            FeatureApiResult.Success(DueStoryResponseDto(storyDto()))
+            FeatureApiResult.Success(
+                if (pending) DueStoryResponseDto(pending = true)
+                else DueStoryResponseDto(storyDto()),
+            )
                 .also { dueCalls += 1 }
 
         override suspend fun chooseStory(storyId: String, request: ScheduledStoryChoiceRequestDto):

@@ -70,4 +70,5 @@ private val RetryableSyncFailures = setOf(
     FeatureFailureKind.Server,
     FeatureFailureKind.RefreshUnavailable,
     FeatureFailureKind.Storage,
+    FeatureFailureKind.InProgress,
 )

@@ -49,14 +49,16 @@
   the retained one-part `InteractiveTravelStoryScreen` shell without restoring 4-part machinery.
   Choice success/replay commits the existing story receipt with the actual durable request key;
   route state and return to Dashboard use Room-authoritative experience, so restart cannot double XP.
-- Background delivery is one unique WorkManager `CoroutineWorker` (`KEEP`, connected network,
-  15-minute periodic minimum) enqueued only after production Dashboard startup. One pass
+- Background delivery uses the unique periodic WorkManager `CoroutineWorker` (`KEEP`, connected
+  network, 15-minute periodic minimum) enqueued after production Dashboard startup. When the due
+  endpoint reports that story generation is pending, foreground startup also enqueues a unique
+  one-shot run with linear retry; a periodic run retries itself until the story becomes ready. One pass
   bootstraps the anonymous Keystore session, checks due story once, performs exactly one pending
   Outfit/Travel recovery poll/apply, then emits one-channel local notifications. Room v1 dedupe is
   three nullable `notifiedAt` fields on existing completed rows; stable Android notification IDs
   replace a prior post if the process dies before the durable mark. Create media recovery после
   foreground-ready выполняется на Dashboard при lifecycle STARTED, но не через WorkManager.
-  Scheduled-story delivery is therefore best-effort local notification, not server FCM. Event
+  Scheduled-story delivery is still a best-effort local notification, not server FCM. Event
   chronology has no backend list/backfill endpoint: it remains durable across normal app restarts,
   but clearing app data, reinstalling, or moving to another device loses older local history.
 - `feature/events` merges the owner+pet `scheduled_stories` and consumed `travel_video_assets` Room

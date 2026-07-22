@@ -156,6 +156,10 @@ class MvpSyncPassRunnerTest {
             MvpSyncPassResult.Retry,
             runner(onSync = { FeatureFailure(FeatureFailureKind.Network) }).runOnce(),
         )
+        assertEquals(
+            MvpSyncPassResult.Retry,
+            runner(onSync = { FeatureFailure(FeatureFailureKind.InProgress) }).runOnce(),
+        )
         val emitted = mutableListOf<LocalCompletionNotification>()
         assertEquals(
             MvpSyncPassResult.Success,

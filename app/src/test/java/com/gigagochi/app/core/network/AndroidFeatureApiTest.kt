@@ -141,6 +141,11 @@ class AndroidFeatureApiTest {
 
     @Test
     fun scheduledStoryAllowsAdditiveFieldsButRejectsMalformedChoicesAndUnsafeMedia() = runBlocking {
+        val pending = api(200, """{"story":null,"pending":true}""")
+            .dueStory(DueStoryRequestDto(featurePet()))
+        assertTrue(pending is FeatureApiResult.Success)
+        assertTrue((pending as FeatureApiResult.Success).value.pending)
+
         val accepted = api(200, dueStoryJson().replace("\"storyId\"", "\"future\":true,\"storyId\""))
             .dueStory(DueStoryRequestDto(featurePet()))
         assertTrue(accepted is FeatureApiResult.Success)

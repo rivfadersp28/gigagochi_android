@@ -65,6 +65,7 @@ import com.gigagochi.app.core.auth.LocalSessionBootstrapOutcome
 import com.gigagochi.app.core.auth.SessionBootstrapCoordinator
 import com.gigagochi.app.core.auth.androidSessionRepository
 import com.gigagochi.app.core.background.MvpSyncScheduler
+import com.gigagochi.app.core.background.StorySyncScheduler
 import com.gigagochi.app.core.background.CreateSyncScheduler
 import com.gigagochi.app.core.background.RequestNotificationPermissionOnce
 import com.gigagochi.app.core.background.AndroidLocalNotificationEmitter
@@ -714,7 +715,12 @@ class MainActivity : ComponentActivity() {
                             lifecycleOwner,
                         ) {
                             lifecycleOwner.lifecycle.repeatOnLifecycle(ForegroundRecoveryMinimumLifecycle) {
-                                scheduledStoryCoordinator.checkDue(requireNotNull(activePet.value))
+                                if (
+                                    scheduledStoryCoordinator.checkDue(requireNotNull(activePet.value)) ==
+                                    com.gigagochi.app.feature.travel.ScheduledStoryDueResult.Pending
+                                ) {
+                                    StorySyncScheduler.enqueue(applicationContext)
+                                }
                                 completionNotifications.dispatch(
                                     session.accountId,
                                     requireNotNull(activePet.value).petId,

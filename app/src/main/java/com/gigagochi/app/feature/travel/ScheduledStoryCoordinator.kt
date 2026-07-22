@@ -16,6 +16,7 @@ import kotlinx.coroutines.CancellationException
 
 sealed interface ScheduledStoryDueResult {
     data object NotDue : ScheduledStoryDueResult
+    data object Pending : ScheduledStoryDueResult
     data class Saved(val story: ScheduledStory) : ScheduledStoryDueResult
     data class Failure(val failure: FeatureFailure) : ScheduledStoryDueResult
 }
@@ -40,7 +41,11 @@ class ScheduledStoryCoordinator(
         when (val response = api.dueStory(DueStoryRequestDto(pet.toFeaturePetDto()))) {
             is FeatureApiResult.Failure -> ScheduledStoryDueResult.Failure(response.failure)
             is FeatureApiResult.Success -> {
-                val dto = response.value.story ?: return@protectDue ScheduledStoryDueResult.NotDue
+                val dto = response.value.story ?: return@protectDue if (response.value.pending) {
+                    ScheduledStoryDueResult.Pending
+                } else {
+                    ScheduledStoryDueResult.NotDue
+                }
                 val story = api.story(dto)
                     ?.takeIf { it.petId == pet.petId }
                     ?: return@protectDue protocolDueFailure()

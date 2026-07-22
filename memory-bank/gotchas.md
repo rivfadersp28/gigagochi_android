@@ -111,9 +111,10 @@
   их и может оставить фразу про голод обрезанным хвостом следующего блока.
 - `partycles` измеряет heart `lifetime` в simulation frames, уменьшая life на 1.2 при 60 fps; это не миллисекунды. Mobile web оптимизирует 16/170/42 до 9 частиц, 136 frames и 33px, поэтому native burst длится около 1.889s. Media3 `GlEffect` обновляет динамический shader на decoded video frames, а `setVideoEffects` без явного `Presentation` crop меняет aspect/letterbox; native tap использует smoothstep envelope 250 мс при постоянном cover-crop, без snapshot и смены геометрии.
 - WorkManager periodic interval 15 minutes is only a legal minimum, not a delivery deadline: OS
-  batching, Doze and network constraints may delay it. This MVP is local best-effort notification,
-  not FCM/push. Never replace the one-pass `recoverForeground(maxPollAttempts=1)` with `watch()` or
-  long polling inside the worker.
+  batching, Doze and network constraints may delay it. A due-story response with `pending=true`
+  must enqueue/retain the unique one-shot retry instead of waiting for the next periodic window.
+  This remains a local best-effort notification, not FCM/push. Never replace the one-pass
+  `recoverForeground(maxPollAttempts=1)` with `watch()` or long polling inside the worker.
 - `AnimatedContent` продолжает компоновать уходящий route до конца exit-анимации. Нельзя очищать
   payload активного экрана (`activeStory` и аналоги) одновременно со сменой route, если исходная
   ветка делает `requireNotNull(payload)`: сначала переключай route, сохраняй snapshot payload внутри

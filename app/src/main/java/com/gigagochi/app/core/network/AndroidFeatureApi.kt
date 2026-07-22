@@ -383,7 +383,10 @@ data class ScheduledStoryDto(
 }
 
 @Serializable
-data class DueStoryResponseDto(val story: ScheduledStoryDto? = null)
+data class DueStoryResponseDto(
+    val story: ScheduledStoryDto? = null,
+    val pending: Boolean = false,
+)
 
 @Serializable
 data class ScheduledStoryChoiceRequestDto(

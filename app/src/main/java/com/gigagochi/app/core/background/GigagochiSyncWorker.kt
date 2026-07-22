@@ -5,8 +5,11 @@ package com.gigagochi.app.core.background
 import android.content.Context
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.BackoffPolicy
+import androidx.work.ExistingWorkPolicy
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -25,6 +28,7 @@ import com.gigagochi.app.core.model.Session
 import com.gigagochi.app.core.network.AndroidFeatureApi
 import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.FeatureFailure
+import com.gigagochi.app.core.network.FeatureFailureKind
 import com.gigagochi.app.core.network.StaticMediaCache
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.feature.dashboard.DashboardOutcomeApplicationCoordinator
@@ -40,7 +44,10 @@ import java.util.concurrent.TimeUnit
 const val MvpSyncIntervalMinutes = 15L
 internal const val MvpWorkerMaxPollAttempts = 1
 internal const val MvpSyncUniqueWorkName = "gigagochi-mvp-sync"
+internal const val StorySyncUniqueWorkName = "gigagochi-story-sync"
+internal const val StorySyncBackoffSeconds = 10L
 internal val MvpSyncExistingPolicy = ExistingPeriodicWorkPolicy.KEEP
+internal val StorySyncExistingPolicy = ExistingWorkPolicy.KEEP
 internal val MvpSyncNetworkConstraint = NetworkType.CONNECTED
 
 object MvpSyncScheduler {
@@ -56,6 +63,28 @@ object MvpSyncScheduler {
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             MvpSyncUniqueWorkName,
             MvpSyncExistingPolicy,
+            request,
+        )
+    }
+}
+
+object StorySyncScheduler {
+    fun enqueue(context: Context) {
+        val request = OneTimeWorkRequestBuilder<GigagochiSyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(MvpSyncNetworkConstraint)
+                    .build(),
+            )
+            .setBackoffCriteria(
+                BackoffPolicy.LINEAR,
+                StorySyncBackoffSeconds,
+                TimeUnit.SECONDS,
+            )
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            StorySyncUniqueWorkName,
+            StorySyncExistingPolicy,
             request,
         )
     }
@@ -143,6 +172,8 @@ class GigagochiSyncWorker(
                 debugScheduledStoryService(api),
             ).checkDue(pet)
         ) {
+            com.gigagochi.app.feature.travel.ScheduledStoryDueResult.Pending ->
+                FeatureFailure(FeatureFailureKind.InProgress, "STORY_GENERATING")
             is com.gigagochi.app.feature.travel.ScheduledStoryDueResult.Failure -> story.failure
             else -> null
         }
