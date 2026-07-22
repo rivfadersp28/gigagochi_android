@@ -100,7 +100,9 @@ fun EventHistoryScreen(
     }
     val listState = rememberLazyListState()
     val reducedMotion = rememberTravelReducedMotionPreference()
-    val safeTop = WindowInsets.safeDrawing.asPaddingValues().calculateTopPadding()
+    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val safeTop = safeDrawingPadding.calculateTopPadding()
+    val safeBottom = safeDrawingPadding.calculateBottomPadding()
     val eventKeys = remember(history.items) { history.items.mapTo(mutableSetOf()) { it.key } }
     val activeEventKey by remember(listState, eventKeys) {
         derivedStateOf {
@@ -127,7 +129,7 @@ fun EventHistoryScreen(
                 top = safeTop + ContextualAppBarEdgePadding +
                     ContextualNavigationMinimumTouchTarget + ContextualAppBarContentGap,
                 end = EventScreenHorizontalPadding,
-                bottom = 34.dp,
+                bottom = safeBottom + 34.dp,
             ),
             modifier = Modifier
                 .fillMaxSize()

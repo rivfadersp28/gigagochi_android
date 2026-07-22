@@ -279,7 +279,9 @@ private fun StoryScrollableContent(
                 },
             )
             .windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Top),
+                WindowInsets.safeDrawing.only(
+                    WindowInsetsSides.Top + WindowInsetsSides.Bottom,
+                ),
             )
             .padding(
                 top = ContextualAppBarEdgePadding +

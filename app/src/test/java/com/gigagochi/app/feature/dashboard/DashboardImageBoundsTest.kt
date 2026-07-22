@@ -17,10 +17,11 @@ class DashboardImageBoundsTest {
     }
 
     @Test
-    fun dashboardActionsUseAlreadyInsetViewportAfterCoverScale() {
+    fun dashboardActionsUseNavigationBarSafeViewportAfterCoverScale() {
         assertEquals(92.dp, DashboardExperienceTop)
         assertEquals(20.dp, DashboardInputHorizontalPadding)
         assertEquals(362.dp, DashboardInputMaxWidth)
+        assertEquals(826.dp, dashboardSafeViewportHeight(874.dp, 48.dp))
         assertEquals(762.dp, dashboardActionTop(874.dp, 1f))
         assertEquals(672.203.dp, dashboardFeedRowTop(762.dp))
 

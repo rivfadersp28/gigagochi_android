@@ -25,6 +25,7 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -46,8 +47,10 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -1118,7 +1121,11 @@ private fun DashboardInlineScreen(
                 onInputSurfaceTopChange = { inputSurfaceTopPx = it },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .windowInsetsPadding(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                    .windowInsetsPadding(
+                        WindowInsets.ime
+                            .union(WindowInsets.navigationBars)
+                            .only(WindowInsetsSides.Bottom),
+                    )
                     .padding(horizontal = DashboardInputHorizontalPadding)
                     .padding(bottom = 16.dp),
             )
@@ -1761,7 +1768,13 @@ private fun BoxWithReferenceFrame(
 ) {
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val scale = max(maxWidth.value / 402f, maxHeight.value / 874f)
-        val actionTop = dashboardActionTop(maxHeight, scale)
+        val navigationBarBottom = WindowInsets.navigationBars
+            .asPaddingValues()
+            .calculateBottomPadding()
+        val actionTop = dashboardActionTop(
+            dashboardSafeViewportHeight(maxHeight, navigationBarBottom),
+            scale,
+        )
         CompositionLocalProvider(LocalDashboardActionTop provides actionTop) {
             Box(
                 modifier = Modifier
@@ -1781,6 +1794,9 @@ private fun BoxWithReferenceFrame(
         }
     }
 }
+
+internal fun dashboardSafeViewportHeight(viewportHeight: Dp, navigationBarBottom: Dp): Dp =
+    (viewportHeight - navigationBarBottom).coerceAtLeast(0.dp)
 
 internal fun dashboardActionTop(viewportHeight: Dp, scale: Float): Dp {
     require(scale > 0f)
