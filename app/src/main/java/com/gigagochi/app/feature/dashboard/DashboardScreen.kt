@@ -1293,8 +1293,15 @@ private fun ConversationInputPanel(
         else -> "Сообщение персонажу"
     }
     val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val submit by rememberUpdatedState(onSubmit)
+    fun submitAndDismissKeyboard() {
+        buttonPressFeedback()
+        submit()
+        focusManager.clearFocus(force = true)
+        keyboard?.hide()
+    }
     val entranceAlpha = remember(mode, requestIme, reducedMotion) {
         Animatable(if (requestIme && !reducedMotion) 0f else 1f)
     }
@@ -1436,8 +1443,7 @@ private fun ConversationInputPanel(
                         .pointerInput(value, busy) {
                             detectTapGestures(onTap = {
                                 if (!busy && value.trim().isNotEmpty()) {
-                                    buttonPressFeedback()
-                                    submit()
+                                    submitAndDismissKeyboard()
                                 }
                             })
                         }
@@ -1446,8 +1452,7 @@ private fun ConversationInputPanel(
                             contentDescription = "Создать наряд за 200 монет"
                             onClick("Создать наряд за 200 монет") {
                                 if (!busy && value.trim().isNotEmpty()) {
-                                    buttonPressFeedback()
-                                    submit()
+                                    submitAndDismissKeyboard()
                                     true
                                 } else {
                                     false
@@ -1476,8 +1481,7 @@ private fun ConversationInputPanel(
                         .pointerInput(value, busy) {
                             detectTapGestures(onTap = {
                                 if (!busy && value.trim().isNotEmpty()) {
-                                    buttonPressFeedback()
-                                    submit()
+                                    submitAndDismissKeyboard()
                                 }
                             })
                         }
@@ -1486,8 +1490,7 @@ private fun ConversationInputPanel(
                             contentDescription = "Отправить"
                             onClick("Отправить") {
                                 if (!busy && value.trim().isNotEmpty()) {
-                                    buttonPressFeedback()
-                                    submit()
+                                    submitAndDismissKeyboard()
                                     true
                                 } else {
                                     false
