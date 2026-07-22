@@ -151,6 +151,27 @@ class CharacterMemoryTest {
     }
 
     @Test
+    fun ambientContextAlwaysIncludesRememberedOwnerName() {
+        val memory = LocalPetMemoryState(
+            memories = listOf(
+                memory("other", "preference", "Пользователь любит чай.", "tea"),
+                memory(
+                    id = "name-memory",
+                    kind = "user_fact",
+                    text = "Пользователя зовут Серёбра.",
+                    key = "user-name",
+                    memoryClass = "core",
+                ),
+            ),
+        )
+
+        val context = buildAmbientMemoryContext(memory, now)
+
+        assertEquals("name-memory", context.relevantMemories.first().id)
+        assertEquals("Пользователя зовут Серёбра.", context.relevantMemories.first().text)
+    }
+
+    @Test
     fun proactiveRunsOnlyOncePerLocalDay() {
         val memory = memory("exam", "deadline", "У пользователя экзамен.", "deadline-exam", dueAt = now)
         val alreadySent = LocalPetMemoryState(

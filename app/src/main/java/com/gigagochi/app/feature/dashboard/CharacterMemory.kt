@@ -255,6 +255,28 @@ fun buildDailyProactiveContext(
     )
 }
 
+fun buildAmbientMemoryContext(
+    memory: LocalPetMemoryState,
+    nowEpochMillis: Long,
+    characterExperiences: List<LocalCharacterExperience> = emptyList(),
+): MemoryContextDto {
+    val activeMemories = memory.memories
+        .asSequence()
+        .filter { it.expiresAtEpochMillis == null || it.expiresAtEpochMillis > nowEpochMillis }
+        .sortedWith(
+            compareByDescending<LocalUserMemory> { it.normalizedKey == "user-name" }
+                .thenByDescending { it.importance }
+                .thenByDescending { it.updatedAtEpochMillis },
+        )
+        .map(LocalUserMemory::toContextDto)
+    val experiences = characterExperiences.asSequence().map(LocalCharacterExperience::toContextDto)
+    return MemoryContextDto(
+        summary = memory.summary,
+        userProfile = memory.userProfile,
+        relevantMemories = (activeMemories + experiences).take(5).toList(),
+    )
+}
+
 internal fun sanitizeProactiveReply(
     reply: String,
     memory: LocalPetMemoryState,

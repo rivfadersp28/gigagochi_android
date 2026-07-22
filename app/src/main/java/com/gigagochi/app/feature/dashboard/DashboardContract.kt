@@ -152,6 +152,7 @@ data class DashboardUiState(
     val activeChat: PendingChatRequest? = null,
     val queuedChat: PendingChatRequest? = null,
     val chatReply: DashboardReply? = null,
+    val activeAmbientRequestKey: String? = null,
     val feedError: String? = null,
     val activeFeed: PendingFeedRequest? = null,
     val feedReply: DashboardReply? = null,
@@ -186,6 +187,12 @@ sealed interface DashboardEvent {
     data class SubmitChat(val requestKey: String) : DashboardEvent
     data class ChatSucceeded(val requestKey: String, val result: DashboardChatResult) : DashboardEvent
     data class ChatFailed(val requestKey: String) : DashboardEvent
+    data class AmbientStarted(val requestKey: String) : DashboardEvent
+    data class AmbientSucceeded(
+        val requestKey: String,
+        val result: DashboardAmbientResult,
+    ) : DashboardEvent
+    data class AmbientFailed(val requestKey: String) : DashboardEvent
     data class StartFoodDrag(val food: DashboardFood) : DashboardEvent
     data class MoveFoodDrag(val food: DashboardFood, val offsetX: Float, val offsetY: Float) : DashboardEvent
     data class CancelFoodDrag(val food: DashboardFood) : DashboardEvent
@@ -372,6 +379,41 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
             },
             chatError = if (state.queuedChat == null) ChatFailureMessage else null,
         )
+    } else {
+        state
+    }
+
+    is DashboardEvent.AmbientStarted -> if (
+        state.mode == DashboardMode.Idle &&
+        state.activeAmbientRequestKey == null &&
+        state.transientReply == null &&
+        (state.firstSession == null || state.firstSession.stage == FirstSessionStage.Completed)
+    ) {
+        state.copy(activeAmbientRequestKey = event.requestKey)
+    } else {
+        state
+    }
+
+    is DashboardEvent.AmbientSucceeded -> if (
+        state.activeAmbientRequestKey == event.requestKey
+    ) {
+        if (state.mode == DashboardMode.Idle) {
+            state.copy(
+                activeAmbientRequestKey = null,
+                pet = event.result.pet,
+                transientReply = DashboardReply(event.requestKey, event.result.reply),
+            )
+        } else {
+            state.copy(activeAmbientRequestKey = null)
+        }
+    } else {
+        state
+    }
+
+    is DashboardEvent.AmbientFailed -> if (
+        state.activeAmbientRequestKey == event.requestKey
+    ) {
+        state.copy(activeAmbientRequestKey = null)
     } else {
         state
     }

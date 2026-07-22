@@ -512,6 +512,42 @@ class DashboardContractTest {
     }
 
     @Test
+    fun ambientReplyAppearsOnIdleDashboardAndUpdatesPersistedMessage() {
+        val initial = DashboardUiState(pet = pet().copy(message = "Как тебя зовут?"))
+        val started = reduceDashboard(initial, DashboardEvent.AmbientStarted("ambient-1"))
+        val ambientPet = initial.pet.copy(message = "Сегодня облака похожи на пирожки.")
+        val completed = reduceDashboard(
+            started,
+            DashboardEvent.AmbientSucceeded(
+                "ambient-1",
+                DashboardAmbientResult(ambientPet.message, ambientPet),
+            ),
+        )
+
+        assertNull(completed.activeAmbientRequestKey)
+        assertEquals(ambientPet.message, completed.pet.message)
+        assertEquals(ambientPet.message, dashboardIdleMessage(completed))
+    }
+
+    @Test
+    fun ambientReplyDoesNotInterruptActiveOnboarding() {
+        val onboarding = DashboardUiState(
+            pet = pet(),
+            firstSession = LocalFirstSession(
+                "owner-a",
+                "pet-instance-17",
+                FirstSessionStage.AwaitingChat,
+                updatedAtEpochMillis = 1,
+            ),
+        )
+
+        val unchanged = reduceDashboard(onboarding, DashboardEvent.AmbientStarted("ambient-1"))
+
+        assertNull(unchanged.activeAmbientRequestKey)
+        assertEquals(onboarding.firstSessionIdleReply, unchanged.firstSessionIdleReply)
+    }
+
+    @Test
     fun onboardingFoodWaitsForReplyThenRemedyReturnsToTravelAction() {
         val firstReply = DashboardReply("feed-berry", FirstSessionAfterFirstFood)
         val remedySession = LocalFirstSession(

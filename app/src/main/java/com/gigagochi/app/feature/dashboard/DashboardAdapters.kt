@@ -7,6 +7,15 @@ interface DashboardChatAdapter {
     suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult
 }
 
+interface DashboardAmbientAdapter {
+    suspend fun reply(requestKey: String, pet: PetDashboardState): DashboardAmbientResult
+}
+
+data class DashboardAmbientResult(
+    val reply: String,
+    val pet: PetDashboardState,
+)
+
 data class DashboardChatResult(
     val reply: String,
     val pet: PetDashboardState,
@@ -30,6 +39,13 @@ interface DashboardTravelAdapter {
 class UnavailableDashboardChatAdapter : DashboardChatAdapter {
     override suspend fun reply(request: PendingChatRequest, pet: PetDashboardState): DashboardChatResult =
         error("Real chat API is not connected")
+}
+
+class UnavailableDashboardAmbientAdapter : DashboardAmbientAdapter {
+    override suspend fun reply(
+        requestKey: String,
+        pet: PetDashboardState,
+    ): DashboardAmbientResult = error("Real ambient API is not connected")
 }
 
 class UnavailableDashboardFeedAdapter : DashboardFeedAdapter {

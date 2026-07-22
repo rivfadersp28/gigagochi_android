@@ -150,6 +150,17 @@ data class ChatRequestDto(
 )
 
 @Serializable
+data class AmbientRequestDto(
+    val requestKey: String,
+    val pet: FeaturePetDto,
+    val history: List<ChatHistoryItemDto> = emptyList(),
+    val recentAmbientReplies: List<String> = emptyList(),
+    val memoryContext: MemoryContextDto? = null,
+    val nowIso: String? = null,
+    val timezone: String? = null,
+)
+
+@Serializable
 data class ChatHistoryItemDto(
     val role: String,
     val text: String,
@@ -389,6 +400,7 @@ interface AndroidFeatureService {
     suspend fun submitCreate(request: CreateJobRequestDto): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun pollCreate(jobId: String): FeatureApiResult<GenerationEnvelopeDto>
     suspend fun chat(request: ChatRequestDto): FeatureApiResult<ChatResponseDto>
+    suspend fun ambient(request: AmbientRequestDto): FeatureApiResult<ChatResponseDto>
     suspend fun extractMemory(
         request: MemoryExtractionRequestDto,
     ): FeatureApiResult<MemoryExtractionResponseDto>
@@ -430,6 +442,9 @@ class AndroidFeatureApi(
 
     override suspend fun chat(request: ChatRequestDto): FeatureApiResult<ChatResponseDto> =
         post("/api/android/chat", request)
+
+    override suspend fun ambient(request: AmbientRequestDto): FeatureApiResult<ChatResponseDto> =
+        post("/api/android/ambient", request)
 
     override suspend fun extractMemory(
         request: MemoryExtractionRequestDto,

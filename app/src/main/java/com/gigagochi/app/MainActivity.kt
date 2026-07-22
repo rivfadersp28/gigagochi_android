@@ -99,6 +99,7 @@ import com.gigagochi.app.feature.dashboard.ForegroundPendingRecoveryCoordinator
 import com.gigagochi.app.feature.dashboard.ForegroundRecoverySignal
 import com.gigagochi.app.feature.dashboard.DashboardOutcomeApplicationCoordinator
 import com.gigagochi.app.feature.dashboard.RealDashboardChatAdapter
+import com.gigagochi.app.feature.dashboard.RealDashboardAmbientAdapter
 import com.gigagochi.app.feature.dashboard.RealDashboardOutfitAdapter
 import com.gigagochi.app.feature.dashboard.RealDashboardTravelAdapter
 import com.gigagochi.app.feature.dashboard.toUi
@@ -758,6 +759,9 @@ class MainActivity : ComponentActivity() {
                                         scope,
                                     ),
                                 )
+                            },
+                            ambientAdapter = remember(api, session.accountId, repository) {
+                                RealDashboardAmbientAdapter(api, session.accountId, repository)
                             },
                             feedAdapter = remember { DeterministicLocalDashboardFeedAdapter() },
                             outfitAdapter = debugDashboardOutfitAdapter,

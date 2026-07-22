@@ -235,6 +235,7 @@ fun DashboardRoute(
     onFirstSessionChanged: (LocalFirstSession) -> Unit = {},
     onPetChanged: suspend (PetDashboardState) -> Boolean = { true },
     chatAdapter: DashboardChatAdapter = remember { FakeDashboardChatAdapter() },
+    ambientAdapter: DashboardAmbientAdapter = remember { UnavailableDashboardAmbientAdapter() },
     feedAdapter: DashboardFeedAdapter = remember { FakeDashboardFeedAdapter() },
     outfitAdapter: DashboardOutfitAdapter = remember { FakeDashboardOutfitAdapter() },
     travelAdapter: DashboardTravelAdapter = remember { FakeDashboardTravelAdapter() },
@@ -328,6 +329,26 @@ fun DashboardRoute(
     }
 
     BackHandler(enabled = state.mode != DashboardMode.Idle) { closeMode() }
+
+    LaunchedEffect(mediaActive, state.pet.petId, state.firstSession?.stage) {
+        if (
+            !mediaActive ||
+            debugState != DashboardDebugState.Idle ||
+            state.mode != DashboardMode.Idle ||
+            state.transientReply != null ||
+            (state.firstSession != null && state.firstSession?.stage != FirstSessionStage.Completed)
+        ) {
+            return@LaunchedEffect
+        }
+        val requestKey = nextRequestKey("ambient")
+        dispatch(DashboardEvent.AmbientStarted(requestKey))
+        when (val result = executeDashboardAdapter { ambientAdapter.reply(requestKey, state.pet) }) {
+            is DashboardAdapterResult.Success -> dispatch(
+                DashboardEvent.AmbientSucceeded(requestKey, result.value),
+            )
+            DashboardAdapterResult.Failure -> dispatch(DashboardEvent.AmbientFailed(requestKey))
+        }
+    }
 
     LaunchedEffect(state.activeChat?.requestKey) {
         val request = state.activeChat ?: return@LaunchedEffect

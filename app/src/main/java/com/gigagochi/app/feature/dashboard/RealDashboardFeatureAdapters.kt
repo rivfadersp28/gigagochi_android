@@ -13,6 +13,7 @@ import com.gigagochi.app.core.database.PendingBackendStateStore
 import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.hasCompleteDashboardVideos
 import com.gigagochi.app.core.network.AndroidFeatureService
+import com.gigagochi.app.core.network.AmbientRequestDto
 import com.gigagochi.app.core.network.ChatRequestDto
 import com.gigagochi.app.core.network.FeatureApiResult
 import com.gigagochi.app.core.network.FeatureFailure
@@ -163,6 +164,62 @@ class RealDashboardChatAdapter(
                     }
                 }
                 DashboardChatResult(reply, appliedPet)
+            }
+            is FeatureApiResult.Failure -> throw FeatureAdapterException(result.failure)
+        }
+    }
+}
+
+class RealDashboardAmbientAdapter(
+    private val api: AndroidFeatureService,
+    private val ownerId: String,
+    private val repository: PetLocalRepository,
+) : DashboardAmbientAdapter {
+    override suspend fun reply(
+        requestKey: String,
+        pet: PetDashboardState,
+    ): DashboardAmbientResult {
+        val now = System.currentTimeMillis()
+        val history = repository.recentChatMessages(ownerId, pet.petId, 12)
+        val memory = repository.memoryState(ownerId, pet.petId)
+        val memoryContext = buildAmbientMemoryContext(
+            memory,
+            now,
+            repository.recentCharacterExperiences(ownerId, pet.petId),
+        )
+        val recentAmbientReplies = listOf(pet.message)
+            .filter { it.isNotBlank() && !it.contains("как тебя зовут", ignoreCase = true) }
+        return when (
+            val result = api.ambient(
+                AmbientRequestDto(
+                    requestKey = requestKey,
+                    pet = pet.toFeaturePetDto(),
+                    history = history.map {
+                        com.gigagochi.app.core.network.ChatHistoryItemDto(
+                            it.role,
+                            it.text,
+                            Instant.ofEpochMilli(it.createdAtEpochMillis).toString(),
+                        )
+                    },
+                    recentAmbientReplies = recentAmbientReplies,
+                    memoryContext = memoryContext,
+                    nowIso = Instant.ofEpochMilli(now).toString(),
+                    timezone = ZoneId.systemDefault().id,
+                ),
+            )
+        ) {
+            is FeatureApiResult.Success -> {
+                val reply = sanitizeProactiveReply(result.value.reply, memory, now)
+                if (reply.isBlank()) {
+                    throw FeatureAdapterException(FeatureFailure(FeatureFailureKind.Protocol))
+                }
+                repository.markMemoriesMentioned(
+                    ownerId,
+                    pet.petId,
+                    memoryContext.relevantMemories.mapTo(mutableSetOf()) { it.id },
+                    now,
+                )
+                DashboardAmbientResult(reply, pet.copy(message = reply))
             }
             is FeatureApiResult.Failure -> throw FeatureAdapterException(result.failure)
         }
