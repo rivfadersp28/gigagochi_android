@@ -122,8 +122,22 @@ class DashboardContractTest {
 
         state = reduceDashboard(state, DashboardEvent.SubmitChat("chat-1"))
         val firstRequest = state.activeChat
-        val duplicate = reduceDashboard(state, DashboardEvent.SubmitChat("chat-2"))
+        val duplicate = reduceDashboard(
+            reduceDashboard(state, DashboardEvent.UpdateChatDraft("На самом деле это ужасная шутка")),
+            DashboardEvent.SubmitChat("chat-2"),
+        )
         assertSame(firstRequest, duplicate.activeChat)
+        assertEquals("На самом деле это ужасная шутка", duplicate.queuedChat?.message)
+
+        val continued = reduceDashboard(
+            duplicate,
+            DashboardEvent.ChatSucceeded(
+                "chat-1",
+                DashboardChatResult(DeterministicChatReply, duplicate.pet),
+            ),
+        )
+        assertEquals("chat-2", continued.activeChat?.requestKey)
+        assertEquals("На самом деле это ужасная шутка", continued.activeChat?.message)
 
         state = reduceDashboard(state, DashboardEvent.ChatFailed("chat-1"))
         assertTrue(state.chatDraft.startsWith("hello"))
@@ -485,6 +499,16 @@ class DashboardContractTest {
             ),
         )
         assertNull(dashboardIdleMessage(onboardingCompleted))
+    }
+
+    @Test
+    fun restoredDashboardDoesNotRepeatStaleNameQuestionWithoutOnboardingSession() {
+        val restored = DashboardUiState(
+            pet = pet().copy(message = "Как тебя зовут?"),
+            firstSession = null,
+        )
+
+        assertNull(dashboardIdleMessage(restored))
     }
 
     @Test

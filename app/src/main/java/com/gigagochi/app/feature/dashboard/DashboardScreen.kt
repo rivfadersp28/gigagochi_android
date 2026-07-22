@@ -1059,7 +1059,7 @@ private fun DashboardInlineScreen(
                 busy = when {
                     isOutfit -> state.activeOutfit != null
                     isTravel -> state.activeTravel != null
-                    else -> state.activeChat != null
+                    else -> false
                 },
                 hazeState = hazeState,
                 requestIme = requestImeOverride

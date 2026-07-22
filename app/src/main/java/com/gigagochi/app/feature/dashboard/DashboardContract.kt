@@ -150,6 +150,7 @@ data class DashboardUiState(
     val chatDraft: String = "",
     val chatError: String? = null,
     val activeChat: PendingChatRequest? = null,
+    val queuedChat: PendingChatRequest? = null,
     val chatReply: DashboardReply? = null,
     val feedError: String? = null,
     val activeFeed: PendingFeedRequest? = null,
@@ -262,6 +263,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         chatError = null,
         chatReply = null,
         activeChat = null,
+        queuedChat = null,
         transientReply = null,
         settledFirstSessionReply = null,
     )
@@ -297,6 +299,7 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         chatError = null,
         chatReply = null,
         activeChat = null,
+        queuedChat = null,
         feedError = null,
         feedReply = null,
         activeFeed = null,
@@ -319,12 +322,14 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
 
     is DashboardEvent.SubmitChat -> {
         val message = state.chatDraft.trim().take(DashboardPromptMaxLength)
-        if (
-            state.mode != DashboardMode.Chat ||
-            message.isEmpty() ||
-            state.activeChat != null
-        ) {
+        if (state.mode != DashboardMode.Chat || message.isEmpty()) {
             state
+        } else if (state.activeChat != null) {
+            state.copy(
+                chatDraft = "",
+                chatError = null,
+                queuedChat = PendingChatRequest(event.requestKey, message),
+            )
         } else {
             state.copy(
                 chatDraft = "",
@@ -339,7 +344,8 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
         state.mode == DashboardMode.Chat && state.activeChat?.requestKey == event.requestKey
     ) {
         state.copy(
-            activeChat = null,
+            activeChat = state.queuedChat,
+            queuedChat = null,
             chatError = null,
             pet = event.result.pet,
             chatReply = DashboardReply(
@@ -357,9 +363,14 @@ fun reduceDashboard(state: DashboardUiState, event: DashboardEvent): DashboardUi
     ) {
         val failedDraft = state.activeChat.message
         state.copy(
-            activeChat = null,
-            chatDraft = state.chatDraft.ifBlank { failedDraft },
-            chatError = ChatFailureMessage,
+            activeChat = state.queuedChat,
+            queuedChat = null,
+            chatDraft = if (state.queuedChat == null) {
+                state.chatDraft.ifBlank { failedDraft }
+            } else {
+                state.chatDraft
+            },
+            chatError = if (state.queuedChat == null) ChatFailureMessage else null,
         )
     } else {
         state
@@ -674,7 +685,8 @@ fun dashboardIdleMessage(state: DashboardUiState): String? =
         ?: state.settledFirstSessionReply?.visibleText
         ?: state.pet.message.takeUnless {
             firstSessionMainAction(state.firstSession) != null ||
-                state.firstSession?.stage == FirstSessionStage.Completed
+                state.firstSession?.stage == FirstSessionStage.Completed ||
+                (state.firstSession == null && it.contains("как тебя зовут", ignoreCase = true))
         }
 
 fun hydrateExternalFirstSession(
