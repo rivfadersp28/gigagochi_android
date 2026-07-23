@@ -57,6 +57,12 @@
   --glass-line: rgb(255 255 255 / 16%);
   --glass-highlight: rgb(255 255 255 / 20%);
   --glass-shade: rgb(0 0 0 / 20%);
+  --glass-action-inner-shadow:
+    inset 1px 2px 3px var(--glass-highlight),
+    inset -4px -4px 2px var(--glass-shade);
+  --glass-input-inner-shadow:
+    inset 0 3px 12px rgb(255 255 255 / 30%),
+    inset 0 2px 4px rgb(255 255 255 / 9%);
   --safe-top: 0px;
   --safe-right: 0px;
   --safe-bottom: 0px;
@@ -153,6 +159,7 @@ textarea {
   position: absolute;
   width: 1px;
   height: 1px;
+  font-size: var(--platform-sp-11);
   padding: 0;
   margin: -1px;
   overflow: hidden;
@@ -507,9 +514,6 @@ textarea {
   border-radius: 24px;
   isolation: isolate;
   background: transparent;
-  box-shadow:
-    inset 1px 2px 3px var(--glass-highlight),
-    inset -4px -4px 2px var(--glass-shade);
   font-size: var(--platform-sp-28);
   line-height: 1;
 }
@@ -905,9 +909,6 @@ textarea {
   position: relative;
   isolation: isolate;
   background: transparent;
-  box-shadow:
-    inset 1px 2px 3px var(--glass-highlight),
-    inset -4px -4px 2px var(--glass-shade);
   font-size: var(--platform-sp-23-445);
   font-weight: 800;
   white-space: nowrap;
@@ -924,6 +925,18 @@ textarea {
   background: var(--glass-tint);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+  content: "";
+  pointer-events: none;
+}
+
+.glass-action::after,
+.glass-back::after,
+.create-contextual-back::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--glass-action-inner-shadow);
   content: "";
   pointer-events: none;
 }
@@ -1029,9 +1042,6 @@ textarea {
   border: 1px solid var(--glass-line);
   border-radius: 56px;
   background: transparent;
-  box-shadow:
-    inset 0 3px 12px rgb(255 255 255 / 30%),
-    inset 0 2px 4px rgb(255 255 255 / 9%);
 }
 
 .dashboard-input label::before {
@@ -1040,8 +1050,18 @@ textarea {
   inset: 0;
   border-radius: inherit;
   background: var(--glass-tint);
-  -webkit-backdrop-filter: blur(18.5px);
-  backdrop-filter: blur(18.5px);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  content: "";
+  pointer-events: none;
+}
+
+.dashboard-input label::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: var(--glass-input-inner-shadow);
   content: "";
   pointer-events: none;
 }
@@ -1070,10 +1090,6 @@ textarea {
   font-size: var(--platform-sp-20);
   font-weight: 700;
   line-height: var(--platform-sp-24);
-}
-
-.dashboard-input--outfit textarea {
-  padding-right: 126px;
 }
 
 .dashboard-input textarea::placeholder {
@@ -1123,62 +1139,6 @@ textarea {
   line-height: var(--platform-sp-16);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.dashboard-input__operation {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  top: -24px;
-  z-index: 1;
-  overflow: hidden;
-  min-height: 18px;
-  padding: 1px 10px;
-  border: 1px solid rgb(255 255 255 / 9%);
-  border-radius: 12px;
-  background: rgb(35 37 45 / 60%);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  color: rgb(255 255 255 / 76%);
-  font-size: var(--platform-sp-11);
-  font-weight: 700;
-  line-height: var(--platform-sp-15);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dashboard-input__operation--retryable,
-.dashboard-input--has-error .dashboard-input__operation {
-  color: #ff8b96;
-}
-
-.dashboard-input--outfit label > button {
-  right: 16px;
-  bottom: 8px;
-  width: 94px;
-  height: 46px;
-  border-radius: 36.429px;
-  background: #fff;
-  color: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  font-size: var(--platform-sp-20);
-  font-weight: 700;
-}
-
-.dashboard-input--outfit label > button img {
-  width: 19.5px;
-  height: 19.5px;
-  margin: 0;
-  filter: brightness(0);
-}
-
-.dashboard-input--outfit label > button[data-operation-action="retry"] img {
-  width: 35.074px;
-  height: 35.074px;
-  filter: none;
 }
 
 @keyframes input-enter {

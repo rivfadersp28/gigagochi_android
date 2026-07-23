@@ -30,9 +30,7 @@
   border-radius: 24px;
   background: rgb(255 255 255 / 15%);
   color: #fff;
-  box-shadow:
-    inset 1px 2px 3px rgb(255 255 255 / 20%),
-    inset -4px -4px 2px rgb(0 0 0 / 20%);
+  box-shadow: var(--glass-action-inner-shadow);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }

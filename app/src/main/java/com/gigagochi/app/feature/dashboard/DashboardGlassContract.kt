@@ -27,7 +27,7 @@ internal object DashboardGlassContract {
     val InlineStyle = HazeStyle(
         backgroundColor = Color.Transparent,
         tints = listOf(HazeTint(InlineTint)),
-        blurRadius = 18.5.dp,
+        blurRadius = 12.dp,
         noiseFactor = 0f,
         fallbackTint = HazeTint(InlineTint),
     )

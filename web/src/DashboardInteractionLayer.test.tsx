@@ -426,7 +426,6 @@ describe("dashboard outfit and travel operations", () => {
         initialValue="  красный шарф  "
         error={null}
         busy={false}
-        experienceCost={350}
         feedback={feedback}
         dispatch={dispatch}
       />,
@@ -434,7 +433,7 @@ describe("dashboard outfit and travel operations", () => {
     const input = screen.getByPlaceholderText("В футболку Metallica");
     expect(input).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: "Создать наряд за 350 монет" }));
+    fireEvent.click(screen.getByRole("button", { name: "Создать наряд" }));
 
     expect(dispatch).toHaveBeenCalledWith("OUTFIT_SUBMIT", { prompt: "красный шарф" });
     expect(feedback).toHaveBeenCalledWith("buttonPress");
@@ -442,7 +441,7 @@ describe("dashboard outfit and travel operations", () => {
     expect(input).not.toHaveFocus();
   });
 
-  it("retries only the durable retryable identity and exposes its original prompt", () => {
+  it("retries only the durable retryable identity without rendering operation diagnostics", () => {
     const dispatch = vi.fn(async () => undefined) as Dispatch;
     render(
       <ConversationInput
@@ -451,15 +450,14 @@ describe("dashboard outfit and travel operations", () => {
         error={null}
         busy={false}
         pendingStatus="retryable"
-        pendingLabel="красный шарф"
         feedback={vi.fn()}
         dispatch={dispatch}
       />,
     );
 
-    expect(screen.getByText(
-      "Не получилось нарядить персонажа. Попробуйте ещё раз. · красный шарф",
-    )).toBeInTheDocument();
+    expect(screen.queryByText(
+      "Не получилось нарядить персонажа. Попробуйте ещё раз.",
+    )).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("В футболку Metallica")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Повторить создание наряда" }));
 
@@ -467,7 +465,7 @@ describe("dashboard outfit and travel operations", () => {
     expect(dispatch).not.toHaveBeenCalledWith("OUTFIT_SUBMIT", expect.anything());
   });
 
-  it("does not retry an auto-recovering pending travel, but retries a definite safe local failure", () => {
+  it("keeps travel operation diagnostics hidden while preserving retry mechanics", () => {
     const dispatch = vi.fn(async () => undefined) as Dispatch;
     const { rerender } = render(
       <ConversationInput
@@ -477,12 +475,11 @@ describe("dashboard outfit and travel operations", () => {
         busy={false}
         thinking={false}
         pendingStatus="pending"
-        pendingLabel="ночной рынок духов"
         feedback={vi.fn()}
         dispatch={dispatch}
       />,
     );
-    expect(screen.getByText("Путешествие готовится: ночной рынок духов")).toBeInTheDocument();
+    expect(screen.queryByText("Путешествие готовится: ночной рынок духов")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Отправить в путешествие" })).toBeDisabled();
 
     rerender(
@@ -493,12 +490,11 @@ describe("dashboard outfit and travel operations", () => {
         busy={false}
         thinking={false}
         pendingStatus="outcomeUnknown"
-        pendingLabel="ночной рынок духов"
         feedback={vi.fn()}
         dispatch={dispatch}
       />,
     );
-    expect(screen.getByText("Проверяю статус запроса: ночной рынок духов")).toBeInTheDocument();
+    expect(screen.queryByText("Проверяю статус запроса: ночной рынок духов")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Отправить в путешествие" })).toBeDisabled();
 
     rerender(
@@ -509,17 +505,16 @@ describe("dashboard outfit and travel operations", () => {
         busy={false}
         thinking={false}
         pendingStatus="pending"
-        pendingLabel="ночной рынок духов"
         feedback={vi.fn()}
         dispatch={dispatch}
       />,
     );
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Не получилось отправиться в путешествие. Попробуйте ещё раз. · ночной рынок духов",
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Не получилось отправиться в путешествие. Попробуйте ещё раз.",
     );
     expect(screen.getByPlaceholderText("На ночной рынок духов")).toHaveAttribute(
       "aria-describedby",
-      "travel-operation-status",
+      "travel-input-error",
     );
     fireEvent.click(screen.getByRole("button", { name: "Повторить путешествие" }));
 
@@ -535,7 +530,6 @@ describe("dashboard outfit and travel operations", () => {
         error={null}
         busy={false}
         pendingStatus="failed"
-        pendingLabel="старое место"
         feedback={vi.fn()}
         dispatch={dispatch}
       />,

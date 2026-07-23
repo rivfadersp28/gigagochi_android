@@ -653,6 +653,10 @@ class ProductionWebAppRuntimeTest {
         assertEquals("Красный шарф", snapshot.dashboard?.outfit?.pending?.displayItem)
         assertFalse(snapshot.dashboard?.outfit?.thinking == true)
         assertEquals("transient", snapshot.dashboard?.reply?.source)
+        assertEquals(
+            listOf("Красный шарф? Интересно, давай я позову тебя, когда переоденусь."),
+            snapshot.dashboard?.reply?.portions,
+        )
         assertEquals(0, snapshot.pet?.experience)
         runtime.close()
     }

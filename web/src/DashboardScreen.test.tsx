@@ -491,7 +491,7 @@ describe("dashboard exact interaction layer", () => {
     const { rerender } = renderDashboard({ mode: "outfit", snapshot: outfit });
     expect(screen.getByPlaceholderText("В футболку Metallica")).toHaveValue("серебряный плащ");
     expect(screen.getByPlaceholderText("В футболку Metallica")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Создать наряд за 275 монет" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Создать наряд" })).toBeDisabled();
     expect(screen.queryByText("Наряд создаётся: серебряный плащ")).not.toBeInTheDocument();
 
     const travel = dashboard();
@@ -521,7 +521,7 @@ describe("dashboard exact interaction layer", () => {
         dispatch={vi.fn(async () => undefined)}
       />,
     );
-    expect(screen.getByText("Путешествие готовится: ночной рынок духов")).toBeInTheDocument();
+    expect(screen.queryByText("Путешествие готовится: ночной рынок духов")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("На ночной рынок духов")).toBeDisabled();
   });
 

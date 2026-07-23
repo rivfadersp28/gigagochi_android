@@ -798,16 +798,10 @@ export function DashboardScreen({
             dashboardPresentation.chat.activeRequestKey !== null &&
             dashboardPresentation.chat.error !== null &&
             !dashboardPresentation.chat.thinking}
-          experienceCost={dashboardPresentation.outfit.experienceCost}
           pendingStatus={mode === "outfit"
             ? dashboardPresentation.outfit.pending?.status
             : mode === "travel"
               ? dashboardPresentation.travel.pending?.status
-              : null}
-          pendingLabel={mode === "outfit"
-            ? dashboardPresentation.outfit.pending?.prompt
-            : mode === "travel"
-              ? dashboardPresentation.travel.pending?.prompt
               : null}
           feedback={feedback}
           dispatch={dispatch}

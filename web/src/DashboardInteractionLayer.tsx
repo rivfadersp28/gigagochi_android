@@ -258,9 +258,7 @@ interface ConversationInputProps {
   busy: boolean;
   thinking?: boolean;
   retryable?: boolean;
-  experienceCost?: number;
   pendingStatus?: PendingOperationStatus | null;
-  pendingLabel?: string | null;
   feedback(kind: WebFeedbackKind): void;
   dispatch: Dispatch;
   onDraftChange?(mode: DashboardDraftMode, value: string): void;
@@ -277,30 +275,6 @@ const BLOCKING_OPERATION_STATUSES = new Set<PendingOperationStatus>([
   "outcomeUnknown",
 ]);
 
-function operationStatusMessage(
-  mode: "outfit" | "travel",
-  status: PendingOperationStatus,
-  label: string | null,
-  canRetry: boolean,
-  error: string | null,
-): string {
-  const subject = label?.trim();
-  if (error) return subject ? `${error} · ${subject}` : error;
-  if (canRetry) {
-    const failure = mode === "outfit"
-      ? "Не получилось нарядить персонажа. Попробуйте ещё раз."
-      : "Не получилось отправиться в путешествие. Попробуйте ещё раз.";
-    return subject ? `${failure} · ${subject}` : failure;
-  }
-  let prefix: string;
-  if (status === "outcomeUnknown") prefix = "Проверяю статус запроса";
-  else if (status === "completed") prefix = mode === "outfit" ? "Наряд готов" : "Путешествие готово";
-  else if (status === "failed" || status === "applyConflict") {
-    prefix = "Предыдущий запрос завершился с ошибкой";
-  } else prefix = mode === "outfit" ? "Наряд создаётся" : "Путешествие готовится";
-  return subject ? `${prefix}: ${subject}` : prefix;
-}
-
 export function ConversationInput({
   mode,
   initialValue,
@@ -308,9 +282,7 @@ export function ConversationInput({
   busy,
   thinking = false,
   retryable = false,
-  experienceCost = 200,
   pendingStatus = null,
-  pendingLabel = null,
   feedback,
   dispatch,
   onDraftChange,
@@ -373,7 +345,7 @@ export function ConversationInput({
     : mode === "outfit"
       ? [
         "В футболку Metallica",
-        retryAction ? "Повторить создание наряда" : `Создать наряд за ${experienceCost} монет`,
+        retryAction ? "Повторить создание наряда" : "Создать наряд",
       ]
       : [
         "На ночной рынок духов",
@@ -385,10 +357,6 @@ export function ConversationInput({
   const buttonDisabled = isChat
     ? submitting || (chatRetryAction ? busy : !value.trim())
     : submitting || busy || (!retryAction && (operationBlocksSubmit || !value.trim()));
-  const operationMessage = !isChat && pendingStatus && !thinking
-    ? operationStatusMessage(mode, pendingStatus, pendingLabel, operationRetryAction, error)
-    : null;
-
   const submit = () => {
     const rawValue = value.slice(0, 1_000);
     const text = rawValue.trim().slice(0, 1_000);
@@ -440,7 +408,7 @@ export function ConversationInput({
   };
 
   return (
-    <section className={`dashboard-input dashboard-input--${mode}${operationMessage ? " dashboard-input--has-operation" : ""}${error ? " dashboard-input--has-error" : ""}`}>
+    <section className={`dashboard-input dashboard-input--${mode}${error ? " dashboard-input--has-error" : ""}`}>
       <label>
         <span className="sr-only">{content[0]}</span>
         <textarea
@@ -452,10 +420,7 @@ export function ConversationInput({
           disabled={inputBusy}
           aria-busy={submitting || (!isChat && (thinking || (operationBlocksSubmit && !retryAction)))}
           aria-invalid={Boolean(error)}
-          aria-describedby={[
-            error && !operationMessage ? `${mode}-input-error` : null,
-            operationMessage ? `${mode}-operation-status` : null,
-          ].filter(Boolean).join(" ") || undefined}
+          aria-describedby={error ? `${mode}-input-error` : undefined}
           onChange={(event) => {
             const next = event.target.value.slice(0, 1_000);
             valueRef.current = next;
@@ -465,7 +430,7 @@ export function ConversationInput({
             measure(event.currentTarget, !next);
           }}
         />
-        {error && !operationMessage
+        {error
           ? (
               <span
                 className="dashboard-input__error"
@@ -476,15 +441,6 @@ export function ConversationInput({
               </span>
             )
           : null}
-        {operationMessage ? (
-          <span
-            className={`dashboard-input__operation dashboard-input__operation--${pendingStatus}`}
-            id={`${mode}-operation-status`}
-            role="status"
-          >
-            {operationMessage}
-          </span>
-        ) : null}
         <button
           type="button"
           aria-label={content[1]}
@@ -492,12 +448,7 @@ export function ConversationInput({
           disabled={buttonDisabled}
           onClick={submit}
         >
-          {mode === "outfit" && !retryAction ? (
-            <>
-              <span>{experienceCost}</span>
-              <img src="/res/xp_coin.svg" alt="" />
-            </>
-          ) : <img src="/res/conversation_send_icon.svg" alt="" />}
+          <img src="/res/conversation_send_icon.svg" alt="" />
         </button>
       </label>
     </section>

@@ -777,7 +777,7 @@ class DashboardScreenTest {
             }
         }
 
-        composeRule.onNodeWithContentDescription("Создать наряд за 200 монет").performClick()
+        composeRule.onNodeWithContentDescription("Создать наряд").performClick()
         composeRule.waitUntil(timeoutMillis = 15_000) {
             composeRule.onAllNodesWithText("Футболка Metallica?", substring = true)
                 .fetchSemanticsNodes().isNotEmpty()

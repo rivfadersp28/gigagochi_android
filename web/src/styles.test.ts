@@ -9,9 +9,20 @@ describe("Android visual safety invariants", () => {
     );
   });
 
-  it("preserves the authored send icon colors for an Outfit retry", () => {
+  it("uses native inline blur and the shared send action for every dashboard composer", () => {
     expect(stylesheet).toMatch(
-      /\.dashboard-input--outfit label > button\[data-operation-action="retry"\] img\s*\{[^}]*filter:\s*none;/s,
+      /\.dashboard-input label::before\s*\{[^}]*backdrop-filter:\s*blur\(12px\);/s,
+    );
+    expect(stylesheet).not.toMatch(/\.dashboard-input--outfit label > button/);
+    expect(stylesheet).not.toMatch(/\.dashboard-input--outfit textarea/);
+  });
+
+  it("paints native inner shadows above glass backdrop tint", () => {
+    expect(stylesheet).toMatch(
+      /\.glass-action::after,\s*\.glass-back::after,\s*\.create-contextual-back::after\s*\{[^}]*z-index:\s*2;[^}]*box-shadow:\s*var\(--glass-action-inner-shadow\);/s,
+    );
+    expect(stylesheet).toMatch(
+      /\.dashboard-input label::after\s*\{[^}]*z-index:\s*2;[^}]*box-shadow:\s*var\(--glass-input-inner-shadow\);/s,
     );
   });
 

@@ -1428,7 +1428,7 @@ private fun ConversationInputPanel(
                     .fillMaxWidth()
                     .padding(
                         start = 24.dp,
-                        end = if (isOutfit) 126.dp else 82.dp,
+                        end = 82.dp,
                         top = 8.dp,
                         bottom = 8.dp,
                     )
@@ -1471,80 +1471,38 @@ private fun ConversationInputPanel(
                         .semantics { contentDescription = error },
                 )
             }
-            if (isOutfit) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = 8.dp)
-                        .requiredSize(94.dp, 46.dp)
-                        .clip(RoundedCornerShape(36.429.dp))
-                        .background(Color.White)
-                        .pointerInput(value, busy) {
-                            detectTapGestures(onTap = {
-                                if (!busy && value.trim().isNotEmpty()) {
-                                    submitAndDismissKeyboard()
-                                }
-                            })
-                        }
-                        .semantics {
-                            role = Role.Button
-                            contentDescription = "Создать наряд за 200 монет"
-                            onClick("Создать наряд за 200 монет") {
-                                if (!busy && value.trim().isNotEmpty()) {
-                                    submitAndDismissKeyboard()
-                                    true
-                                } else {
-                                    false
-                                }
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 10.dp, bottom = 8.dp)
+                    .requiredSize(46.dp)
+                    .clip(RoundedCornerShape(50))
+                    .pointerInput(value, busy) {
+                        detectTapGestures(onTap = {
+                            if (!busy && value.trim().isNotEmpty()) {
+                                submitAndDismissKeyboard()
                             }
-                        },
-                ) {
-                    Text(
-                        text = "$OutfitExperienceCost",
-                        color = Color.Black,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = OpenRundeFontFamily,
-                    )
-                    Spacer(Modifier.width(7.dp))
-                    Coin(19.5.dp, monochrome = true)
-                }
-            } else {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 10.dp, bottom = 8.dp)
-                        .requiredSize(46.dp)
-                        .clip(RoundedCornerShape(50))
-                        .pointerInput(value, busy) {
-                            detectTapGestures(onTap = {
-                                if (!busy && value.trim().isNotEmpty()) {
-                                    submitAndDismissKeyboard()
-                                }
-                            })
-                        }
-                        .semantics {
-                            role = Role.Button
-                            contentDescription = "Отправить"
-                            onClick("Отправить") {
-                                if (!busy && value.trim().isNotEmpty()) {
-                                    submitAndDismissKeyboard()
-                                    true
-                                } else {
-                                    false
-                                }
+                        })
+                    }
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = if (isOutfit) "Создать наряд" else "Отправить"
+                        onClick(if (isOutfit) "Создать наряд" else "Отправить") {
+                            if (!busy && value.trim().isNotEmpty()) {
+                                submitAndDismissKeyboard()
+                                true
+                            } else {
+                                false
                             }
-                        },
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.conversation_send),
-                        contentDescription = null,
-                        modifier = Modifier.requiredSize(35.074.dp),
-                    )
-                }
+                        }
+                    },
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.conversation_send),
+                    contentDescription = null,
+                    modifier = Modifier.requiredSize(35.074.dp),
+                )
             }
         }
     }
