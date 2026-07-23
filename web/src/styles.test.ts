@@ -24,6 +24,18 @@ describe("Android visual safety invariants", () => {
     );
   });
 
+  it("centers one-line dashboard input content like the native CenterStart decoration box", () => {
+    expect(stylesheet).toMatch(
+      /\.dashboard-input textarea\s*\{[^}]*align-content:\s*center;/s,
+    );
+  });
+
+  it("applies the shared glass backdrop to Create contextual navigation", () => {
+    expect(stylesheet).toMatch(
+      /\.glass-action::before,\s*\.glass-back::before,\s*\.create-contextual-back::before\s*\{[^}]*backdrop-filter:\s*blur\(12px\);/s,
+    );
+  });
+
   it("keeps native Event paper buttons at the fixed clipped 58 point height", () => {
     expect(eventStoryStyles).toMatch(
       /\.event-history__paper-button-tilt\s*\{[^}]*height:\s*58\.203px;/s,

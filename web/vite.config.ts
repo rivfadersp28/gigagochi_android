@@ -9,6 +9,10 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     target: "chrome60",
+    // Keep modern glass effects in the packaged CSS. The JavaScript bundle still targets the
+    // oldest supported WebView syntax, while the runtime-required Android WebView supports these
+    // CSS features natively.
+    cssTarget: "chrome121",
   },
   test: {
     environment: "jsdom",
