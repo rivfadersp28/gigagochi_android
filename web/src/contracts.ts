@@ -6,7 +6,7 @@ import type {
 
 export const BRIDGE_PROTOCOL_VERSION = 1 as const;
 export const WEB_BUNDLE_VERSION = "0.1.0";
-export const BRIDGE_SCHEMA_HASH = "gigagochi-bridge-v3-d76ce0d6b3f08c5351e979e8a6416a60a2308befcf72c1b531d4325d82691280";
+export const BRIDGE_SCHEMA_HASH = "gigagochi-bridge-v3-cde4d836b9d139ed4fcdff1b6db8e2769ce736a954500d15b4b1baeef06924ee";
 
 export type AppRoute =
   | "create"

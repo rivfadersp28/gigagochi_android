@@ -67,6 +67,19 @@ class SessionBootstrapTest {
     }
 
     @Test
+    fun unavailableRefreshKeepsStoredSessionForOfflineStartup() = runBlocking {
+        val repository = FakeRepository(SessionLoadResult.Success(nearExpiry))
+        val exchange = FakeRefreshExchange(SessionRefreshResult.Failure)
+
+        val outcome = coordinator(repository, exchange).bootstrap()
+
+        assertEquals(SessionBootstrapOutcome.Offline(nearExpiry), outcome)
+        assertEquals(1, exchange.calls)
+        assertEquals(0, repository.clearCalls)
+        assertEquals(0, repository.saveCalls)
+    }
+
+    @Test
     fun corruptedCiphertextIsWipedWhileIoFailureOnlyFailsClosed() = runBlocking {
         val corrupt = FakeRepository(SessionLoadResult.Corrupt)
         assertEquals(

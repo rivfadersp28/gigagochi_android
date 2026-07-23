@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.emptyFlow
 internal const val BridgeProtocolVersion = 1
 internal const val BridgeMaxMessageBytes = 65_536
 internal const val BridgeWebBundleVersion = "0.1.0"
-internal const val BridgeSchemaHash = "gigagochi-bridge-v3-d76ce0d6b3f08c5351e979e8a6416a60a2308befcf72c1b531d4325d82691280"
+internal const val BridgeSchemaHash = "gigagochi-bridge-v3-cde4d836b9d139ed4fcdff1b6db8e2769ce736a954500d15b4b1baeef06924ee"
 
 internal val BridgeProductCommandTypes = setOf(
     "CREATE_ANSWER",

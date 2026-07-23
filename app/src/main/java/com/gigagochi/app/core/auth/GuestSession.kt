@@ -124,6 +124,9 @@ class LocalSessionBootstrapCoordinator(
             is SessionBootstrapOutcome.Authenticated -> LocalSessionBootstrapOutcome.Ready(
                 stored.session,
             )
+            is SessionBootstrapOutcome.Offline -> LocalSessionBootstrapOutcome.Ready(
+                stored.session,
+            )
             SessionBootstrapOutcome.Unauthenticated -> createGuestSession()
         }
     }

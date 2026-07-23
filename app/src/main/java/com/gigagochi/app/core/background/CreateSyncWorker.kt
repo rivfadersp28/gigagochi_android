@@ -61,6 +61,7 @@ class CreateSyncWorker(
             val outcome = SessionBootstrapCoordinator(sessionRepository, refresh).bootstrap()
         ) {
             is SessionBootstrapOutcome.Authenticated -> outcome.session
+            is SessionBootstrapOutcome.Offline -> return Result.retry()
             SessionBootstrapOutcome.Unauthenticated -> return Result.retry()
         }
         val headers = InMemoryAuthHeaderProvider().apply { update(session) }

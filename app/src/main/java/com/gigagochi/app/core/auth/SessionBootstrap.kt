@@ -16,6 +16,7 @@ sealed interface SessionBootstrapState {
         val requestKey: String,
     ) : SessionBootstrapState
     data class Authenticated(val session: Session) : SessionBootstrapState
+    data class Offline(val session: Session) : SessionBootstrapState
     data class Unauthenticated(val wipeStoredSession: Boolean) : SessionBootstrapState
 }
 
@@ -64,7 +65,7 @@ fun reduceSessionBootstrap(
     ) {
         when (val result = event.result) {
             SessionRefreshResult.InvalidSession -> SessionBootstrapState.Unauthenticated(true)
-            SessionRefreshResult.Failure -> SessionBootstrapState.Unauthenticated(false)
+            SessionRefreshResult.Failure -> SessionBootstrapState.Offline(state.storedSession)
             is SessionRefreshResult.Success -> SessionBootstrapState.RefreshPersistencePending(
                 refreshedSession = result.session.copy(accountId = state.storedSession.accountId),
                 requestKey = state.requestKey,
@@ -91,6 +92,7 @@ fun reduceSessionBootstrap(
 
 sealed interface SessionBootstrapOutcome {
     data class Authenticated(val session: Session) : SessionBootstrapOutcome
+    data class Offline(val session: Session) : SessionBootstrapOutcome
     data object Unauthenticated : SessionBootstrapOutcome
 }
 
@@ -117,6 +119,9 @@ class SessionBootstrapCoordinator(
                 SessionBootstrapState.Loading -> error("bootstrap did not consume repository result")
                 is SessionBootstrapState.Authenticated -> {
                     return SessionBootstrapOutcome.Authenticated(current.session)
+                }
+                is SessionBootstrapState.Offline -> {
+                    return SessionBootstrapOutcome.Offline(current.session)
                 }
                 is SessionBootstrapState.Unauthenticated -> {
                     if (current.wipeStoredSession) repository.clear()

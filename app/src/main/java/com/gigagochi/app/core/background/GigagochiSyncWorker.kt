@@ -117,6 +117,7 @@ class GigagochiSyncWorker(
                         ).bootstrap()
                     ) {
                         is SessionBootstrapOutcome.Authenticated -> outcome.session
+                        is SessionBootstrapOutcome.Offline -> null
                         SessionBootstrapOutcome.Unauthenticated -> null
                     }
                 },

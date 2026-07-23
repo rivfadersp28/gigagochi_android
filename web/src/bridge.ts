@@ -45,6 +45,7 @@ export interface GigagochiBridge {
 }
 
 const REQUEST_TIMEOUT_MS = 10_000;
+const BOOTSTRAP_REQUEST_TIMEOUT_MS = 30_000;
 
 export class BridgeError extends Error {
   constructor(
@@ -113,7 +114,7 @@ export class NativeGigagochiBridge implements GigagochiBridge {
       const timeout = window.setTimeout(() => {
         this.pending.delete(requestId);
         reject(new BridgeError("BRIDGE_TIMEOUT", true));
-      }, REQUEST_TIMEOUT_MS);
+      }, method === "bootstrap" ? BOOTSTRAP_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS);
       this.pending.set(requestId, {
         timeout,
         reject,

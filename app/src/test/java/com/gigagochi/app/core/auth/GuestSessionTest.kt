@@ -95,6 +95,31 @@ class GuestSessionTest {
         assertEquals(0, guestCalls)
     }
 
+    @Test
+    fun localBootstrapUsesStoredSessionOfflineWithoutCreatingAnotherGuest() = runBlocking {
+        val stored = session("acct_abcdefghijklmnopqrstuvwx").copy(
+            expiresAtEpochMillis = now - 1,
+        )
+        val repository = FakeSessionRepository(SessionLoadResult.Success(stored))
+        var guestCalls = 0
+        val outcome = LocalSessionBootstrapCoordinator(
+            sessionBootstrap = SessionBootstrapCoordinator(
+                repository,
+                FakeRefreshExchange,
+                nowEpochMillis = { now },
+            ),
+            sessionRepository = repository,
+            installationIdProvider = InstallationIdProvider { error("not called") },
+            guestSessionExchange = GuestSessionExchange {
+                guestCalls += 1
+                GuestSessionExchangeResult.Failure(AuthFailureKind.Server)
+            },
+        ).bootstrap()
+
+        assertEquals(LocalSessionBootstrapOutcome.Ready(stored), outcome)
+        assertEquals(0, guestCalls)
+    }
+
     private fun session(accountId: String) = Session(
         accountId = accountId,
         accessToken = SensitiveToken.of("access"),

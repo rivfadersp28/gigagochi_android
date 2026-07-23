@@ -63,8 +63,8 @@ trap 'rm -f -- "${manifest_dump}" "${class_dump}" "${certificate_dump}"; rm -rf 
 
 if [[ "${verification_mode}" == "signed-release" ]]; then
     expected_application_id='com.gigagochi.app'
-    expected_version_code='17'
-    expected_version_name='0.1.16'
+    expected_version_code='18'
+    expected_version_name='0.1.17'
     expected_certificate_sha256='453318508e26ae11efddc22cffe4cedfe16829fc76035de84460a692ca0de0cd'
 
     if ! application_id="$("${apkanalyzer_path}" manifest application-id "${apk_path}" | tr -d '\r\n')"; then
