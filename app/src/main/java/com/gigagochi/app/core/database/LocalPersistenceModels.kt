@@ -4,7 +4,7 @@ import com.gigagochi.app.core.model.PetDashboardState
 import com.gigagochi.app.core.model.PetGeneratedMedia
 import com.gigagochi.app.core.model.ScheduledStory
 
-const val OutfitAcceptanceCost = 0
+const val OutfitAcceptanceCost = 200
 
 enum class FirstSessionStage(val storageValue: String) {
     AwaitingChat("awaiting-chat"),
@@ -60,6 +60,12 @@ data class OwnedPetSnapshot(
     val pet: PetDashboardState,
     val updatedAtEpochMillis: Long,
 )
+
+sealed interface PetSnapshotMutationResult {
+    data class Applied(val pet: PetDashboardState) : PetSnapshotMutationResult
+    data object Missing : PetSnapshotMutationResult
+    data object Conflict : PetSnapshotMutationResult
+}
 
 enum class PendingCreateStage {
     Requested,
@@ -142,7 +148,92 @@ data class LocalPendingChat(
     val createdAtEpochMillis: Long,
     val responseText: String? = null,
     val completedAtEpochMillis: Long? = null,
+    /**
+     * Onboarding stage captured by the durable dashboard command receipt.
+     *
+     * This is a recovery projection over the existing receipt table, not another Room column.
+     * Together with [responseText] it lets every process deterministically rebuild the mandatory
+     * local follow-up portion before the completed response is acknowledged.
+     */
+    val originFirstSessionStage: FirstSessionStage? = null,
 )
+
+sealed interface DashboardChatReservationResult {
+    data class Pending(
+        val pet: PetDashboardState,
+        val request: LocalPendingChat,
+        val originFirstSessionStage: FirstSessionStage?,
+        val newlyAccepted: Boolean,
+    ) : DashboardChatReservationResult
+
+    data class Finished(val pet: PetDashboardState) : DashboardChatReservationResult
+    data object Missing : DashboardChatReservationResult
+    data object Conflict : DashboardChatReservationResult
+}
+
+data class LocalDashboardFeedReceipt(
+    val requestKey: String,
+    val food: String,
+    val audioIndex: Int,
+    val reply: String,
+    val explicitPortions: List<String>? = null,
+    val autoAdvanceDelayMillis: Long,
+)
+
+data class LocalDashboardFeedPresentation(
+    val reply: String,
+    val explicitPortions: List<String>? = null,
+    val autoAdvanceDelayMillis: Long,
+)
+
+sealed interface DashboardFeedApplicationResult {
+    data class Applied(
+        val pet: PetDashboardState,
+        val firstSession: LocalFirstSession?,
+        val receipt: LocalDashboardFeedReceipt,
+        val newlyApplied: Boolean,
+    ) : DashboardFeedApplicationResult
+
+    data object Missing : DashboardFeedApplicationResult
+    data object Conflict : DashboardFeedApplicationResult
+    data object WrongStage : DashboardFeedApplicationResult
+}
+
+sealed interface DashboardOutfitReservationResult {
+    data class Accepted(
+        val pet: PetDashboardState,
+        val request: LocalPendingOutfit,
+        val newlyAccepted: Boolean,
+    ) : DashboardOutfitReservationResult
+
+    data class Finished(val pet: PetDashboardState) : DashboardOutfitReservationResult
+    data class Busy(val pet: PetDashboardState, val request: LocalPendingOutfit) :
+        DashboardOutfitReservationResult
+    data class InsufficientExperience(val pet: PetDashboardState) :
+        DashboardOutfitReservationResult
+    data object Missing : DashboardOutfitReservationResult
+    data object WrongStage : DashboardOutfitReservationResult
+    data object Conflict : DashboardOutfitReservationResult
+}
+
+sealed interface DashboardTravelReservationResult {
+    data class Accepted(
+        val pet: PetDashboardState,
+        val request: LocalPendingTravelVideo,
+        val newlyAccepted: Boolean,
+    ) : DashboardTravelReservationResult
+
+    data class Finished(
+        val pet: PetDashboardState,
+        val result: LocalTravelVideoAsset,
+    ) : DashboardTravelReservationResult
+
+    data class Busy(val pet: PetDashboardState, val request: LocalPendingTravelVideo) :
+        DashboardTravelReservationResult
+    data object Missing : DashboardTravelReservationResult
+    data object WrongStage : DashboardTravelReservationResult
+    data object Conflict : DashboardTravelReservationResult
+}
 
 data class LocalPendingOutfit(
     val ownerId: String,

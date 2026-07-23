@@ -1,0 +1,30 @@
+{
+  "name": "gigagochi-webview-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "test:bridge-command-contract": "node ../scripts/check-bridge-command-contract.mjs",
+    "test:typography-contract": "node ../scripts/check-typography-contract.mjs",
+    "test:watch": "vitest",
+    "check": "npm run test:bridge-command-contract && npm run test:typography-contract && npm run test && npm run build"
+  },
+  "dependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.4",
+    "jsdom": "29.1.1",
+    "typescript": "5.9.3",
+    "vite": "8.1.5",
+    "vitest": "4.1.10"
+  }
+}

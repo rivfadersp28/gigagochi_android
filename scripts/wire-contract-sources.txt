@@ -1,0 +1,12 @@
+app/src/main/java/com/gigagochi/app/core/webview/BridgeCodec.kt
+app/src/main/java/com/gigagochi/app/core/webview/BridgeDispatcher.kt
+app/src/main/java/com/gigagochi/app/core/webview/BridgeModels.kt
+app/src/main/java/com/gigagochi/app/core/webview/ProductionWebAppRuntime.kt
+app/src/main/java/com/gigagochi/app/core/webview/WebEventStoryProjection.kt
+app/src/main/java/com/gigagochi/app/core/webview/WebFeedback.kt
+app/src/main/java/com/gigagochi/app/core/webview/WebNavigationBack.kt
+app/src/main/java/com/gigagochi/app/core/webview/WebPlatformEvents.kt
+app/src/main/java/com/gigagochi/app/core/webview/WebTravelShareCoordinator.kt
+web/src/EventStoryTypes.ts
+web/src/bridge.ts
+web/src/contracts.ts

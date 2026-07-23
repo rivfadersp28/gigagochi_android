@@ -16,7 +16,7 @@ const val DashboardReplyAutoAdvanceMillis = 6_000L
 const val OnboardingBlockAutoAdvanceMillis = 6_000L
 const val PetTapThanksVisibleMillis = 5_000L
 const val OutfitExperienceCost = 200
-const val OutfitExperienceCharge = 0
+const val OutfitExperienceCharge = OutfitExperienceCost
 const val ChatFailureMessage = "Не получилось отправить сообщение. Попробуйте ещё раз."
 const val FeedFailureMessage = "Питомец поел, но не смог ответить. Попробуйте ещё раз."
 const val OutfitInsufficientMessage = "Не хватает опыта для нового наряда."
@@ -848,7 +848,9 @@ fun firstSessionIdleReply(
     session: LocalFirstSession,
 ): DashboardReply? = firstSessionDashboardMessage(pet, session)?.let { message ->
     DashboardReply(
-        requestKey = "first-session:${session.ownerId}:${session.petId}:${session.stage.name}",
+        // This identity crosses the WebView presentation boundary, so it must not contain native
+        // owner or pet identifiers. Stage is sufficient because a runtime exposes one active pet.
+        requestKey = "first-session:${session.stage.name}",
         text = message,
         explicitPortions = firstSessionDashboardMessagePortions(pet, session),
         autoAdvanceDelayMillis = if (session.stage in setOf(

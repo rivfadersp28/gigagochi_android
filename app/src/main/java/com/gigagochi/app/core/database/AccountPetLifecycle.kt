@@ -14,6 +14,7 @@ sealed interface AccountStartupDestination {
         val storyReceipts: List<InteractiveStoryReceipt>,
         val firstSession: LocalFirstSession? = null,
         val pendingChat: LocalPendingChat? = null,
+        val queuedChat: LocalPendingChat? = null,
     ) : AccountStartupDestination
     data object Failure : AccountStartupDestination
 }
@@ -31,6 +32,15 @@ class AccountPetLifecycle(
             recovery.petSnapshots.singleOrNull { it.pet.petId == preferred }
         } ?: recovery.petSnapshots.maxByOrNull { it.updatedAtEpochMillis }
         latest?.let { snapshot ->
+            val chatQueue = recovery.pendingChats
+                .filter { it.petId == snapshot.pet.petId }
+                .sortedWith(
+                    compareBy(
+                        LocalPendingChat::createdAtEpochMillis,
+                        LocalPendingChat::requestKey,
+                    ),
+                )
+                .take(MaxDashboardChatQueueSize)
             AccountStartupDestination.Dashboard(
                 pet = snapshot.pet,
                 pendingOutfit = recovery.pendingOutfits
@@ -51,9 +61,8 @@ class AccountPetLifecycle(
                 firstSession = recovery.firstSessions.singleOrNull {
                     it.petId == snapshot.pet.petId
                 },
-                pendingChat = recovery.pendingChats
-                    .filter { it.petId == snapshot.pet.petId }
-                    .maxByOrNull { it.createdAtEpochMillis },
+                pendingChat = chatQueue.getOrNull(0),
+                queuedChat = chatQueue.getOrNull(1),
             )
         } ?: AccountStartupDestination.Create(
             pending = recovery.pendingCreates.maxByOrNull { it.updatedAtEpochMillis },
@@ -78,3 +87,5 @@ class AccountPetLifecycle(
         false
     }
 }
+
+private const val MaxDashboardChatQueueSize = 2

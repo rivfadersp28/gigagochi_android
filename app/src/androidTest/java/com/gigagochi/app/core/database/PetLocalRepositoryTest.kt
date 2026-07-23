@@ -16,6 +16,10 @@ import com.gigagochi.app.feature.dashboard.DurableOutfitResult
 import com.gigagochi.app.feature.dashboard.PendingOutfitGeneration
 import com.gigagochi.app.feature.dashboard.PendingOutfitRequest
 import com.gigagochi.app.feature.dashboard.UnavailableDashboardTravelAdapter
+import com.gigagochi.app.core.webview.WebChatExecutionResult
+import com.gigagochi.app.core.webview.completeDashboardFirstSessionChat
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterChat
+import com.gigagochi.app.feature.onboarding.FirstSessionAfterName
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -144,6 +148,686 @@ class PetLocalRepositoryTest {
         assertEquals(9, finished.pet.happiness)
         assertEquals(17, finished.pet.energy)
         assertEquals("hungry", finished.pet.mood)
+    }
+
+    @Test
+    fun atomicMutationUsesLatestDecayedPetAndRejectsStalePreconditions() = runBlocking {
+        val startedAt = 1_000_000L
+        var now = startedAt + PetStatFullDecayMillis / 2
+        repository = PetLocalRepository(database) { now }
+        repository.replacePetSnapshot(
+            snapshot(petTapProgress = 2).copy(updatedAtEpochMillis = startedAt),
+        )
+
+        val applied = repository.mutatePetSnapshot(OwnerId, PetId, AssetSetId) { current ->
+            assertEquals(50, current.hunger)
+            assertEquals(2, current.petTapProgress)
+            current.copy(petTapProgress = 3)
+        }
+        assertTrue(applied is PetSnapshotMutationResult.Applied)
+        assertEquals(3, repository.getPetSnapshot(OwnerId, PetId)?.pet?.petTapProgress)
+        assertEquals(50, repository.getPetSnapshot(OwnerId, PetId)?.pet?.hunger)
+
+        now += 1
+        val conflict = repository.mutatePetSnapshot(OwnerId, PetId, AssetSetId) { current ->
+            current.takeIf { it.petTapProgress == 2 }?.copy(petTapProgress = 4)
+        }
+        assertEquals(PetSnapshotMutationResult.Conflict, conflict)
+        assertEquals(3, repository.getPetSnapshot(OwnerId, PetId)?.pet?.petTapProgress)
+
+        val assetConflict = repository.mutatePetSnapshot(OwnerId, PetId, "stale-assets") {
+            it.copy(petTapProgress = 4)
+        }
+        assertEquals(PetSnapshotMutationResult.Conflict, assetConflict)
+        assertEquals(3, repository.getPetSnapshot(OwnerId, PetId)?.pet?.petTapProgress)
+    }
+
+    @Test
+    fun dashboardOutfitReservationChargesExactlyOnceAndFencesPayload() = runBlocking {
+        repository.replacePetSnapshot(snapshot(experience = 500))
+
+        val accepted = repository.reserveDashboardOutfit(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "outfit-command",
+            "Красный шарф",
+        )
+        assertTrue(accepted is DashboardOutfitReservationResult.Accepted)
+        accepted as DashboardOutfitReservationResult.Accepted
+        assertTrue(accepted.newlyAccepted)
+        assertEquals(300, accepted.pet.experience)
+        assertEquals(200, accepted.request.experienceCost)
+
+        val replay = repository.reserveDashboardOutfit(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "outfit-command",
+            "Красный шарф",
+        )
+        assertTrue(replay is DashboardOutfitReservationResult.Accepted)
+        replay as DashboardOutfitReservationResult.Accepted
+        assertEquals(false, replay.newlyAccepted)
+        assertEquals(300, replay.pet.experience)
+        assertEquals(1, repository.getPendingOutfits(OwnerId).size)
+
+        assertEquals(
+            DashboardOutfitReservationResult.Conflict,
+            repository.reserveDashboardOutfit(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "outfit-command",
+                "Другой шарф",
+            ),
+        )
+        assertTrue(
+            repository.reserveDashboardOutfit(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "outfit-second",
+                "Плащ",
+            ) is DashboardOutfitReservationResult.Busy,
+        )
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+    }
+
+    @Test
+    fun dashboardOutfitReservationRejectsInsufficientExperienceWithoutDurableSideEffect() =
+        runBlocking {
+            repository.replacePetSnapshot(snapshot(experience = 199))
+
+            val result = repository.reserveDashboardOutfit(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "outfit-insufficient",
+                "Шляпа",
+            )
+
+            assertTrue(result is DashboardOutfitReservationResult.InsufficientExperience)
+            assertEquals(199, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+            assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
+            assertTrue(repository.loadOwnerRecovery(OwnerId).pendingOutfits.isEmpty())
+        }
+
+    @Test
+    fun dashboardTravelReservationIsIdempotentAndFencesPayload() = runBlocking {
+        repository.replacePetSnapshot(snapshot(experience = 321))
+
+        val accepted = repository.reserveDashboardTravel(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "travel-command",
+            "Ночной рынок духов",
+        )
+        assertTrue(accepted is DashboardTravelReservationResult.Accepted)
+        accepted as DashboardTravelReservationResult.Accepted
+        assertTrue(accepted.newlyAccepted)
+
+        val replay = repository.reserveDashboardTravel(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "travel-command",
+            "Ночной рынок духов",
+        )
+        assertTrue(replay is DashboardTravelReservationResult.Accepted)
+        replay as DashboardTravelReservationResult.Accepted
+        assertEquals(false, replay.newlyAccepted)
+        assertEquals(1, repository.getPendingTravels(OwnerId).size)
+        assertEquals(321, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(
+            DashboardTravelReservationResult.Conflict,
+            repository.reserveDashboardTravel(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "travel-command",
+                "Луна",
+            ),
+        )
+    }
+
+    @Test
+    fun dashboardManualGenerationReservationsRespectFirstSessionGates() = runBlocking {
+        repository.replacePetSnapshot(snapshot(experience = 500))
+        database.gigagochiDao().insertFirstSession(
+            FirstSessionEntity(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingChat.storageValue,
+                null,
+                null,
+                1,
+            ),
+        )
+
+        assertEquals(
+            DashboardOutfitReservationResult.WrongStage,
+            repository.reserveDashboardOutfit(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "outfit-too-early",
+                "Шарф",
+            ),
+        )
+        assertEquals(
+            DashboardTravelReservationResult.WrongStage,
+            repository.reserveDashboardTravel(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "travel-too-early",
+                "Луна",
+            ),
+        )
+
+        database.gigagochiDao().upsertFirstSession(
+            FirstSessionEntity(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingCompletionMessage.storageValue,
+                null,
+                null,
+                2,
+            ),
+        )
+        assertTrue(
+            repository.reserveDashboardOutfit(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "outfit-onboarding",
+                "Шарф",
+            ) is DashboardOutfitReservationResult.Accepted,
+        )
+        assertEquals(
+            DashboardTravelReservationResult.WrongStage,
+            repository.reserveDashboardTravel(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "travel-before-complete",
+                "Луна",
+            ),
+        )
+        database.gigagochiDao().upsertFirstSession(
+            FirstSessionEntity(
+                OwnerId,
+                PetId,
+                FirstSessionStage.Completed.storageValue,
+                null,
+                null,
+                3,
+            ),
+        )
+        assertTrue(
+            repository.reserveDashboardTravel(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "travel-after-complete",
+                "Луна",
+            ) is DashboardTravelReservationResult.Accepted,
+        )
+    }
+
+    @Test
+    fun dashboardChatReservationDurablyFencesMessageAndSurvivesPresentationAck() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+
+        val accepted = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "chat-reserved",
+            "Привет",
+            FirstSessionStage.AwaitingChat,
+        ) as DashboardChatReservationResult.Pending
+        assertTrue(accepted.newlyAccepted)
+        assertEquals(FirstSessionStage.AwaitingChat, accepted.originFirstSessionStage)
+        val replay = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            "chat-reserved",
+            "Привет",
+            FirstSessionStage.AwaitingChatFollowup,
+        ) as DashboardChatReservationResult.Pending
+        assertEquals(false, replay.newlyAccepted)
+        assertEquals(FirstSessionStage.AwaitingChat, replay.originFirstSessionStage)
+        assertEquals(
+            DashboardChatReservationResult.Conflict,
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "chat-reserved",
+                "Другой payload",
+            ),
+        )
+
+        repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            "chat-reserved",
+            listOf(
+                LocalChatMessage("chat-user", "user", "Привет", 20),
+                LocalChatMessage("chat-pet", "pet", "Привет!", 21),
+            ),
+            happinessDelta = 0,
+            complimentKey = null,
+            appliedAtEpochMillis = 22,
+        )
+        assertTrue(repository.deletePendingChat(OwnerId, "chat-reserved"))
+        assertTrue(
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "chat-reserved",
+                "Привет",
+            ) is DashboardChatReservationResult.Finished,
+        )
+        assertEquals(
+            DashboardChatReservationResult.Conflict,
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "chat-reserved",
+                "Другой payload",
+            ),
+        )
+        database.gigagochiDao().insertFirstSessionActionReceipt(
+            FirstSessionActionReceiptEntity(
+                OwnerId,
+                PetId,
+                "onboarding-key-already-used",
+                "food:berry-bowl",
+                23,
+            ),
+        )
+        assertEquals(
+            DashboardChatReservationResult.Conflict,
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                "onboarding-key-already-used",
+                "Новый чат",
+                FirstSessionStage.AwaitingChat,
+            ),
+        )
+    }
+
+    @Test
+    fun mismatchedChatReceiptCannotImposeOnboardingRecoveryProjection() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        val pending = LocalPendingChat(
+            ownerId = OwnerId,
+            petId = PetId,
+            requestKey = "chat-mismatched-receipt",
+            message = "Настоящее сообщение",
+            createdAtEpochMillis = 20,
+            responseText = "Сохранённый ответ",
+            completedAtEpochMillis = 21,
+        )
+        assertTrue(repository.savePendingChat(pending))
+        assertTrue(
+            database.gigagochiDao().insertDashboardCommandReceipt(
+                DashboardCommandReceiptEntity(
+                    ownerId = OwnerId,
+                    petId = PetId,
+                    requestKey = pending.requestKey,
+                    commandType = "chat-send",
+                    payloadFingerprint = "fingerprint-for-a-different-message",
+                    originFirstSessionStage = FirstSessionStage.AwaitingChat.storageValue,
+                    food = null,
+                    audioIndex = null,
+                    reply = null,
+                    explicitPortionsJson = null,
+                    autoAdvanceDelayMillis = null,
+                    createdAtEpochMillis = 20,
+                ),
+            ) != -1L,
+        )
+
+        assertNull(repository.getPendingChat(OwnerId, pending.requestKey)?.originFirstSessionStage)
+        assertNull(
+            repository.loadOwnerRecovery(OwnerId).pendingChats.single().originFirstSessionStage,
+        )
+        assertEquals(
+            DashboardChatReservationResult.Conflict,
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                pending.requestKey,
+                pending.message,
+                FirstSessionStage.AwaitingChat,
+            ),
+        )
+    }
+
+    @Test
+    fun dashboardChatQueueIsOrderedDurableAndAtomicallyReplacesOnlyQueuedRow() = runBlocking {
+        repository = PetLocalRepository(database) { 100L }
+        repository.replacePetSnapshot(snapshot())
+        val activeKey = "ffffffff-ffff-4fff-8fff-fffffffffff1"
+        val replacedKey = "00000000-0000-4000-8000-000000000002"
+        val latestKey = "11111111-1111-4111-8111-111111111113"
+
+        val active = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            activeKey,
+            "Первое",
+        ) as DashboardChatReservationResult.Pending
+        val queued = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            replacedKey,
+            "Второе",
+            queueAnchorRequestKey = activeKey,
+        ) as DashboardChatReservationResult.Pending
+
+        // Both calls observe the same test clock. The queue still preserves acceptance order and
+        // never falls back to lexical UUID order (which would place replacedKey first).
+        assertTrue(queued.request.createdAtEpochMillis > active.request.createdAtEpochMillis)
+        var recovered = repository.loadOwnerRecovery(OwnerId).pendingChats
+        assertEquals(listOf(activeKey, replacedKey), recovered.map(LocalPendingChat::requestKey))
+
+        val latest = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            latestKey,
+            "Третье",
+            queueAnchorRequestKey = activeKey,
+            replacingQueuedRequestKey = replacedKey,
+        ) as DashboardChatReservationResult.Pending
+
+        assertTrue(latest.request.createdAtEpochMillis > active.request.createdAtEpochMillis)
+        recovered = repository.loadOwnerRecovery(OwnerId).pendingChats
+        assertEquals(listOf(activeKey, latestKey), recovered.map(LocalPendingChat::requestKey))
+        assertEquals(2, recovered.size)
+        assertTrue(repository.getPendingChat(OwnerId, replacedKey) == null)
+        assertTrue(
+            repository.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                replacedKey,
+                "Второе",
+            ) is DashboardChatReservationResult.Finished,
+        )
+
+        // Presentation ack is exact-key deletion: acknowledging active cannot delete the newer
+        // durable queue row.
+        assertTrue(repository.deletePendingChat(OwnerId, activeKey))
+        assertEquals(
+            listOf(latestKey),
+            repository.loadOwnerRecovery(OwnerId).pendingChats.map(LocalPendingChat::requestKey),
+        )
+    }
+
+    @Test
+    fun dashboardFirstSessionChatRecoversBothCrashWindowsOfflineFromStoredOrigin() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        database.gigagochiDao().insertFirstSession(
+            FirstSessionEntity(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingChat.storageValue,
+                null,
+                null,
+                10,
+            ),
+        )
+        var networkCalls = 0
+        val offlineApi = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto):
+                com.gigagochi.app.core.network.FeatureApiResult<com.gigagochi.app.core.network.ChatResponseDto> {
+                networkCalls += 1
+                error("completed pending must not hit the network")
+            }
+        }
+
+        val firstRequest = PendingChatRequest("chat-first-crash", "Меня зовут Серёжа")
+        val firstReservation = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            firstRequest.requestKey,
+            firstRequest.message,
+            FirstSessionStage.AwaitingChat,
+        ) as DashboardChatReservationResult.Pending
+        repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            firstRequest.requestKey,
+            listOf(
+                LocalChatMessage("first-user", "user", firstRequest.message, 20),
+                LocalChatMessage("first-pet", "pet", "Очень приятно!", 21),
+            ),
+            happinessDelta = 0,
+            complimentKey = null,
+            appliedAtEpochMillis = 22,
+        )
+        val firstAdapterResult = RealDashboardChatAdapter(
+            offlineApi,
+            OwnerId,
+            repository,
+            this,
+        ).reply(firstRequest, firstReservation.pet)
+        val afterResponseCrash = completeDashboardFirstSessionChat(
+            ownerId = OwnerId,
+            repository = repository,
+            request = firstRequest,
+            adapterResult = firstAdapterResult,
+            originFirstSessionStage = firstReservation.originFirstSessionStage,
+            nowEpochMillis = 23,
+        ) as WebChatExecutionResult.Success
+        assertEquals(FirstSessionStage.AwaitingChatFollowup, afterResponseCrash.firstSession?.stage)
+        assertEquals(2, afterResponseCrash.result.explicitPortions?.size)
+        assertEquals(FirstSessionAfterName, afterResponseCrash.result.explicitPortions?.last())
+        assertEquals("Очень приятно!", afterResponseCrash.pendingChat?.responseText)
+        assertEquals(
+            "chat:awaiting-chat",
+            database.gigagochiDao().getFirstSessionActionReceipt(
+                OwnerId,
+                PetId,
+                firstRequest.requestKey,
+            )?.actionKind,
+        )
+
+        val secondRequest = PendingChatRequest("chat-stage-crash", "Я люблю рисовать")
+        val secondReservation = repository.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            secondRequest.requestKey,
+            secondRequest.message,
+            FirstSessionStage.AwaitingChatFollowup,
+        ) as DashboardChatReservationResult.Pending
+        repository.applyChatResponse(
+            OwnerId,
+            PetId,
+            secondRequest.requestKey,
+            listOf(
+                LocalChatMessage("second-user", "user", secondRequest.message, 30),
+                LocalChatMessage("second-pet", "pet", "Это здорово!", 31),
+            ),
+            happinessDelta = 0,
+            complimentKey = null,
+            appliedAtEpochMillis = 32,
+        )
+        assertTrue(
+            repository.advanceFirstSession(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingChatFollowup,
+                FirstSessionStage.AwaitingFirstFood,
+                secondRequest.requestKey,
+                nowEpochMillis = 33,
+            ) is FirstSessionMutationResult.Applied,
+        )
+        assertEquals(
+            "stage",
+            database.gigagochiDao().getFirstSessionActionReceipt(
+                OwnerId,
+                PetId,
+                secondRequest.requestKey,
+            )?.actionKind,
+        )
+
+        val restarted = PetLocalRepository(database)
+        val replayReservation = restarted.reserveDashboardChat(
+            OwnerId,
+            PetId,
+            AssetSetId,
+            secondRequest.requestKey,
+            secondRequest.message,
+            originFirstSessionStage = FirstSessionStage.AwaitingFirstFood,
+        ) as DashboardChatReservationResult.Pending
+        assertEquals(
+            FirstSessionStage.AwaitingChatFollowup,
+            replayReservation.originFirstSessionStage,
+        )
+        val replayAdapterResult = RealDashboardChatAdapter(
+            offlineApi,
+            OwnerId,
+            restarted,
+            this,
+        ).reply(secondRequest, replayReservation.pet)
+        val afterStageCrash = completeDashboardFirstSessionChat(
+            ownerId = OwnerId,
+            repository = restarted,
+            request = secondRequest,
+            adapterResult = replayAdapterResult,
+            originFirstSessionStage = replayReservation.originFirstSessionStage,
+            nowEpochMillis = 34,
+        ) as WebChatExecutionResult.Success
+        assertEquals(FirstSessionStage.AwaitingFirstFood, afterStageCrash.firstSession?.stage)
+        assertEquals(2, afterStageCrash.result.explicitPortions?.size)
+        assertEquals(FirstSessionAfterChat, afterStageCrash.result.explicitPortions?.last())
+        assertEquals("Это здорово!", afterStageCrash.pendingChat?.responseText)
+        assertEquals(0, networkCalls)
+        assertEquals(
+            DashboardChatReservationResult.Conflict,
+            restarted.reserveDashboardChat(
+                OwnerId,
+                PetId,
+                AssetSetId,
+                secondRequest.requestKey,
+                "Другой payload",
+                FirstSessionStage.AwaitingFirstFood,
+            ),
+        )
+        assertEquals(
+            FirstSessionMutationResult.WrongStage,
+            restarted.advanceDashboardChatFirstSession(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingChatFollowup,
+                secondRequest.requestKey,
+                "Другой payload",
+                35,
+            ),
+        )
+        assertEquals(
+            FirstSessionMutationResult.WrongStage,
+            restarted.applyFirstSessionFood(
+                OwnerId,
+                PetId,
+                "berry-bowl",
+                secondRequest.requestKey,
+                36,
+            ),
+        )
+    }
+
+    @Test
+    fun dashboardFeedRapidActionsAreCumulativeAndReplayCannotApplyTwice() = runBlocking {
+        repository = PetLocalRepository(database) { 10L }
+        repository.replacePetSnapshot(snapshot(hunger = 40, energy = 30))
+
+        val berry = applyFeed("feed-berry", "berry-bowl", 0)
+            as DashboardFeedApplicationResult.Applied
+        val leaf = applyFeed("feed-leaf", "leaf-crunch", 1)
+            as DashboardFeedApplicationResult.Applied
+        assertTrue(berry.newlyApplied)
+        assertTrue(leaf.newlyApplied)
+        assertEquals(65, leaf.pet.hunger)
+        assertEquals(55, leaf.pet.energy)
+
+        val replay = applyFeed("feed-berry", "berry-bowl", 2)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(false, replay.newlyApplied)
+        assertEquals(0, replay.receipt.audioIndex)
+        assertEquals(65, replay.pet.hunger)
+        assertEquals(55, replay.pet.energy)
+        assertEquals(
+            DashboardFeedApplicationResult.Conflict,
+            applyFeed("feed-berry", "leaf-crunch", 2),
+        )
+        assertEquals(65, repository.getPetSnapshot(OwnerId, PetId)?.pet?.hunger)
+        assertEquals(55, repository.getPetSnapshot(OwnerId, PetId)?.pet?.energy)
+    }
+
+    @Test
+    fun dashboardFeedPreservesExactFourRowFirstSessionFoodMatrix() = runBlocking {
+        repository = PetLocalRepository(database) { 10L }
+        repository.replacePetSnapshot(snapshot(hunger = 40, energy = 30))
+        database.gigagochiDao().insertFirstSession(
+            FirstSessionEntity(
+                OwnerId,
+                PetId,
+                FirstSessionStage.AwaitingFirstFood.storageValue,
+                null,
+                null,
+                1,
+            ),
+        )
+
+        val wrongFirst = applyFeed("food-1", "leaf-crunch", 0)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(FirstSessionStage.AwaitingFirstFood, wrongFirst.firstSession?.stage)
+        assertEquals("Обычный лист", wrongFirst.receipt.reply)
+        assertEquals(55, wrongFirst.pet.energy)
+
+        val firstFood = applyFeed("food-2", "berry-bowl", 1)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(FirstSessionStage.AwaitingRemedy, firstFood.firstSession?.stage)
+        assertEquals("После первой еды", firstFood.receipt.reply)
+        assertEquals(65, firstFood.pet.hunger)
+
+        val wrongRemedy = applyFeed("food-3", "berry-bowl", 2)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(FirstSessionStage.AwaitingRemedy, wrongRemedy.firstSession?.stage)
+        assertEquals("Обычная ягода", wrongRemedy.receipt.reply)
+        assertEquals(90, wrongRemedy.pet.hunger)
+
+        val remedy = applyFeed("food-4", "leaf-crunch", 0)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(FirstSessionStage.AwaitingTravel, remedy.firstSession?.stage)
+        assertEquals("После лекарства", remedy.receipt.reply)
+        assertEquals(listOf("Часть 1", "Часть 2"), remedy.receipt.explicitPortions)
+        assertEquals(80, remedy.pet.energy)
+
+        val replay = applyFeed("food-1", "leaf-crunch", 2)
+            as DashboardFeedApplicationResult.Applied
+        assertEquals(false, replay.newlyApplied)
+        assertEquals(90, replay.pet.hunger)
+        assertEquals(80, replay.pet.energy)
     }
 
     @Test
@@ -295,12 +979,76 @@ class PetLocalRepositoryTest {
     }
 
     @Test
+    fun networkChatFailureRetainsPendingAndReplaysTheSameRequestKey() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        val request = PendingChatRequest("chat-response-lost", "Ответ потерялся?")
+        val requestKeys = mutableListOf<String>()
+        var responseLost = true
+        val api = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto):
+                com.gigagochi.app.core.network.FeatureApiResult<com.gigagochi.app.core.network.ChatResponseDto> {
+                requestKeys += request.requestKey
+                return if (responseLost) {
+                    com.gigagochi.app.core.network.FeatureApiResult.Failure(
+                        com.gigagochi.app.core.network.FeatureFailure(
+                            com.gigagochi.app.core.network.FeatureFailureKind.Network,
+                        ),
+                    )
+                } else {
+                    com.gigagochi.app.core.network.FeatureApiResult.Success(
+                        com.gigagochi.app.core.network.ChatResponseDto("Слышу."),
+                    )
+                }
+            }
+        }
+        val adapter = RealDashboardChatAdapter(api, OwnerId, repository, this)
+        try {
+            adapter.reply(request, requireNotNull(repository.getPetSnapshot(OwnerId, PetId)).pet)
+        } catch (_: com.gigagochi.app.feature.create.FeatureAdapterException) {
+            Unit
+        }
+
+        val retained = requireNotNull(repository.getPendingChat(OwnerId, request.requestKey))
+        assertEquals(request.message, retained.message)
+        responseLost = false
+        val replayed = adapter.reply(request, requireNotNull(repository.getPetSnapshot(OwnerId, PetId)).pet)
+
+        assertEquals(listOf(request.requestKey, request.requestKey), requestKeys)
+        assertEquals("Слышу.", replayed.reply)
+        assertEquals("Слышу.", repository.getPendingChat(OwnerId, request.requestKey)?.responseText)
+    }
+
+    @Test
+    fun definitiveChatRejectionDeletesPendingRequest() = runBlocking {
+        repository.replacePetSnapshot(snapshot())
+        val request = PendingChatRequest("chat-rejected", "Некорректный запрос")
+        val api = object : com.gigagochi.app.core.network.TestAndroidFeatureService() {
+            override suspend fun chat(request: com.gigagochi.app.core.network.ChatRequestDto) =
+                com.gigagochi.app.core.network.FeatureApiResult.Failure(
+                    com.gigagochi.app.core.network.FeatureFailure(
+                        com.gigagochi.app.core.network.FeatureFailureKind.BadRequest,
+                    ),
+                )
+        }
+        try {
+            RealDashboardChatAdapter(api, OwnerId, repository, this).reply(
+                request,
+                requireNotNull(repository.getPetSnapshot(OwnerId, PetId)).pet,
+            )
+        } catch (_: com.gigagochi.app.feature.create.FeatureAdapterException) {
+            Unit
+        }
+
+        assertNull(repository.getPendingChat(OwnerId, request.requestKey))
+    }
+
+    @Test
     fun existingPetWithoutFirstSessionRowKeepsOrdinaryFlow() = runBlocking {
         repository.replacePetSnapshot(snapshot(experience = 500))
 
         assertNull(repository.getFirstSession(OwnerId, PetId))
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(outfit()))
-        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -395,7 +1143,7 @@ class PetLocalRepositoryTest {
             PendingOutfitRequest("outfit-retry", "Зелёный плащ"),
             repository.getPetSnapshot(OwnerId, PetId)!!.pet,
         ) is DurableOutfitResult.PersistedButQueueFailed)
-        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(
             FirstSessionStage.AwaitingCompletionMessage,
             repository.getFirstSession(OwnerId, PetId)?.stage,
@@ -410,7 +1158,7 @@ class PetLocalRepositoryTest {
         ) is DurableOutfitResult.Queued)
 
         assertEquals(2, calls)
-        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(1, repository.getPendingOutfits(OwnerId).size)
         assertEquals("outfit-retry", repository.getPendingOutfits(OwnerId).single().requestKey)
         assertEquals("backend-retry", repository.getPendingOutfits(OwnerId).single().backendJobId)
@@ -495,9 +1243,9 @@ class PetLocalRepositoryTest {
             repository.attachOutfitBackendJob(OwnerId, "outfit-request", "outfit-backend"),
         )
         assertEquals(FirstSessionStage.Completed, repository.getFirstSession(OwnerId, PetId)?.stage)
-        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(outfit()))
-        assertEquals(200, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(0, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -580,13 +1328,13 @@ class PetLocalRepositoryTest {
     }
 
     @Test
-    fun outfitAcceptanceIsFreeAndBackendJobAttachRejectsConflict() = runBlocking {
+    fun outfitAcceptanceChargesOnceAndBackendJobAttachRejectsConflict() = runBlocking {
         repository.replacePetSnapshot(snapshot(experience = 500))
         val pending = outfit()
 
         assertEquals(OutfitAcceptanceResult.Applied, repository.acceptOutfit(pending))
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
-        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertEquals(1, repository.getPendingOutfits(OwnerId).size)
 
         assertEquals(
@@ -683,6 +1431,141 @@ class PetLocalRepositoryTest {
         assertEquals("retry-request", pending.requestKey)
         assertNull(pending.backendJobId)
         assertEquals(PendingBackendState.Pending, pending.backendState)
+    }
+
+    @Test
+    fun staleCreateAnswerWritePreservesAttachedAndTerminalBackendProgress() = runBlocking {
+        val initial = create().copy(
+            backendJobId = null,
+            stage = PendingCreateStage.Requested,
+            name = null,
+            personality = null,
+            fear = null,
+            favoriteItem = null,
+            currentStep = 1,
+            updatedAtEpochMillis = 100L,
+            backendState = PendingBackendState.Pending,
+            backendErrorCode = null,
+        )
+        repository.savePendingCreate(initial)
+
+        // This is the answer snapshot captured before the backend coroutine attaches its job.
+        val staleBackendButNewerAnswer = initial.copy(
+            stage = PendingCreateStage.Generating,
+            name = "Тото",
+            personality = "Добрый",
+            fear = "Пауков",
+            favoriteItem = "Вантуз",
+            currentStep = 5,
+            updatedAtEpochMillis = 200L,
+        )
+        val releaseStaleWrite = CompletableDeferred<Unit>()
+        val staleWriter = launch {
+            releaseStaleWrite.await()
+            repository.savePendingCreate(staleBackendButNewerAnswer)
+        }
+
+        assertTrue(
+            repository.updateCreateBackendState(
+                OwnerId,
+                "create-request",
+                PendingBackendState.Dispatching,
+            ),
+        )
+        assertEquals(
+            BackendJobAttachmentResult.Attached,
+            repository.attachCreateBackendJob(
+                OwnerId,
+                "create-request",
+                "backend-attached",
+            ),
+        )
+        assertTrue(
+            repository.updateCreateBackendState(
+                OwnerId,
+                "create-request",
+                PendingBackendState.Attached,
+            ),
+        )
+        releaseStaleWrite.complete(Unit)
+        staleWriter.join()
+
+        val attached = repository.getPendingCreates(OwnerId).single()
+        assertEquals("backend-attached", attached.backendJobId)
+        assertEquals(PendingBackendState.Attached, attached.backendState)
+        assertNull(attached.backendErrorCode)
+        assertEquals(PendingCreateStage.Generating, attached.stage)
+        assertEquals("Тото", attached.name)
+        assertEquals("Добрый", attached.personality)
+        assertEquals("Пауков", attached.fear)
+        assertEquals("Вантуз", attached.favoriteItem)
+        assertEquals(5, attached.currentStep)
+        assertEquals(200L, attached.updatedAtEpochMillis)
+
+        // A lower-step snapshot cannot roll answers back, even with the same timestamp.
+        repository.savePendingCreate(
+            staleBackendButNewerAnswer.copy(
+                stage = PendingCreateStage.Requested,
+                name = null,
+                personality = null,
+                fear = null,
+                favoriteItem = null,
+                currentStep = 1,
+                updatedAtEpochMillis = 200L,
+            ),
+        )
+        assertEquals(attached, repository.getPendingCreates(OwnerId).single())
+
+        // Nor can an older lower-step snapshot roll progress or its logical timestamp backwards.
+        repository.savePendingCreate(
+            staleBackendButNewerAnswer.copy(
+                stage = PendingCreateStage.Requested,
+                name = null,
+                personality = null,
+                fear = null,
+                favoriteItem = null,
+                currentStep = 1,
+                updatedAtEpochMillis = 150L,
+            ),
+        )
+        assertEquals(attached, repository.getPendingCreates(OwnerId).single())
+
+        repository.deletePendingCreate(OwnerId, "create-request")
+        listOf(
+            PendingBackendState.Ready to null,
+            PendingBackendState.OutcomeUnknown to "SUBMIT_UNKNOWN",
+            PendingBackendState.Failed to "GENERATION_FAILED",
+        ).forEachIndexed { index, (terminalState, errorCode) ->
+            val requestKey = "terminal-create-$index"
+            repository.savePendingCreate(
+                initial.copy(
+                    requestKey = requestKey,
+                    backendJobId = "terminal-job-$index",
+                    updatedAtEpochMillis = 300L + index,
+                    backendState = terminalState,
+                    backendErrorCode = errorCode,
+                ),
+            )
+            repository.savePendingCreate(
+                staleBackendButNewerAnswer.copy(
+                    requestKey = requestKey,
+                    backendJobId = null,
+                    updatedAtEpochMillis = 400L + index,
+                    backendState = PendingBackendState.Pending,
+                    backendErrorCode = null,
+                ),
+            )
+
+            val terminal = repository.getPendingCreates(OwnerId).single {
+                it.requestKey == requestKey
+            }
+            assertEquals("terminal-job-$index", terminal.backendJobId)
+            assertEquals(terminalState, terminal.backendState)
+            assertEquals(errorCode, terminal.backendErrorCode)
+            assertEquals(PendingCreateStage.Generating, terminal.stage)
+            assertEquals(5, terminal.currentStep)
+            assertEquals(400L + index, terminal.updatedAtEpochMillis)
+        }
     }
 
     @Test
@@ -837,7 +1720,7 @@ class PetLocalRepositoryTest {
         val appliedMedia = requireNotNull(repository.getPetSnapshot(OwnerId, PetId)?.pet?.generatedMedia)
         assertEquals("https://gigagochi.serega.works/static/${pending.requestKey}-idle.mp4", appliedMedia.videoUrl)
         assertEquals(false, appliedMedia.moodImages.any { it.url.contains("previous") })
-        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
         val outfitNotification = repository.getUnnotifiedNotifications(OwnerId, PetId).single()
         assertEquals(LocalNotificationKind.OutfitReady, outfitNotification.kind)
@@ -849,13 +1732,13 @@ class PetLocalRepositoryTest {
         assertTrue(outfitExperience.text.contains("плащ"))
         assertTrue(repository.applyOutfitOutcome(OwnerId, PetId, pending.requestKey) is OutfitOutcomeApplicationResult.AlreadyApplied)
         assertEquals(OutfitAcceptanceResult.AlreadyApplied, repository.acceptOutfit(pending))
-        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
         assertTrue(repository.getPendingOutfits(OwnerId).isEmpty())
 
         val stale = snapshot(experience = 999)
         assertEquals(false, repository.replacePetSnapshotIfAssetCurrent(stale))
         assertEquals("asset-${pending.requestKey}", repository.getPetSnapshot(OwnerId, PetId)?.pet?.assetSetId)
-        assertEquals(500, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
+        assertEquals(300, repository.getPetSnapshot(OwnerId, PetId)?.pet?.experience)
     }
 
     @Test
@@ -931,6 +1814,32 @@ class PetLocalRepositoryTest {
         assertEquals("APPLY_CONFLICT", failed.backendErrorCode)
         assertEquals(false, repository.markOutfitApplyConflict(OwnerId, pending.requestKey))
     }
+
+    private suspend fun applyFeed(
+        requestKey: String,
+        food: String,
+        audioIndex: Int,
+    ): DashboardFeedApplicationResult = repository.applyDashboardFeed(
+        ownerId = OwnerId,
+        petId = PetId,
+        expectedAssetSetId = AssetSetId,
+        requestKey = requestKey,
+        food = food,
+        audioIndex = audioIndex,
+        defaultPresentation = LocalDashboardFeedPresentation(
+            reply = if (food == "berry-bowl") "Обычная ягода" else "Обычный лист",
+            autoAdvanceDelayMillis = 6_000,
+        ),
+        firstFoodPresentation = LocalDashboardFeedPresentation(
+            reply = "После первой еды",
+            autoAdvanceDelayMillis = 6_000,
+        ),
+        remedyPresentation = LocalDashboardFeedPresentation(
+            reply = "После лекарства",
+            explicitPortions = listOf("Часть 1", "Часть 2"),
+            autoAdvanceDelayMillis = 6_000,
+        ),
+    )
 
     private fun snapshot(
         ownerId: String = OwnerId,

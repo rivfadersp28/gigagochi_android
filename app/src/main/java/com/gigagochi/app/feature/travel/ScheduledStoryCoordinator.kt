@@ -31,6 +31,22 @@ sealed interface ScheduledStoryChoiceResult {
     data class Failure(val failure: FeatureFailure) : ScheduledStoryChoiceResult
 }
 
+/**
+ * Durable identity won before a scheduled-story request is sent to the backend.
+ *
+ * [requestKey] and [choice] always come back from Room. Callers must use these values for the
+ * network request instead of the values they proposed, so retries and competing taps cannot mint a
+ * second reward identity.
+ */
+sealed interface ScheduledStoryChoicePreparationResult {
+    data class Prepared(
+        val requestKey: String,
+        val choice: String,
+    ) : ScheduledStoryChoicePreparationResult
+
+    data class Failure(val failure: FeatureFailure) : ScheduledStoryChoicePreparationResult
+}
+
 class ScheduledStoryCoordinator(
     private val ownerId: String,
     private val store: ScheduledStoryStore,
@@ -62,22 +78,61 @@ class ScheduledStoryCoordinator(
         choice: String,
         proposedRequestKey: String,
     ): ScheduledStoryChoiceResult = protectChoice {
-        when (val claim = store.claimScheduledStoryChoice(
-            ownerId,
-            storyId,
-            proposedRequestKey,
-            choice,
-        )) {
-            is ScheduledStoryChoiceClaim.Completed -> commitReceipt(
-                claim.story,
-                claim.requestKey,
+        when (val prepared = prepareChoice(storyId, choice, proposedRequestKey)) {
+            is ScheduledStoryChoicePreparationResult.Failure ->
+                ScheduledStoryChoiceResult.Failure(prepared.failure)
+            is ScheduledStoryChoicePreparationResult.Prepared -> executePreparedChoice(
+                storyId = storyId,
+                requestKey = prepared.requestKey,
+                choice = prepared.choice,
+            )
+        }
+    }
+
+    /** Room-only winner claim. No backend work or reward commit is performed here. */
+    suspend fun prepareChoice(
+        storyId: String,
+        choice: String,
+        proposedRequestKey: String,
+    ): ScheduledStoryChoicePreparationResult = protectPreparation {
+        when (
+            val claim = store.claimScheduledStoryChoice(
+                ownerId,
+                storyId,
+                proposedRequestKey,
                 choice,
             )
+        ) {
+            is ScheduledStoryChoiceClaim.Completed ->
+                ScheduledStoryChoicePreparationResult.Prepared(claim.requestKey, choice)
             ScheduledStoryChoiceClaim.Conflict,
             ScheduledStoryChoiceClaim.Missing,
-            -> protocolChoiceFailure()
-            is ScheduledStoryChoiceClaim.Claimed -> submitChoice(storyId, claim.requestKey, claim.choice)
-            is ScheduledStoryChoiceClaim.Existing -> submitChoice(storyId, claim.requestKey, claim.choice)
+            -> preparationProtocolFailure()
+            is ScheduledStoryChoiceClaim.Claimed ->
+                ScheduledStoryChoicePreparationResult.Prepared(claim.requestKey, claim.choice)
+            is ScheduledStoryChoiceClaim.Existing ->
+                ScheduledStoryChoicePreparationResult.Prepared(claim.requestKey, claim.choice)
+        }
+    }
+
+    /**
+     * Executes exactly the identity previously returned by [prepareChoice]. The Room row is checked
+     * again before any remote request, making this safe to call after recreation and on retries.
+     */
+    suspend fun executePreparedChoice(
+        storyId: String,
+        requestKey: String,
+        choice: String,
+    ): ScheduledStoryChoiceResult = protectChoice {
+        val local = store.getScheduledStory(ownerId, storyId)
+            ?: return@protectChoice protocolChoiceFailure()
+        if (local.choiceRequestKey != requestKey) return@protectChoice protocolChoiceFailure()
+        val selected = local.story.selectedChoice
+        when {
+            selected != null && selected == choice -> commitReceipt(local.story, requestKey, choice)
+            selected != null -> protocolChoiceFailure()
+            local.pendingChoice == choice -> submitChoice(storyId, requestKey, choice)
+            else -> protocolChoiceFailure()
         }
     }
 
@@ -169,6 +224,18 @@ class ScheduledStoryCoordinator(
     } catch (_: Exception) {
         ScheduledStoryChoiceResult.Failure(FeatureFailure(FeatureFailureKind.Storage))
     }
+
+    private suspend inline fun protectPreparation(
+        block: () -> ScheduledStoryChoicePreparationResult,
+    ): ScheduledStoryChoicePreparationResult = try {
+        block()
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (_: Exception) {
+        ScheduledStoryChoicePreparationResult.Failure(
+            FeatureFailure(FeatureFailureKind.Storage),
+        )
+    }
 }
 
 private fun protocolDueFailure() =
@@ -176,3 +243,6 @@ private fun protocolDueFailure() =
 
 private fun protocolChoiceFailure() =
     ScheduledStoryChoiceResult.Failure(FeatureFailure(FeatureFailureKind.Conflict))
+
+private fun preparationProtocolFailure() =
+    ScheduledStoryChoicePreparationResult.Failure(FeatureFailure(FeatureFailureKind.Conflict))

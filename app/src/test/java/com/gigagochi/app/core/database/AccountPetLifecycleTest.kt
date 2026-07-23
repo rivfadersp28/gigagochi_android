@@ -160,6 +160,48 @@ class AccountPetLifecycleTest {
         assertTrue(store.outfits.contains(failedOutfit))
     }
 
+    @Test
+    fun startupRestoresOldestActiveAndOneQueuedChatDeterministically() = runBlocking {
+        val store = FakeStore()
+        val activePet = pet("pet-a", hunger = 70)
+        val oldest = pendingChat(
+            "acct_owner_a",
+            activePet.petId,
+            "ffffffff-ffff-4fff-8fff-fffffffffff1",
+            "Первое",
+            createdAt = 10,
+        )
+        val next = pendingChat(
+            "acct_owner_a",
+            activePet.petId,
+            "00000000-0000-4000-8000-000000000002",
+            "Второе",
+            createdAt = 11,
+        )
+        val extra = pendingChat(
+            "acct_owner_a",
+            activePet.petId,
+            "11111111-1111-4111-8111-111111111113",
+            "Третье",
+            createdAt = 12,
+        )
+        store.snapshots += snapshot("acct_owner_a", activePet, 20)
+        store.chats += listOf(extra, next, oldest)
+        store.chats += pendingChat(
+            "acct_owner_a",
+            "another-pet",
+            "22222222-2222-4222-8222-222222222224",
+            "Чужое",
+            createdAt = 1,
+        )
+
+        val destination = AccountPetLifecycle(store).startup("acct_owner_a")
+            as AccountStartupDestination.Dashboard
+
+        assertEquals(oldest, destination.pendingChat)
+        assertEquals(next, destination.queuedChat)
+    }
+
     private fun pendingCreate(owner: String, petId: String, key: String) =
         LocalPendingCreateGeneration(
             owner, petId, key, null, PendingCreateStage.Generating, "Дракон",
@@ -173,6 +215,14 @@ class AccountPetLifecycleTest {
     private fun pendingTravel(owner: String, petId: String, key: String) = LocalPendingTravelVideo(
         owner, petId, key, "local-$key", null, "Луна", 12,
     )
+
+    private fun pendingChat(
+        owner: String,
+        petId: String,
+        key: String,
+        message: String,
+        createdAt: Long,
+    ) = LocalPendingChat(owner, petId, key, message, createdAt)
 
     private fun storyReceipt(owner: String, petId: String, key: String, travelId: String) =
         InteractiveStoryReceipt(owner, petId, key, travelId, "part", 10, 0, 0, 0, 13)
@@ -207,6 +257,7 @@ class AccountPetLifecycleTest {
         val creates = mutableListOf<LocalPendingCreateGeneration>()
         val outfits = mutableListOf<LocalPendingOutfit>()
         val travels = mutableListOf<LocalPendingTravelVideo>()
+        val chats = mutableListOf<LocalPendingChat>()
         val receipts = mutableListOf<InteractiveStoryReceipt>()
         val assets = mutableListOf<LocalTravelVideoAsset>()
         var readFailure = false
@@ -237,6 +288,7 @@ class AccountPetLifecycleTest {
                 outfits.filter { it.ownerId == ownerId },
                 travels.filter { it.ownerId == ownerId },
                 receipts.filter { it.ownerId == ownerId },
+                pendingChats = chats.filter { it.ownerId == ownerId },
                 travelVideoAssets = assets.filter { it.ownerId == ownerId },
             )
         }

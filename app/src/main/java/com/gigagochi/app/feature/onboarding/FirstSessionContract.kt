@@ -51,7 +51,8 @@ fun reduceFirstSession(stage: FirstSessionStage, event: FirstSessionEvent): Firs
         event.destination.trim().isNotEmpty() -> FirstSessionStage.ConfirmingTravel
     stage == FirstSessionStage.ConfirmingTravel && event == FirstSessionEvent.DestinationChanged ->
         FirstSessionStage.AwaitingTravel
-    stage == FirstSessionStage.AwaitingTravel && event == FirstSessionEvent.BatFinished ->
+    stage in setOf(FirstSessionStage.AwaitingTravel, FirstSessionStage.ConfirmingTravel) &&
+        event == FirstSessionEvent.BatFinished ->
         FirstSessionStage.AwaitingCompletionMessage
     stage == FirstSessionStage.AwaitingCompletionMessage && event == FirstSessionEvent.OutfitAccepted ->
         FirstSessionStage.Completed

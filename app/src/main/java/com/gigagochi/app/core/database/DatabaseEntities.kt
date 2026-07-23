@@ -76,6 +76,38 @@ internal data class PendingChatEntity(
     val completedAtEpochMillis: Long?,
 )
 
+/**
+ * Durable idempotency fence for locally accepted dashboard commands.
+ *
+ * Chat text is represented only by a SHA-256 fingerprint here; the recoverable clear-text request
+ * remains in [PendingChatEntity]. Feed result presentation is stored because feeding is completely
+ * local and must be replayable without applying its stat delta twice.
+ */
+@Entity(
+    tableName = "dashboard_command_receipts",
+    primaryKeys = ["ownerId", "requestKey"],
+    indices = [
+        Index(
+            value = ["ownerId", "petId", "createdAtEpochMillis"],
+            name = "index_dashboard_command_owner_pet_created",
+        ),
+    ],
+)
+internal data class DashboardCommandReceiptEntity(
+    val ownerId: String,
+    val petId: String,
+    val requestKey: String,
+    val commandType: String,
+    val payloadFingerprint: String,
+    val originFirstSessionStage: String?,
+    val food: String?,
+    val audioIndex: Int?,
+    val reply: String?,
+    val explicitPortionsJson: String?,
+    val autoAdvanceDelayMillis: Long?,
+    val createdAtEpochMillis: Long,
+)
+
 @Entity(
     tableName = "compliment_ledger",
     primaryKeys = ["ownerId", "petId", "normalizedKey"],

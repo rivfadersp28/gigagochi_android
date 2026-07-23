@@ -1,6 +1,7 @@
 package com.gigagochi.app.core.background
 
 import android.Manifest
+import android.content.Context
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,8 +9,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 
-private const val PermissionPreferences = "gigagochi-notification-permission"
-private const val PermissionAsked = "asked"
+internal const val NotificationPermissionPreferences = "gigagochi-notification-permission"
+internal const val NotificationPermissionAsked = "asked"
+
+internal fun notificationPermissionWasAsked(context: Context): Boolean =
+    context.getSharedPreferences(NotificationPermissionPreferences, 0)
+        .getBoolean(NotificationPermissionAsked, false)
+
+internal fun markNotificationPermissionAsked(context: Context) {
+    context.getSharedPreferences(NotificationPermissionPreferences, 0)
+        .edit()
+        .putBoolean(NotificationPermissionAsked, true)
+        .apply()
+}
 
 @Composable
 fun RequestNotificationPermissionOnce(
@@ -23,9 +35,8 @@ fun RequestNotificationPermissionOnce(
         onPermissionResult,
     )
     LaunchedEffect(enabled) {
-        val preferences = context.getSharedPreferences(PermissionPreferences, 0)
-        if (!preferences.getBoolean(PermissionAsked, false)) {
-            preferences.edit().putBoolean(PermissionAsked, true).apply()
+        if (!notificationPermissionWasAsked(context)) {
+            markNotificationPermissionAsked(context)
             launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }

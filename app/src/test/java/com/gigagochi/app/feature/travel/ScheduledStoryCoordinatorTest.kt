@@ -71,6 +71,41 @@ class ScheduledStoryCoordinatorTest {
     }
 
     @Test
+    fun prepareChoiceClaimsRoomWinnerWithoutPostingAndExecuteUsesThatExactIdentity() = runBlocking {
+        val store = MemoryStoryStore().apply {
+            saveScheduledStory(LocalScheduledStory("owner-a", StoryApi().story(StoryApi.storyDto())!!))
+        }
+        val api = StoryApi()
+        val receiptStore = ReceiptStore(pet())
+        val coordinator = ScheduledStoryCoordinator(
+            "owner-a",
+            store,
+            api,
+            StoryReceiptCoordinator("owner-a", "pet-a", receiptStore),
+        )
+
+        val prepared = coordinator.prepareChoice(StoryId, "b", WinnerKey)
+        val competing = coordinator.prepareChoice(StoryId, "b", LoserKey)
+
+        assertEquals(
+            ScheduledStoryChoicePreparationResult.Prepared(WinnerKey, "b"),
+            prepared,
+        )
+        assertEquals(prepared, competing)
+        assertTrue(api.choiceKeys.isEmpty())
+        assertEquals(WinnerKey, store.rows.single().choiceRequestKey)
+        assertEquals("b", store.rows.single().pendingChoice)
+
+        assertTrue(
+            coordinator.executePreparedChoice(StoryId, WinnerKey, "b")
+                is ScheduledStoryChoiceResult.Saved,
+        )
+        assertEquals(listOf(WinnerKey), api.choiceKeys)
+        assertEquals(20, receiptStore.pet.experience)
+        assertEquals(1, receiptStore.receipts.size)
+    }
+
+    @Test
     fun processDeathAfterChoiceSaveReconcilesMissingReceiptWithoutSecondPostOrXp() = runBlocking {
         val api = StoryApi()
         val selected = requireNotNull(

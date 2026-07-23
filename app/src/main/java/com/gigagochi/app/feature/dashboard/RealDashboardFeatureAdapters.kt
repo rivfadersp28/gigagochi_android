@@ -122,12 +122,20 @@ class RealDashboardChatAdapter(
                         ?: request.message.takeIf { result.value.happinessDelta in setOf(30, 100) },
                     appliedAtEpochMillis = System.currentTimeMillis(),
                 )
-                repository.markMemoriesMentioned(
-                    ownerId,
-                    pet.petId,
-                    memoryContext.relevantMemories.mapTo(mutableSetOf()) { it.id },
-                    System.currentTimeMillis(),
-                )
+                try {
+                    repository.markMemoriesMentioned(
+                        ownerId,
+                        pet.petId,
+                        memoryContext.relevantMemories.mapTo(mutableSetOf()) { it.id },
+                        System.currentTimeMillis(),
+                    )
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    // The reply and its durable chat receipt are already committed. A secondary
+                    // memory-bookkeeping failure must never turn a valid server reply into an
+                    // empty Chat state.
+                }
                 postReplyScope.launch {
                     val extraction = api.extractMemory(
                         MemoryExtractionRequestDto(
@@ -187,11 +195,51 @@ class RealDashboardChatAdapter(
                 DashboardChatResult(reply, appliedPet)
             }
             is FeatureApiResult.Failure -> {
-                repository.deletePendingChat(ownerId, request.requestKey)
+                val fallbackReply = result.failure.chatFallbackReplyOrNull()
+                if (fallbackReply != null) {
+                    val assistantMessage = newChatMessage(
+                        "pet",
+                        fallbackReply,
+                        System.currentTimeMillis(),
+                    )
+                    val appliedPet = repository.applyChatResponse(
+                        ownerId = ownerId,
+                        petId = pet.petId,
+                        requestKey = request.requestKey,
+                        messages = listOf(userMessage, assistantMessage),
+                        happinessDelta = 0,
+                        complimentKey = null,
+                        appliedAtEpochMillis = System.currentTimeMillis(),
+                    )
+                    return DashboardChatResult(fallbackReply, appliedPet)
+                }
+                if (!result.failure.keepsPendingChatForRetry()) {
+                    repository.deletePendingChat(ownerId, request.requestKey)
+                }
                 throw FeatureAdapterException(result.failure)
             }
         }
     }
+}
+
+internal fun FeatureFailure.chatFallbackReplyOrNull(): String? =
+    DeterministicChatReply.takeIf { kind == FeatureFailureKind.Server }
+
+private fun FeatureFailure.keepsPendingChatForRetry(): Boolean = when (kind) {
+    FeatureFailureKind.Network,
+    FeatureFailureKind.Storage,
+    FeatureFailureKind.SessionInvalid,
+    FeatureFailureKind.RefreshUnavailable,
+    FeatureFailureKind.RateLimited,
+    FeatureFailureKind.InProgress,
+    FeatureFailureKind.OutcomeUnknown,
+    FeatureFailureKind.Server,
+    FeatureFailureKind.Protocol,
+    -> true
+    FeatureFailureKind.BadRequest,
+    FeatureFailureKind.Conflict,
+    FeatureFailureKind.NotFound,
+    -> false
 }
 
 class RealDashboardAmbientAdapter(

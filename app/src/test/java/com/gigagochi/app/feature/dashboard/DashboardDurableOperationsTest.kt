@@ -7,6 +7,8 @@ import com.gigagochi.app.core.database.OutfitAcceptanceResult
 import com.gigagochi.app.core.database.OwnerRecoveryData
 import com.gigagochi.app.core.database.OwnedPetSnapshot
 import com.gigagochi.app.core.database.PendingBackendState
+import com.gigagochi.app.core.network.FeatureFailure
+import com.gigagochi.app.core.network.FeatureFailureKind
 import com.gigagochi.app.core.database.TestOwnerRecoveryStore
 import com.gigagochi.app.core.database.IdempotentInsertResult
 import com.gigagochi.app.core.model.PetDashboardState
@@ -16,6 +18,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DashboardDurableOperationsTest {
+    @Test
+    fun serverChatFailureUsesNativeFallbackReply() {
+        assertEquals(
+            DeterministicChatReply,
+            FeatureFailure(FeatureFailureKind.Server).chatFallbackReplyOrNull(),
+        )
+    }
+
+    @Test
+    fun retryableNonServerChatFailuresRemainVisible() {
+        listOf(
+            FeatureFailureKind.Network,
+            FeatureFailureKind.SessionInvalid,
+            FeatureFailureKind.RateLimited,
+            FeatureFailureKind.Protocol,
+        ).forEach { kind ->
+            assertEquals(null, FeatureFailure(kind).chatFallbackReplyOrNull())
+        }
+    }
+
     @Test
     fun failedOutfitQueueThenReopenRetriesSamePendingWithoutDebit() = runBlocking {
         val store = Store(pet(experience = 500))
@@ -45,13 +67,13 @@ class DashboardDurableOperationsTest {
         )
         val request = PendingOutfitRequest("request-1", "В футболку Metallica")
         assertTrue(firstCoordinator.acceptOutfit(request, store.pet) is DurableOutfitResult.PersistedButQueueFailed)
-        assertEquals(500, store.pet.experience)
+        assertEquals(300, store.pet.experience)
 
         val restarted = DashboardDurableOperations(
             "owner-a", store, adapter, UnavailableDashboardTravelAdapter(), nowEpochMillis = { 20 },
         )
         assertTrue(restarted.acceptOutfit(PendingOutfitRequest("request-2", "Другой"), store.pet) is DurableOutfitResult.Queued)
-        assertEquals(500, store.pet.experience)
+        assertEquals(300, store.pet.experience)
         assertEquals(1, store.outfits.size)
         assertEquals("backend-1", store.outfits.single().backendJobId)
         assertEquals(2, queueCalls)
@@ -154,7 +176,7 @@ class DashboardDurableOperationsTest {
 
         assertTrue(result is DurableOutfitResult.Queued)
         assertEquals(listOf("outfit-new"), dispatchedKeys)
-        assertEquals(800, store.pet.experience)
+        assertEquals(600, store.pet.experience)
         assertEquals(listOf("outfit-failed", "outfit-new"), store.outfits.map { it.requestKey })
         assertEquals(PendingBackendState.Failed, store.outfits.first().backendState)
     }

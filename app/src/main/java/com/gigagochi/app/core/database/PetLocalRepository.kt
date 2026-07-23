@@ -19,6 +19,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.security.MessageDigest
 import java.time.Instant
 import java.util.UUID
 
@@ -261,7 +262,704 @@ class PetLocalRepository(
     suspend fun getPendingChat(ownerId: String, requestKey: String): LocalPendingChat? {
         LocalPersistenceValidation.ownerId(ownerId)
         LocalPersistenceValidation.requestKey(requestKey)
-        return dao.getPendingChat(ownerId, requestKey)?.toModel()
+        return database.withTransaction {
+            val entity = dao.getPendingChat(ownerId, requestKey) ?: return@withTransaction null
+            entity.toModel(
+                originFirstSessionStage = dao.getDashboardCommandReceipt(ownerId, requestKey)
+                    .chatOriginFor(entity),
+            )
+        }
+    }
+
+    /**
+     * Atomically reserves the durable identity used by a dashboard chat before network dispatch.
+     * A matching replay adopts the original pending row; a mismatched payload can never redispatch
+     * the backend request under the same request key.
+     */
+    suspend fun reserveDashboardChat(
+        ownerId: String,
+        petId: String,
+        expectedAssetSetId: String,
+        requestKey: String,
+        message: String,
+        originFirstSessionStage: FirstSessionStage? = null,
+        queueAnchorRequestKey: String? = null,
+        replacingQueuedRequestKey: String? = null,
+    ): DashboardChatReservationResult {
+        val capturedOriginFirstSessionStage = originFirstSessionStage
+            ?.takeIf { it in DashboardChatFirstSessionStages }
+        val now = nowEpochMillis()
+        val pending = LocalPendingChat(ownerId, petId, requestKey, message, now)
+        LocalPersistenceValidation.pendingChat(pending)
+        queueAnchorRequestKey?.let(LocalPersistenceValidation::requestKey)
+        replacingQueuedRequestKey?.let(LocalPersistenceValidation::requestKey)
+        val fingerprint = dashboardCommandFingerprint(DashboardChatCommandType, message)
+        return database.withTransaction {
+            val stored = dao.getPet(ownerId, petId)
+                ?: return@withTransaction DashboardChatReservationResult.Missing
+            val currentEntity = decayAndPersist(stored, now)
+            if (currentEntity.assetSetId != expectedAssetSetId) {
+                return@withTransaction DashboardChatReservationResult.Conflict
+            }
+            val currentPet = currentEntity.toModel(dao.getMoodImages(ownerId, petId)).pet
+            val receipt = dao.getDashboardCommandReceipt(ownerId, requestKey)
+            if (receipt != null) {
+                if (
+                    receipt.petId != petId ||
+                    receipt.commandType != DashboardChatCommandType ||
+                    receipt.payloadFingerprint != fingerprint
+                ) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                val storedOrigin = receipt.originFirstSessionStage?.let { stored ->
+                    FirstSessionStage.entries.singleOrNull { it.storageValue == stored }
+                        ?: return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                if (storedOrigin != null && storedOrigin !in DashboardChatFirstSessionStages) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                val durable = dao.getPendingChat(ownerId, requestKey)?.toModel(storedOrigin)
+                    ?: return@withTransaction DashboardChatReservationResult.Finished(currentPet)
+                if (durable.petId != petId || durable.message != message) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                return@withTransaction DashboardChatReservationResult.Pending(
+                    currentPet,
+                    durable,
+                    originFirstSessionStage = storedOrigin,
+                    newlyAccepted = false,
+                )
+            }
+
+            // Adopt pending rows written by the pre-v9 native implementation without changing the
+            // request identity. An already-applied row without clear-text pending data is not safe
+            // to adopt because its original payload cannot be proven.
+            val legacy = dao.getPendingChat(ownerId, requestKey)
+            if (legacy != null && (legacy.petId != petId || legacy.message != message)) {
+                return@withTransaction DashboardChatReservationResult.Conflict
+            }
+            if (legacy == null && dao.getAppliedChatResponse(ownerId, requestKey) != null) {
+                return@withTransaction DashboardChatReservationResult.Conflict
+            }
+            if (dao.getFirstSessionActionReceipt(ownerId, petId, requestKey) != null) {
+                return@withTransaction DashboardChatReservationResult.Conflict
+            }
+            if (queueAnchorRequestKey == null && replacingQueuedRequestKey != null) {
+                return@withTransaction DashboardChatReservationResult.Conflict
+            }
+            var pendingToInsert = pending
+            if (queueAnchorRequestKey != null) {
+                if (
+                    queueAnchorRequestKey == requestKey ||
+                    replacingQueuedRequestKey == requestKey ||
+                    replacingQueuedRequestKey == queueAnchorRequestKey
+                ) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                val anchor = dao.getPendingChat(ownerId, queueAnchorRequestKey)?.toModel()
+                    ?: return@withTransaction DashboardChatReservationResult.Conflict
+                if (anchor.petId != petId || anchor.responseText != null) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                if (anchor.createdAtEpochMillis == Long.MAX_VALUE) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                // Queue order must not depend on the lexical order of random UUIDs when two
+                // commands are accepted in the same clock tick.
+                pendingToInsert = pending.copy(
+                    createdAtEpochMillis = maxOf(
+                        pending.createdAtEpochMillis,
+                        anchor.createdAtEpochMillis + 1L,
+                    ),
+                )
+                val replacing = replacingQueuedRequestKey?.let { replacingKey ->
+                    dao.getPendingChat(ownerId, replacingKey)?.toModel()
+                        ?: return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                if (
+                    replacing != null &&
+                    (replacing.petId != petId || replacing.responseText != null)
+                ) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                val existingQueue = dao.getPendingChats(ownerId).filter { it.petId == petId }
+                val expectedQueueKeys = listOfNotNull(
+                    queueAnchorRequestKey,
+                    replacingQueuedRequestKey,
+                )
+                if (existingQueue.map(PendingChatEntity::requestKey) != expectedQueueKeys) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                replacingQueuedRequestKey?.let { replacingKey ->
+                    check(dao.deletePendingChat(ownerId, replacingKey) == 1)
+                }
+            } else if (legacy == null) {
+                val existingQueue = dao.getPendingChats(ownerId).filter { it.petId == petId }
+                if (
+                    existingQueue.size > 1 ||
+                    existingQueue.any { it.responseText == null }
+                ) {
+                    return@withTransaction DashboardChatReservationResult.Conflict
+                }
+                existingQueue.singleOrNull()?.let { completed ->
+                    if (completed.createdAtEpochMillis == Long.MAX_VALUE) {
+                        return@withTransaction DashboardChatReservationResult.Conflict
+                    }
+                    pendingToInsert = pending.copy(
+                        createdAtEpochMillis = maxOf(
+                            pending.createdAtEpochMillis,
+                            completed.createdAtEpochMillis + 1L,
+                        ),
+                    )
+                }
+            }
+            check(
+                dao.insertDashboardCommandReceipt(
+                    DashboardCommandReceiptEntity(
+                        ownerId = ownerId,
+                        petId = petId,
+                        requestKey = requestKey,
+                        commandType = DashboardChatCommandType,
+                        payloadFingerprint = fingerprint,
+                        originFirstSessionStage = capturedOriginFirstSessionStage?.storageValue,
+                        food = null,
+                        audioIndex = null,
+                        reply = null,
+                        explicitPortionsJson = null,
+                        autoAdvanceDelayMillis = null,
+                        createdAtEpochMillis = now,
+                    ),
+                ) != -1L,
+            )
+            if (legacy == null) check(dao.insertPendingChat(pendingToInsert.toEntity()) != -1L)
+            DashboardChatReservationResult.Pending(
+                currentPet,
+                (legacy ?: pendingToInsert.toEntity()).toModel(capturedOriginFirstSessionStage),
+                originFirstSessionStage = capturedOriginFirstSessionStage,
+                newlyAccepted = legacy == null,
+            )
+        }
+    }
+
+    /**
+     * Advances the onboarding chat using the origin durably captured by [reserveDashboardChat].
+     * The dashboard receipt is checked again in the same transaction so an action key cannot be
+     * replayed as a different message or as another onboarding action after a process restart.
+     */
+    suspend fun advanceDashboardChatFirstSession(
+        ownerId: String,
+        petId: String,
+        originFirstSessionStage: FirstSessionStage,
+        requestKey: String,
+        message: String,
+        nowEpochMillis: Long = System.currentTimeMillis(),
+    ): FirstSessionMutationResult = database.withTransaction {
+        LocalPersistenceValidation.firstSessionAction(ownerId, petId, requestKey, null)
+        require(originFirstSessionStage in DashboardChatFirstSessionStages) {
+            "unsupported chat first-session origin"
+        }
+        val dashboardReceipt = dao.getDashboardCommandReceipt(ownerId, requestKey)
+            ?: return@withTransaction FirstSessionMutationResult.WrongStage
+        if (
+            dashboardReceipt.petId != petId ||
+            dashboardReceipt.commandType != DashboardChatCommandType ||
+            dashboardReceipt.payloadFingerprint != dashboardCommandFingerprint(
+                DashboardChatCommandType,
+                message,
+            ) ||
+            dashboardReceipt.originFirstSessionStage != originFirstSessionStage.storageValue
+        ) {
+            return@withTransaction FirstSessionMutationResult.WrongStage
+        }
+        val actionKind = "chat:${originFirstSessionStage.storageValue}"
+        firstSessionReplay(
+            ownerId,
+            petId,
+            requestKey,
+            compatibleActionKinds = setOf(actionKind, LegacyFirstSessionStageActionKind),
+        )?.let { return@withTransaction it }
+        val current = dao.getFirstSession(ownerId, petId)
+            ?: return@withTransaction FirstSessionMutationResult.Missing
+        val pet = dao.getPet(ownerId, petId)
+            ?: return@withTransaction FirstSessionMutationResult.Missing
+        val next = when (originFirstSessionStage) {
+            FirstSessionStage.AwaitingChat -> FirstSessionStage.AwaitingChatFollowup
+            FirstSessionStage.AwaitingChatFollowup -> FirstSessionStage.AwaitingFirstFood
+            else -> error("validated dashboard chat origin")
+        }
+        if (current.stage != originFirstSessionStage.storageValue) {
+            return@withTransaction FirstSessionMutationResult.WrongStage
+        }
+        check(
+            dao.insertFirstSessionActionReceipt(
+                FirstSessionActionReceiptEntity(
+                    ownerId,
+                    petId,
+                    requestKey,
+                    actionKind,
+                    nowEpochMillis,
+                ),
+            ) != -1L,
+        )
+        check(
+            dao.advanceFirstSession(
+                ownerId,
+                petId,
+                originFirstSessionStage.storageValue,
+                next.storageValue,
+                null,
+                requestKey,
+                nowEpochMillis,
+            ) == 1,
+        )
+        FirstSessionMutationResult.Applied(
+            requireNotNull(dao.getFirstSession(ownerId, petId)).toModel(),
+            pet.toModel(dao.getMoodImages(ownerId, petId)).pet,
+        )
+    }
+
+    /** Atomically fences an outfit command, persists its pending work, and charges XP once. */
+    suspend fun reserveDashboardOutfit(
+        ownerId: String,
+        petId: String,
+        expectedAssetSetId: String,
+        requestKey: String,
+        prompt: String,
+    ): DashboardOutfitReservationResult {
+        val now = nowEpochMillis()
+        val pending = LocalPendingOutfit(
+            ownerId = ownerId,
+            petId = petId,
+            requestKey = requestKey,
+            localJobId = "outfit-$requestKey",
+            backendJobId = null,
+            prompt = prompt,
+            baseAssetSetId = expectedAssetSetId,
+            acceptedAtEpochMillis = now,
+        )
+        LocalPersistenceValidation.pendingOutfit(pending)
+        val fingerprint = dashboardCommandFingerprint(DashboardOutfitCommandType, prompt)
+        return database.withTransaction {
+            val stored = dao.getPet(ownerId, petId)
+                ?: return@withTransaction DashboardOutfitReservationResult.Missing
+            val currentEntity = decayAndPersist(stored, now)
+            if (currentEntity.assetSetId != expectedAssetSetId) {
+                return@withTransaction DashboardOutfitReservationResult.Conflict
+            }
+            val currentPet = currentEntity.toModel(dao.getMoodImages(ownerId, petId)).pet
+            val receipt = dao.getDashboardCommandReceipt(ownerId, requestKey)
+            if (receipt != null) {
+                if (
+                    receipt.petId != petId ||
+                    receipt.commandType != DashboardOutfitCommandType ||
+                    receipt.payloadFingerprint != fingerprint
+                ) {
+                    return@withTransaction DashboardOutfitReservationResult.Conflict
+                }
+                val durable = dao.getPendingOutfit(ownerId, requestKey)?.toModel()
+                if (durable != null) {
+                    if (durable.petId != petId || durable.prompt != prompt) {
+                        return@withTransaction DashboardOutfitReservationResult.Conflict
+                    }
+                    return@withTransaction DashboardOutfitReservationResult.Accepted(
+                        currentPet,
+                        durable,
+                        newlyAccepted = false,
+                    )
+                }
+                val applied = dao.getAppliedOutfitReceipt(ownerId, requestKey)
+                return@withTransaction if (applied?.petId == petId) {
+                    DashboardOutfitReservationResult.Finished(currentPet)
+                } else {
+                    DashboardOutfitReservationResult.Conflict
+                }
+            }
+
+            val legacy = dao.getPendingOutfit(ownerId, requestKey)?.toModel()
+            if (legacy != null) {
+                if (legacy.petId != petId || legacy.prompt != prompt) {
+                    return@withTransaction DashboardOutfitReservationResult.Conflict
+                }
+                check(
+                    dao.insertDashboardCommandReceipt(
+                        dashboardCommandReceipt(
+                            ownerId,
+                            petId,
+                            requestKey,
+                            DashboardOutfitCommandType,
+                            fingerprint,
+                            now,
+                        ),
+                    ) != -1L,
+                )
+                return@withTransaction DashboardOutfitReservationResult.Accepted(
+                    currentPet,
+                    legacy,
+                    newlyAccepted = false,
+                )
+            }
+            if (dao.getAppliedOutfitReceipt(ownerId, requestKey) != null) {
+                return@withTransaction DashboardOutfitReservationResult.Conflict
+            }
+            dao.getPendingOutfits(ownerId)
+                .filter {
+                    it.petId == petId && it.backendState != PendingBackendState.Failed
+                }
+                .maxByOrNull(PendingOutfitEntity::acceptedAtEpochMillis)
+                ?.let { busy ->
+                    return@withTransaction DashboardOutfitReservationResult.Busy(
+                        currentPet,
+                        busy.toModel(),
+                    )
+                }
+            val firstSession = dao.getFirstSession(ownerId, petId)
+            if (
+                firstSession != null &&
+                firstSession.stage !in DashboardOutfitAllowedFirstSessionStages
+            ) {
+                return@withTransaction DashboardOutfitReservationResult.WrongStage
+            }
+            if (currentEntity.experience < OutfitAcceptanceCost) {
+                return@withTransaction DashboardOutfitReservationResult.InsufficientExperience(
+                    currentPet,
+                )
+            }
+            val acceptedAt = maxOf(now, currentEntity.updatedAtEpochMillis + 1L)
+            val accepted = pending.copy(acceptedAtEpochMillis = acceptedAt)
+            check(
+                dao.insertDashboardCommandReceipt(
+                    dashboardCommandReceipt(
+                        ownerId,
+                        petId,
+                        requestKey,
+                        DashboardOutfitCommandType,
+                        fingerprint,
+                        acceptedAt,
+                    ),
+                ) != -1L,
+            )
+            check(dao.insertPendingOutfit(accepted.toEntity()) != -1L)
+            check(
+                dao.updatePetProgress(
+                    ownerId,
+                    petId,
+                    currentEntity.experience - OutfitAcceptanceCost,
+                    currentEntity.hunger,
+                    currentEntity.happiness,
+                    currentEntity.energy,
+                    acceptedAt,
+                ) == 1,
+            )
+            DashboardOutfitReservationResult.Accepted(
+                pet = requireNotNull(dao.getPet(ownerId, petId))
+                    .toModel(dao.getMoodImages(ownerId, petId)).pet,
+                request = accepted,
+                newlyAccepted = true,
+            )
+        }
+    }
+
+    /** Atomically fences and persists a travel command before any generation side effect. */
+    suspend fun reserveDashboardTravel(
+        ownerId: String,
+        petId: String,
+        expectedAssetSetId: String,
+        requestKey: String,
+        prompt: String,
+    ): DashboardTravelReservationResult {
+        val now = nowEpochMillis()
+        val pending = LocalPendingTravelVideo(
+            ownerId = ownerId,
+            petId = petId,
+            requestKey = requestKey,
+            localJobId = "travel-$requestKey",
+            backendJobId = null,
+            prompt = prompt,
+            acceptedAtEpochMillis = now,
+        )
+        LocalPersistenceValidation.pendingTravel(pending)
+        val fingerprint = dashboardCommandFingerprint(DashboardTravelCommandType, prompt)
+        return database.withTransaction {
+            val stored = dao.getPet(ownerId, petId)
+                ?: return@withTransaction DashboardTravelReservationResult.Missing
+            val currentEntity = decayAndPersist(stored, now)
+            if (currentEntity.assetSetId != expectedAssetSetId) {
+                return@withTransaction DashboardTravelReservationResult.Conflict
+            }
+            val currentPet = currentEntity.toModel(dao.getMoodImages(ownerId, petId)).pet
+            val receipt = dao.getDashboardCommandReceipt(ownerId, requestKey)
+            if (receipt != null) {
+                if (
+                    receipt.petId != petId ||
+                    receipt.commandType != DashboardTravelCommandType ||
+                    receipt.payloadFingerprint != fingerprint
+                ) {
+                    return@withTransaction DashboardTravelReservationResult.Conflict
+                }
+                val durable = dao.getPendingTravel(ownerId, requestKey)?.toModel()
+                if (durable != null) {
+                    if (durable.petId != petId || durable.prompt != prompt) {
+                        return@withTransaction DashboardTravelReservationResult.Conflict
+                    }
+                    return@withTransaction DashboardTravelReservationResult.Accepted(
+                        currentPet,
+                        durable,
+                        newlyAccepted = false,
+                    )
+                }
+                val completed = dao.getTravelVideoAsset(ownerId, requestKey)?.toModel()
+                return@withTransaction if (
+                    completed?.petId == petId && completed.prompt == prompt
+                ) {
+                    DashboardTravelReservationResult.Finished(currentPet, completed)
+                } else {
+                    DashboardTravelReservationResult.Conflict
+                }
+            }
+
+            val legacy = dao.getPendingTravel(ownerId, requestKey)?.toModel()
+            if (legacy != null) {
+                if (legacy.petId != petId || legacy.prompt != prompt) {
+                    return@withTransaction DashboardTravelReservationResult.Conflict
+                }
+                check(
+                    dao.insertDashboardCommandReceipt(
+                        dashboardCommandReceipt(
+                            ownerId,
+                            petId,
+                            requestKey,
+                            DashboardTravelCommandType,
+                            fingerprint,
+                            now,
+                        ),
+                    ) != -1L,
+                )
+                return@withTransaction DashboardTravelReservationResult.Accepted(
+                    currentPet,
+                    legacy,
+                    newlyAccepted = false,
+                )
+            }
+            val completed = dao.getTravelVideoAsset(ownerId, requestKey)?.toModel()
+            if (completed != null) {
+                if (completed.petId != petId || completed.prompt != prompt) {
+                    return@withTransaction DashboardTravelReservationResult.Conflict
+                }
+                check(
+                    dao.insertDashboardCommandReceipt(
+                        dashboardCommandReceipt(
+                            ownerId,
+                            petId,
+                            requestKey,
+                            DashboardTravelCommandType,
+                            fingerprint,
+                            now,
+                        ),
+                    ) != -1L,
+                )
+                return@withTransaction DashboardTravelReservationResult.Finished(
+                    currentPet,
+                    completed,
+                )
+            }
+            dao.getPendingTravels(ownerId)
+                .filter {
+                    it.petId == petId && it.backendState != PendingBackendState.Failed
+                }
+                .maxByOrNull(PendingTravelVideoEntity::acceptedAtEpochMillis)
+                ?.let { busy ->
+                    return@withTransaction DashboardTravelReservationResult.Busy(
+                        currentPet,
+                        busy.toModel(),
+                    )
+                }
+            val firstSession = dao.getFirstSession(ownerId, petId)
+            if (firstSession != null && firstSession.stage != FirstSessionStage.Completed.storageValue) {
+                return@withTransaction DashboardTravelReservationResult.WrongStage
+            }
+            val acceptedAt = maxOf(now, currentEntity.updatedAtEpochMillis + 1L)
+            val accepted = pending.copy(acceptedAtEpochMillis = acceptedAt)
+            check(
+                dao.insertDashboardCommandReceipt(
+                    dashboardCommandReceipt(
+                        ownerId,
+                        petId,
+                        requestKey,
+                        DashboardTravelCommandType,
+                        fingerprint,
+                        acceptedAt,
+                    ),
+                ) != -1L,
+            )
+            check(dao.insertPendingTravel(accepted.toEntity()) != -1L)
+            DashboardTravelReservationResult.Accepted(
+                pet = currentPet,
+                request = accepted,
+                newlyAccepted = true,
+            )
+        }
+    }
+
+    /**
+     * Applies a feed command and its first-session transition in one Room transaction. The receipt
+     * is the durable fingerprint and presentation source, so replay cannot duplicate stat gains or
+     * native audio/haptic feedback.
+     */
+    suspend fun applyDashboardFeed(
+        ownerId: String,
+        petId: String,
+        expectedAssetSetId: String,
+        requestKey: String,
+        food: String,
+        audioIndex: Int,
+        defaultPresentation: LocalDashboardFeedPresentation,
+        firstFoodPresentation: LocalDashboardFeedPresentation,
+        remedyPresentation: LocalDashboardFeedPresentation,
+    ): DashboardFeedApplicationResult {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        LocalPersistenceValidation.requestKey(requestKey)
+        require(food in DashboardFeedFoods) { "unsupported dashboard food" }
+        require(audioIndex in 0..2) { "unsupported dashboard feed audio" }
+        listOf(defaultPresentation, firstFoodPresentation, remedyPresentation).forEach {
+            require(it.reply.isNotBlank() && it.reply.length <= 8_000)
+            require(it.explicitPortions?.all { portion -> portion.isNotBlank() && portion.length <= 8_000 } != false)
+            require(it.autoAdvanceDelayMillis in 0..60_000)
+        }
+        val now = nowEpochMillis()
+        val fingerprint = dashboardCommandFingerprint(DashboardFeedCommandType, food)
+        return database.withTransaction {
+            val stored = dao.getPet(ownerId, petId)
+                ?: return@withTransaction DashboardFeedApplicationResult.Missing
+            val currentEntity = decayAndPersist(stored, now)
+            if (currentEntity.assetSetId != expectedAssetSetId) {
+                return@withTransaction DashboardFeedApplicationResult.Conflict
+            }
+            val existing = dao.getDashboardCommandReceipt(ownerId, requestKey)
+            if (existing != null) {
+                if (
+                    existing.petId != petId ||
+                    existing.commandType != DashboardFeedCommandType ||
+                    existing.payloadFingerprint != fingerprint ||
+                    existing.food != food
+                ) {
+                    return@withTransaction DashboardFeedApplicationResult.Conflict
+                }
+                val receipt = existing.toFeedReceipt()
+                    ?: return@withTransaction DashboardFeedApplicationResult.Conflict
+                return@withTransaction DashboardFeedApplicationResult.Applied(
+                    pet = currentEntity.toModel(dao.getMoodImages(ownerId, petId)).pet,
+                    firstSession = dao.getFirstSession(ownerId, petId)?.toModel(),
+                    receipt = receipt,
+                    newlyApplied = false,
+                )
+            }
+
+            // A command key already used by the legacy onboarding reducer has an unknown complete
+            // payload/result and therefore cannot be safely repurposed as a v9 feed operation.
+            if (dao.getFirstSessionActionReceipt(ownerId, petId, requestKey) != null) {
+                return@withTransaction DashboardFeedApplicationResult.Conflict
+            }
+            val session = dao.getFirstSession(ownerId, petId)
+            val stage = session?.let { FirstSessionStage.fromStorage(it.stage) }
+            if (stage != null && stage !in DashboardFeedAllowedFirstSessionStages) {
+                return@withTransaction DashboardFeedApplicationResult.WrongStage
+            }
+            val nextStage = when {
+                stage == FirstSessionStage.AwaitingFirstFood && food == DashboardBerryFood ->
+                    FirstSessionStage.AwaitingRemedy
+                stage == FirstSessionStage.AwaitingFirstFood -> FirstSessionStage.AwaitingFirstFood
+                stage == FirstSessionStage.AwaitingRemedy && food == DashboardLeafFood ->
+                    FirstSessionStage.AwaitingTravel
+                stage == FirstSessionStage.AwaitingRemedy -> FirstSessionStage.AwaitingRemedy
+                else -> stage
+            }
+            val presentation = when {
+                stage == FirstSessionStage.AwaitingFirstFood && food == DashboardBerryFood ->
+                    firstFoodPresentation
+                stage == FirstSessionStage.AwaitingRemedy && food == DashboardLeafFood ->
+                    remedyPresentation
+                else -> defaultPresentation
+            }
+            val nextHunger = if (food == DashboardBerryFood) {
+                (currentEntity.hunger + 25).coerceAtMost(100)
+            } else currentEntity.hunger
+            val nextEnergy = if (food == DashboardLeafFood) {
+                (currentEntity.energy + 25).coerceAtMost(100)
+            } else currentEntity.energy
+            val updatedAt = maxOf(now, currentEntity.updatedAtEpochMillis + 1L)
+            val portionsJson = presentation.explicitPortions?.let { portions ->
+                JsonArray(portions.map(::JsonPrimitive)).toString()
+            }
+            check(
+                dao.insertDashboardCommandReceipt(
+                    DashboardCommandReceiptEntity(
+                        ownerId = ownerId,
+                        petId = petId,
+                        requestKey = requestKey,
+                        commandType = DashboardFeedCommandType,
+                        payloadFingerprint = fingerprint,
+                        originFirstSessionStage = null,
+                        food = food,
+                        audioIndex = audioIndex,
+                        reply = presentation.reply,
+                        explicitPortionsJson = portionsJson,
+                        autoAdvanceDelayMillis = presentation.autoAdvanceDelayMillis,
+                        createdAtEpochMillis = updatedAt,
+                    ),
+                ) != -1L,
+            )
+            check(
+                dao.updatePetProgress(
+                    ownerId,
+                    petId,
+                    currentEntity.experience,
+                    nextHunger,
+                    currentEntity.happiness,
+                    nextEnergy,
+                    updatedAt,
+                ) == 1,
+            )
+            if (stage != null && stage != FirstSessionStage.Completed) {
+                check(nextStage != null)
+                check(
+                    dao.insertFirstSessionActionReceipt(
+                        FirstSessionActionReceiptEntity(
+                            ownerId,
+                            petId,
+                            requestKey,
+                            "food:$food",
+                            updatedAt,
+                        ),
+                    ) != -1L,
+                )
+                check(
+                    dao.advanceFirstSession(
+                        ownerId,
+                        petId,
+                        stage.storageValue,
+                        nextStage.storageValue,
+                        null,
+                        requestKey,
+                        updatedAt,
+                    ) == 1,
+                )
+            }
+            DashboardFeedApplicationResult.Applied(
+                pet = requireNotNull(dao.getPet(ownerId, petId))
+                    .toModel(dao.getMoodImages(ownerId, petId)).pet,
+                firstSession = dao.getFirstSession(ownerId, petId)?.toModel(),
+                receipt = LocalDashboardFeedReceipt(
+                    requestKey = requestKey,
+                    food = food,
+                    audioIndex = audioIndex,
+                    reply = presentation.reply,
+                    explicitPortions = presentation.explicitPortions,
+                    autoAdvanceDelayMillis = presentation.autoAdvanceDelayMillis,
+                ),
+                newlyApplied = true,
+            )
+        }
     }
 
     suspend fun recentChatMessages(
@@ -836,6 +1534,7 @@ class PetLocalRepository(
         LocalPersistenceValidation.ownerId(ownerId)
         LocalPersistenceValidation.petId(petId)
         if (dao.getPet(ownerId, petId) == null) return@withTransaction null
+        dao.deleteDashboardCommandReceipts(ownerId, petId)
         dao.deleteFirstSessionActionReceipts(ownerId, petId)
         val entity = FirstSessionEntity(
             ownerId = ownerId,
@@ -867,7 +1566,12 @@ class PetLocalRepository(
         nowEpochMillis: Long,
     ): FirstSessionMutationResult = database.withTransaction {
         LocalPersistenceValidation.firstSessionAction(ownerId, petId, actionKey, selectedDestination)
-        firstSessionReplay(ownerId, petId, actionKey)?.let { return@withTransaction it }
+        firstSessionReplay(
+            ownerId,
+            petId,
+            actionKey,
+            compatibleActionKinds = setOf(LegacyFirstSessionStageActionKind),
+        )?.let { return@withTransaction it }
         val current = dao.getFirstSession(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
         val pet = dao.getPet(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
         if (current.stage != expected.storageValue || !isAllowedFirstSessionTransition(expected, next)) {
@@ -894,7 +1598,12 @@ class PetLocalRepository(
         nowEpochMillis: Long,
     ): FirstSessionMutationResult = database.withTransaction {
         LocalPersistenceValidation.firstSessionAction(ownerId, petId, actionKey, null)
-        firstSessionReplay(ownerId, petId, actionKey)?.let { return@withTransaction it }
+        firstSessionReplay(
+            ownerId,
+            petId,
+            actionKey,
+            compatibleActionKinds = setOf("food:$food"),
+        )?.let { return@withTransaction it }
         val session = dao.getFirstSession(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
         val pet = dao.getPet(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
         val stage = FirstSessionStage.fromStorage(session.stage)
@@ -935,7 +1644,7 @@ class PetLocalRepository(
                 session.toModel(), pet.toModel(dao.getMoodImages(ownerId, petId)).pet,
             )
         }
-        if (session.stage != FirstSessionStage.AwaitingTravel.storageValue) {
+        if (session.stage !in FirstSessionBatEntryStageValues) {
             return@withTransaction FirstSessionMutationResult.WrongStage
         }
         check(dao.insertStoryReceipt(
@@ -955,21 +1664,26 @@ class PetLocalRepository(
         nowEpochMillis: Long,
     ): FirstSessionMutationResult = database.withTransaction {
         LocalPersistenceValidation.firstSessionAction(ownerId, petId, actionKey, null)
-        firstSessionReplay(ownerId, petId, actionKey)?.let { return@withTransaction it }
+        firstSessionReplay(
+            ownerId,
+            petId,
+            actionKey,
+            compatibleActionKinds = setOf("bat-finish"),
+        )?.let { return@withTransaction it }
         val travelId = "onboarding-bat-help-v1-$petId".take(160)
         if (dao.getStoryReceiptByPart(ownerId, travelId, "choice-result") == null) {
             return@withTransaction FirstSessionMutationResult.WrongStage
         }
         val session = dao.getFirstSession(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
         val pet = dao.getPet(ownerId, petId) ?: return@withTransaction FirstSessionMutationResult.Missing
-        if (session.stage != FirstSessionStage.AwaitingTravel.storageValue) {
+        if (session.stage !in FirstSessionBatEntryStageValues) {
             return@withTransaction FirstSessionMutationResult.WrongStage
         }
         check(dao.insertFirstSessionActionReceipt(
             FirstSessionActionReceiptEntity(ownerId, petId, actionKey, "bat-finish", nowEpochMillis),
         ) != -1L)
         check(dao.advanceFirstSession(
-            ownerId, petId, FirstSessionStage.AwaitingTravel.storageValue,
+            ownerId, petId, session.stage,
             FirstSessionStage.AwaitingCompletionMessage.storageValue, null, actionKey, nowEpochMillis,
         ) == 1)
         FirstSessionMutationResult.Applied(
@@ -978,8 +1692,16 @@ class PetLocalRepository(
         )
     }
 
-    private suspend fun firstSessionReplay(ownerId: String, petId: String, actionKey: String): FirstSessionMutationResult? {
-        if (dao.getFirstSessionActionReceipt(ownerId, petId, actionKey) == null) return null
+    private suspend fun firstSessionReplay(
+        ownerId: String,
+        petId: String,
+        actionKey: String,
+        compatibleActionKinds: Set<String>,
+    ): FirstSessionMutationResult? {
+        val receipt = dao.getFirstSessionActionReceipt(ownerId, petId, actionKey) ?: return null
+        if (receipt.actionKind !in compatibleActionKinds) {
+            return FirstSessionMutationResult.WrongStage
+        }
         val session = dao.getFirstSession(ownerId, petId) ?: return FirstSessionMutationResult.Missing
         val pet = dao.getPet(ownerId, petId) ?: return FirstSessionMutationResult.Missing
         return FirstSessionMutationResult.AlreadyApplied(
@@ -1024,6 +1746,40 @@ class PetLocalRepository(
         }
     }
 
+    /**
+     * Applies a small product mutation to the latest decayed pet inside one Room transaction.
+     * The caller supplies an asset fence and may reject a stale product precondition by returning
+     * null. This avoids read-modify-write overwrites between WebView commands and background work.
+     */
+    suspend fun mutatePetSnapshot(
+        ownerId: String,
+        petId: String,
+        expectedAssetSetId: String,
+        mutation: (PetDashboardState) -> PetDashboardState?,
+    ): PetSnapshotMutationResult {
+        LocalPersistenceValidation.ownerId(ownerId)
+        LocalPersistenceValidation.petId(petId)
+        return database.withTransaction {
+            val stored = dao.getPet(ownerId, petId)
+                ?: return@withTransaction PetSnapshotMutationResult.Missing
+            val currentEntity = decayAndPersist(stored, nowEpochMillis())
+            if (currentEntity.assetSetId != expectedAssetSetId) {
+                return@withTransaction PetSnapshotMutationResult.Conflict
+            }
+            val current = currentEntity.toModel(dao.getMoodImages(ownerId, petId)).pet
+            val next = mutation(current)
+                ?: return@withTransaction PetSnapshotMutationResult.Conflict
+            if (next.petId != current.petId || next.assetSetId != current.assetSetId) {
+                return@withTransaction PetSnapshotMutationResult.Conflict
+            }
+            val updatedAt = maxOf(nowEpochMillis(), currentEntity.updatedAtEpochMillis + 1L)
+            val snapshot = OwnedPetSnapshot(ownerId, next, updatedAt)
+            LocalPersistenceValidation.petSnapshot(snapshot)
+            dao.upsertPet(snapshot.toEntity(currentEntity))
+            PetSnapshotMutationResult.Applied(next)
+        }
+    }
+
     suspend fun decayPetSnapshot(ownerId: String, petId: String): OwnedPetSnapshot? {
         LocalPersistenceValidation.ownerId(ownerId)
         LocalPersistenceValidation.petId(petId)
@@ -1050,7 +1806,42 @@ class PetLocalRepository(
 
     override suspend fun savePendingCreate(pending: LocalPendingCreateGeneration) {
         LocalPersistenceValidation.pendingCreate(pending)
-        dao.upsertPendingCreate(pending.toEntity())
+        database.withTransaction {
+            val existing = dao.getPendingCreate(pending.ownerId, pending.requestKey)
+            if (existing == null) {
+                dao.upsertPendingCreate(pending.toEntity())
+                return@withTransaction
+            }
+
+            // Answers are persisted while create generation runs on another coroutine. A caller
+            // can therefore hold a pre-attach snapshot and save it after the backend job/state has
+            // advanced. Merge both ownership domains atomically: the newest answer snapshot owns
+            // questionnaire fields, while only the dedicated attach/state methods own backend
+            // progress once the row exists.
+            val answerSource = if (
+                pending.currentStep > existing.currentStep ||
+                (
+                    pending.currentStep == existing.currentStep &&
+                        pending.updatedAtEpochMillis >= existing.updatedAtEpochMillis
+                )
+            ) {
+                pending.toEntity()
+            } else {
+                existing
+            }
+            dao.upsertPendingCreate(
+                answerSource.copy(
+                    backendJobId = existing.backendJobId,
+                    stage = laterCreateStage(existing.stage, pending.stage),
+                    updatedAtEpochMillis = maxOf(
+                        existing.updatedAtEpochMillis,
+                        pending.updatedAtEpochMillis,
+                    ),
+                    backendState = existing.backendState,
+                    backendErrorCode = existing.backendErrorCode,
+                ),
+            )
+        }
     }
 
     override suspend fun replaceFailedPendingCreate(
@@ -1836,6 +2627,7 @@ class PetLocalRepository(
             dao.deleteOwnerFirstSessions(ownerId)
             dao.deleteOwnerChatMessages(ownerId)
             dao.deleteOwnerPendingChats(ownerId)
+            dao.deleteOwnerDashboardCommandReceipts(ownerId)
             dao.deleteOwnerCompliments(ownerId)
             dao.deleteOwnerAppliedChatResponses(ownerId)
             dao.deleteOwnerUserMemories(ownerId)
@@ -1874,7 +2666,13 @@ class PetLocalRepository(
                     dao.getTravelVideoAssets(ownerId, entity.petId).map(TravelVideoAssetEntity::toModel)
                 },
                 firstSessions = dao.getFirstSessions(ownerId).map(FirstSessionEntity::toModel),
-                pendingChats = dao.getPendingChats(ownerId).map(PendingChatEntity::toModel),
+                pendingChats = dao.getPendingChats(ownerId).map { entity ->
+                    entity.toModel(
+                        originFirstSessionStage =
+                            dao.getDashboardCommandReceipt(ownerId, entity.requestKey)
+                                .chatOriginFor(entity),
+                    )
+                },
             )
         }
     }
@@ -2368,7 +3166,9 @@ private fun LocalPendingChat.toEntity() = PendingChatEntity(
     completedAtEpochMillis = completedAtEpochMillis,
 )
 
-private fun PendingChatEntity.toModel() = LocalPendingChat(
+private fun PendingChatEntity.toModel(
+    originFirstSessionStage: FirstSessionStage? = null,
+) = LocalPendingChat(
     ownerId = ownerId,
     petId = petId,
     requestKey = requestKey,
@@ -2376,7 +3176,28 @@ private fun PendingChatEntity.toModel() = LocalPendingChat(
     createdAtEpochMillis = createdAtEpochMillis,
     responseText = responseText,
     completedAtEpochMillis = completedAtEpochMillis,
+    originFirstSessionStage = originFirstSessionStage,
 )
+
+private fun DashboardCommandReceiptEntity?.chatOriginFor(
+    pending: PendingChatEntity,
+): FirstSessionStage? {
+    val receipt = this ?: return null
+    if (
+        receipt.petId != pending.petId ||
+        receipt.commandType != DashboardChatCommandType ||
+        receipt.payloadFingerprint != dashboardCommandFingerprint(
+            DashboardChatCommandType,
+            pending.message,
+        )
+    ) {
+        return null
+    }
+    return receipt.originFirstSessionStage?.let { stored ->
+        FirstSessionStage.entries.singleOrNull { it.storageValue == stored }
+            ?.takeIf { it in DashboardChatFirstSessionStages }
+    }
+}
 
 private fun ChatMessageEntity.toModel() = LocalChatMessage(
     messageId,
@@ -2527,6 +3348,11 @@ private fun PendingCreateGenerationEntity.toModel() = LocalPendingCreateGenerati
     backendErrorCode = backendErrorCode,
 )
 
+private fun laterCreateStage(
+    first: PendingCreateStage,
+    second: PendingCreateStage,
+): PendingCreateStage = if (first.ordinal >= second.ordinal) first else second
+
 private fun LocalPendingOutfit.toEntity() = PendingOutfitEntity(
     ownerId = ownerId,
     petId = petId,
@@ -2616,6 +3442,81 @@ private fun FirstSessionEntity.toModel() = LocalFirstSession(
     updatedAtEpochMillis = updatedAtEpochMillis,
 )
 
+private fun DashboardCommandReceiptEntity.toFeedReceipt(): LocalDashboardFeedReceipt? {
+    val storedFood = food ?: return null
+    val storedAudioIndex = audioIndex?.takeIf { it in 0..2 } ?: return null
+    val storedReply = reply?.takeIf(String::isNotBlank) ?: return null
+    val storedDelay = autoAdvanceDelayMillis?.takeIf { it in 0..60_000 } ?: return null
+    val portions = explicitPortionsJson?.let { encoded ->
+        runCatching {
+            Json.parseToJsonElement(encoded).jsonArray.map { it.jsonPrimitive.content }
+        }.getOrNull() ?: return null
+    }
+    return LocalDashboardFeedReceipt(
+        requestKey = requestKey,
+        food = storedFood,
+        audioIndex = storedAudioIndex,
+        reply = storedReply,
+        explicitPortions = portions,
+        autoAdvanceDelayMillis = storedDelay,
+    )
+}
+
+private fun dashboardCommandFingerprint(commandType: String, payload: String): String {
+    val encoded = "$commandType\u0000$payload".encodeToByteArray()
+    return MessageDigest.getInstance("SHA-256").digest(encoded).joinToString("") {
+        "%02x".format(it.toInt() and 0xff)
+    }
+}
+
+private fun dashboardCommandReceipt(
+    ownerId: String,
+    petId: String,
+    requestKey: String,
+    commandType: String,
+    payloadFingerprint: String,
+    createdAtEpochMillis: Long,
+) = DashboardCommandReceiptEntity(
+    ownerId = ownerId,
+    petId = petId,
+    requestKey = requestKey,
+    commandType = commandType,
+    payloadFingerprint = payloadFingerprint,
+    originFirstSessionStage = null,
+    food = null,
+    audioIndex = null,
+    reply = null,
+    explicitPortionsJson = null,
+    autoAdvanceDelayMillis = null,
+    createdAtEpochMillis = createdAtEpochMillis,
+)
+
+private const val DashboardChatCommandType = "chat-send"
+private const val DashboardFeedCommandType = "feed-consume"
+private const val DashboardOutfitCommandType = "outfit-submit"
+private const val DashboardTravelCommandType = "travel-submit"
+private const val LegacyFirstSessionStageActionKind = "stage"
+private const val DashboardBerryFood = "berry-bowl"
+private const val DashboardLeafFood = "leaf-crunch"
+private val DashboardChatFirstSessionStages = setOf(
+    FirstSessionStage.AwaitingChat,
+    FirstSessionStage.AwaitingChatFollowup,
+)
+private val DashboardFeedFoods = setOf(DashboardBerryFood, DashboardLeafFood)
+private val DashboardFeedAllowedFirstSessionStages = setOf(
+    FirstSessionStage.AwaitingFirstFood,
+    FirstSessionStage.AwaitingRemedy,
+    FirstSessionStage.Completed,
+)
+private val DashboardOutfitAllowedFirstSessionStages = setOf(
+    FirstSessionStage.AwaitingCompletionMessage.storageValue,
+    FirstSessionStage.Completed.storageValue,
+)
+private val FirstSessionBatEntryStageValues = setOf(
+    FirstSessionStage.AwaitingTravel.storageValue,
+    FirstSessionStage.ConfirmingTravel.storageValue,
+)
+
 private fun isAllowedFirstSessionTransition(
     expected: FirstSessionStage,
     next: FirstSessionStage,
@@ -2628,7 +3529,10 @@ private fun isAllowedFirstSessionTransition(
         FirstSessionStage.ConfirmingTravel,
         FirstSessionStage.AwaitingCompletionMessage,
     )
-    FirstSessionStage.ConfirmingTravel -> setOf(FirstSessionStage.AwaitingTravel)
+    FirstSessionStage.ConfirmingTravel -> setOf(
+        FirstSessionStage.AwaitingTravel,
+        FirstSessionStage.AwaitingCompletionMessage,
+    )
     FirstSessionStage.AwaitingCompletionMessage -> setOf(FirstSessionStage.Completed)
     FirstSessionStage.Completed -> emptySet()
 }

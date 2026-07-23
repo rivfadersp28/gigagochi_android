@@ -138,6 +138,8 @@ class SecureStaticMediaDataSource(
         android.net.Uri.parse(it)
     }
 
+    fun responseHeader(name: String): String? = connection?.getHeaderField(name)
+
     override fun close() {
         try {
             input?.close()

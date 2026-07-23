@@ -25,6 +25,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         FirstSessionActionReceiptEntity::class,
         ChatMessageEntity::class,
         PendingChatEntity::class,
+        DashboardCommandReceiptEntity::class,
         ComplimentLedgerEntity::class,
         AppliedChatResponseEntity::class,
         UserMemoryEntity::class,
@@ -34,7 +35,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         NotificationOutboxEntity::class,
         EventHistoryViewEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 @TypeConverters(DatabaseTypeConverters::class)
@@ -130,6 +131,25 @@ abstract class GigagochiDatabase : RoomDatabase() {
             }
         }
 
+        val Migration8To9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `dashboard_command_receipts` " +
+                        "(`ownerId` TEXT NOT NULL, `petId` TEXT NOT NULL, " +
+                        "`requestKey` TEXT NOT NULL, `commandType` TEXT NOT NULL, " +
+                        "`payloadFingerprint` TEXT NOT NULL, `originFirstSessionStage` TEXT, " +
+                        "`food` TEXT, " +
+                        "`audioIndex` INTEGER, `reply` TEXT, `explicitPortionsJson` TEXT, " +
+                        "`autoAdvanceDelayMillis` INTEGER, `createdAtEpochMillis` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`ownerId`, `requestKey`))",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_dashboard_command_owner_pet_created` " +
+                        "ON `dashboard_command_receipts` (`ownerId`, `petId`, `createdAtEpochMillis`)",
+                )
+            }
+        }
+
         fun build(context: Context): GigagochiDatabase = Room.databaseBuilder(
             context.applicationContext,
             GigagochiDatabase::class.java,
@@ -142,6 +162,7 @@ abstract class GigagochiDatabase : RoomDatabase() {
             Migration5To6,
             Migration6To7,
             Migration7To8,
+            Migration8To9,
         ).build()
     }
 }

@@ -1,0 +1,99 @@
+.route-transition,
+.retained-dashboard-stack,
+.retained-dashboard-stack__dashboard,
+.retained-dashboard-stack__overlays {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.retained-dashboard-stack {
+  isolation: isolate;
+}
+
+.retained-dashboard-stack__dashboard {
+  z-index: 0;
+}
+
+.retained-dashboard-stack__overlays {
+  z-index: 1;
+  pointer-events: none;
+}
+
+.route-transition__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.route-transition__layer--interactive {
+  pointer-events: auto;
+}
+
+.route-transition__layer--animating-fade {
+  will-change: opacity;
+}
+
+.route-transition__layer--animating-slide {
+  will-change: transform;
+}
+
+.route-transition__layer--fade-enter {
+  animation: route-transition-fade-enter var(--route-fade-in-duration) var(--route-fade-easing) both;
+}
+
+.route-transition__layer--fade-exit {
+  animation: route-transition-fade-exit var(--route-fade-out-duration) var(--route-fade-easing) both;
+}
+
+.route-transition__layer--forward-enter {
+  animation: route-transition-forward-enter var(--route-slide-duration) var(--route-slide-easing) both;
+}
+
+.route-transition__layer--forward-exit {
+  animation: route-transition-forward-exit var(--route-slide-duration) var(--route-slide-easing) both;
+}
+
+.route-transition__layer--backward-enter {
+  animation: route-transition-backward-enter var(--route-slide-duration) var(--route-slide-easing) both;
+}
+
+.route-transition__layer--backward-exit {
+  animation: route-transition-backward-exit var(--route-slide-duration) var(--route-slide-easing) both;
+}
+
+@keyframes route-transition-fade-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes route-transition-fade-exit {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes route-transition-forward-enter {
+  from { transform: translate3d(var(--route-full-offset), 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes route-transition-forward-exit {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(var(--route-negative-parallax-offset), 0, 0); }
+}
+
+@keyframes route-transition-backward-enter {
+  from { transform: translate3d(var(--route-negative-parallax-offset), 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes route-transition-backward-exit {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(var(--route-full-offset), 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-transition__layer {
+    animation: none !important;
+  }
+}

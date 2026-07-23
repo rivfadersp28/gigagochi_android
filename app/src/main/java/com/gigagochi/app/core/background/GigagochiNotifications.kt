@@ -11,7 +11,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import com.gigagochi.app.MainActivity
+import com.gigagochi.app.GigagochiWebViewActivity
 import com.gigagochi.app.R
 import com.gigagochi.app.core.database.LocalCompletionNotification
 import com.gigagochi.app.core.database.LocalNotificationKind
@@ -77,7 +77,7 @@ class AndroidLocalNotificationEmitter(
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return false
         ensureChannel()
         val notificationId = stableNotificationId(notification)
-        val intent = Intent(context, MainActivity::class.java).apply {
+        val intent = Intent(context, GigagochiWebViewActivity::class.java).apply {
             notification.storyId?.let { putExtra("gigagochi.storyId", it) }
             notification.travelRequestKey?.let { putExtra("gigagochi.travelRequestKey", it) }
         }

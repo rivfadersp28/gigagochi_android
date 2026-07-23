@@ -40,7 +40,10 @@ internal interface GigagochiDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPendingChat(entity: PendingChatEntity): Long
 
-    @Query("SELECT * FROM pending_chats WHERE ownerId = :ownerId ORDER BY createdAtEpochMillis")
+    @Query(
+        "SELECT * FROM pending_chats WHERE ownerId = :ownerId " +
+            "ORDER BY createdAtEpochMillis, requestKey",
+    )
     suspend fun getPendingChats(ownerId: String): List<PendingChatEntity>
 
     @Query("SELECT * FROM pending_chats WHERE ownerId = :ownerId AND requestKey = :requestKey")
@@ -56,6 +59,18 @@ internal interface GigagochiDao {
         responseText: String,
         completedAtEpochMillis: Long,
     ): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertDashboardCommandReceipt(entity: DashboardCommandReceiptEntity): Long
+
+    @Query("SELECT * FROM dashboard_command_receipts WHERE ownerId = :ownerId AND requestKey = :requestKey")
+    suspend fun getDashboardCommandReceipt(
+        ownerId: String,
+        requestKey: String,
+    ): DashboardCommandReceiptEntity?
+
+    @Query("DELETE FROM dashboard_command_receipts WHERE ownerId = :ownerId AND petId = :petId")
+    suspend fun deleteDashboardCommandReceipts(ownerId: String, petId: String): Int
 
     @Query("SELECT complimentKey FROM compliment_ledger WHERE ownerId = :ownerId AND petId = :petId ORDER BY createdAtEpochMillis DESC LIMIT :limit")
     suspend fun getRecentComplimentKeys(ownerId: String, petId: String, limit: Int): List<String>
@@ -527,6 +542,9 @@ internal interface GigagochiDao {
 
     @Query("DELETE FROM pending_chats WHERE ownerId = :ownerId")
     suspend fun deleteOwnerPendingChats(ownerId: String): Int
+
+    @Query("DELETE FROM dashboard_command_receipts WHERE ownerId = :ownerId")
+    suspend fun deleteOwnerDashboardCommandReceipts(ownerId: String): Int
 
     @Query("DELETE FROM compliment_ledger WHERE ownerId = :ownerId")
     suspend fun deleteOwnerCompliments(ownerId: String): Int

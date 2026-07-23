@@ -5,6 +5,8 @@ import java.util.UUID
 
 const val MaxCustomPromptLength = 300
 const val FinalCreationStep = 5
+const val CreateGenerationFailureMessage =
+    "Не получилось создать питомца. Попробуйте ещё раз."
 
 data class CreationQuestion(
     val title: String,
@@ -174,7 +176,7 @@ fun CreatePetState.markGenerationReady(result: GeneratedPetFixture): CreatePetSt
 )
 
 fun CreatePetState.markGenerationFailed(
-    message: String = "Не получилось создать питомца. Попробуйте ещё раз.",
+    message: String = CreateGenerationFailureMessage,
     newRequestRequired: Boolean = false,
 ): CreatePetState = copy(
     generation = GenerationStatus.Error(message, newRequestRequired),

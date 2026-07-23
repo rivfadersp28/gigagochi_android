@@ -81,6 +81,7 @@ import com.gigagochi.app.core.network.StaticMediaCache
 import com.gigagochi.app.core.network.AuthenticatedFeatureClient
 import com.gigagochi.app.core.network.UrlConnectionFeatureHttpTransport
 import com.gigagochi.app.core.network.StaticMediaUrlPolicy
+import com.gigagochi.app.core.webview.VerifiedWebMediaCache
 import com.gigagochi.app.feature.create.CreateDebugState
 import com.gigagochi.app.feature.create.CreateBackgroundMediaCoordinator
 import com.gigagochi.app.feature.create.CreatePetRoute
@@ -862,7 +863,13 @@ class MainActivity : ComponentActivity() {
                             travelVideos = travelVideoAssets.value,
                             mediaUrlPolicy = mediaUrlPolicy,
                             travelVideoSharer = remember(mediaUrlPolicy) {
-                                AndroidTravelVideoSharer(this@MainActivity, mediaUrlPolicy)
+                                AndroidTravelVideoSharer(
+                                    this@MainActivity,
+                                    VerifiedWebMediaCache.store(
+                                        applicationContext,
+                                        mediaUrlPolicy,
+                                    ),
+                                )
                             },
                             initialFocusTravelRequestKey = focusedTravelRequestKey,
                             onHelp = { story ->
